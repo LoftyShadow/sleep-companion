@@ -1,4 +1,4 @@
-import type { SoundId } from "./soundCatalog";
+import type { BuiltInSoundId } from "./soundCatalog";
 
 export type SoundPresetId =
   | "rainy_night"
@@ -17,7 +17,7 @@ export type SoundPresetId =
 export type SoundPresetGroupId = "sleep" | "focus" | "nature";
 
 export interface SoundPresetItem {
-  soundId: SoundId;
+  soundId: BuiltInSoundId;
   volume: number;
 }
 

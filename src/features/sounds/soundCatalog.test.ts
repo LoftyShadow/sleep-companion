@@ -48,8 +48,17 @@ describe("BUILT_IN_SOUNDS", () => {
     ]);
   });
 
+  it("marks all built-in sounds as built-in sources", () => {
+    for (const sound of BUILT_IN_SOUNDS) {
+      expect(sound.sourceKind).toBe("built-in");
+      expect(sound.androidResourceName).toBeTruthy();
+    }
+  });
+
   it("has matching web and Android audio files", () => {
     for (const sound of BUILT_IN_SOUNDS) {
+      const androidResourceName = sound.androidResourceName;
+      expect(androidResourceName).toBeDefined();
       expect(
         existsSync(resolve("public", sound.sources[0].src.slice(1))),
       ).toBe(true);
@@ -57,10 +66,16 @@ describe("BUILT_IN_SOUNDS", () => {
         existsSync(
           resolve(
             "src-tauri/gen/android/app/src/main/res/raw",
-            `${sound.androidResourceName}.ogg`,
+            `${androidResourceName}.ogg`,
           ),
         ),
       ).toBe(true);
+    }
+  });
+
+  it("has matching sound artwork files", () => {
+    for (const sound of BUILT_IN_SOUNDS) {
+      expect(existsSync(resolve("public", sound.imageSrc.slice(1)))).toBe(true);
     }
   });
 });

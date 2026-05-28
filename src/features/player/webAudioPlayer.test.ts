@@ -16,7 +16,9 @@ function createSound(): SoundDefinition {
   return {
     id: "heavy_rain",
     name: "大雨",
+    sourceKind: "built-in",
     androidResourceName: "heavy_rain",
+    imageSrc: "/images/sounds/heavy_rain.webp",
     sources: [{ src: "/audio/heavy_rain.ogg", type: "audio/ogg" }],
   };
 }
@@ -60,7 +62,7 @@ describe("createWebAudioPlayer", () => {
     await player.pause("heavy_rain");
     await player.stopAll();
 
-    expect(audio.pause).toHaveBeenCalledTimes(2);
+    expect(audio.pause).toHaveBeenCalledTimes(1);
     expect(audio.src).toBe("");
     expect(audio.load).toHaveBeenCalledTimes(1);
   });

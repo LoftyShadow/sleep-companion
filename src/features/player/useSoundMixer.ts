@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { SoundDefinition, SoundId } from "../sounds/soundCatalog";
 import type { SoundPreset, SoundPresetId } from "../sounds/soundPresets";
 import type { PlayerPort } from "./PlayerPort";
@@ -33,6 +33,14 @@ function uniqueSoundIds(soundIds: SoundId[]): SoundId[] {
 
 function getPresetSoundIds(preset: SoundPreset): SoundId[] {
   return uniqueSoundIds(preset.items.map((item) => item.soundId));
+}
+
+function getSoundVolume(volumes: VolumeState, soundId: SoundId): number {
+  return volumes[soundId] ?? 0.5;
+}
+
+function hasSameSoundIds(left: SoundId[], right: SoundId[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function applyPresetVolumes(
@@ -76,6 +84,46 @@ export function useSoundMixer({
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  useEffect(() => {
+    const availableSoundIds = new Set(sounds.map((sound) => sound.id));
+    const fallbackResumeSoundIds = defaultPreset
+      ? getPresetSoundIds(defaultPreset)
+      : sounds.map((sound) => sound.id);
+
+    setPlayingSoundIds((current) => {
+      const nextSoundIds = [...current].filter((soundId) =>
+        availableSoundIds.has(soundId),
+      );
+      return nextSoundIds.length === current.size ? current : new Set(nextSoundIds);
+    });
+
+    setResumeSoundIds((current) => {
+      const nextSoundIds = current.filter((soundId) =>
+        availableSoundIds.has(soundId),
+      );
+      const normalizedSoundIds =
+        nextSoundIds.length > 0 ? nextSoundIds : fallbackResumeSoundIds;
+
+      return hasSameSoundIds(current, normalizedSoundIds)
+        ? current
+        : normalizedSoundIds;
+    });
+
+    setVolumes((current) => {
+      let hasChange = false;
+      const nextVolumes = { ...current };
+
+      for (const sound of sounds) {
+        if (nextVolumes[sound.id] === undefined) {
+          nextVolumes[sound.id] = 0.5;
+          hasChange = true;
+        }
+      }
+
+      return hasChange ? nextVolumes : current;
+    });
+  }, [defaultPreset, sounds]);
+
   const playSoundIds = useCallback(
     async (soundIds: SoundId[], nextVolumes: VolumeState) => {
       const playedSoundIds: SoundId[] = [];
@@ -86,7 +134,7 @@ export function useSoundMixer({
           continue;
         }
 
-        await player.play(sound, nextVolumes[soundId]);
+        await player.play(sound, getSoundVolume(nextVolumes, soundId));
         playedSoundIds.push(soundId);
       }
 
@@ -118,7 +166,7 @@ export function useSoundMixer({
           return;
         }
 
-        await player.play(sound, volumes[soundId]);
+        await player.play(sound, getSoundVolume(volumes, soundId));
         const nextPlayingSoundIds = new Set(playingSoundIds).add(soundId);
         setPlayingSoundIds(nextPlayingSoundIds);
         setResumeSoundIds([...nextPlayingSoundIds]);

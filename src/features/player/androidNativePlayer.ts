@@ -17,6 +17,10 @@ export function createAndroidNativePlayer(
 
   return {
     async play(sound: SoundDefinition, volume: number) {
+      if (!sound.androidResourceName) {
+        throw new Error("Android 原生播放器仅支持内置音频");
+      }
+
       await invoke("plugin:native-audio|play", {
         soundId: sound.id,
         resourceName: sound.androidResourceName,

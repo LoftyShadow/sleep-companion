@@ -1,5 +1,5 @@
 import type { PlayerPort } from "./PlayerPort";
-import { createAndroidNativePlayer } from "./androidNativePlayer";
+import { createAndroidHybridPlayer } from "./androidHybridPlayer";
 import { createWebAudioPlayer } from "./webAudioPlayer";
 
 type RuntimePlatform = "web" | "linux" | "windows" | "android" | "unknown";
@@ -36,7 +36,7 @@ export async function createPlayer<TPlayer = PlayerPort>(
   const createWebPlayer =
     options.createWebPlayer ?? (() => createWebAudioPlayer() as TPlayer);
   const createAndroidPlayer =
-    options.createAndroidPlayer ?? (() => createAndroidNativePlayer() as TPlayer);
+    options.createAndroidPlayer ?? (() => createAndroidHybridPlayer() as TPlayer);
 
   try {
     const runtimePlatform = await platformDetector();

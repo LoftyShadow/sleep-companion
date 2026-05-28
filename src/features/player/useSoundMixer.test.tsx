@@ -6,6 +6,7 @@ import {
   BUILT_IN_PRESETS,
   DEFAULT_SOUND_PRESET,
 } from "../sounds/soundPresets";
+import type { SoundDefinition } from "../sounds/soundCatalog";
 import type { PlayerPort } from "./PlayerPort";
 import { useSoundMixer } from "./useSoundMixer";
 
@@ -120,5 +121,29 @@ describe("useSoundMixer", () => {
 
     expect(stopAll).toHaveBeenCalledTimes(1);
     expect(result.current.isAnySoundPlaying).toBe(false);
+  });
+
+  it("plays a custom sound added after the hook has mounted", async () => {
+    const { play, player } = createPlayer();
+    const customSound: SoundDefinition = {
+      id: "custom:rain",
+      name: "自定义雨声",
+      sourceKind: "custom",
+      imageSrc: "/images/sounds/typewriter.webp",
+      sources: [{ src: "blob:rain", type: "audio/mpeg" }],
+    };
+    const { result, rerender } = renderHook(
+      ({ sounds }) => useSoundMixer({ sounds, player }),
+      { initialProps: { sounds: BUILT_IN_SOUNDS } },
+    );
+
+    rerender({ sounds: [...BUILT_IN_SOUNDS, customSound] });
+
+    await act(async () => {
+      await result.current.toggleSound("custom:rain");
+    });
+
+    expect(play).toHaveBeenCalledWith(customSound, 0.5);
+    expect(result.current.playingSoundIds.has("custom:rain")).toBe(true);
   });
 });

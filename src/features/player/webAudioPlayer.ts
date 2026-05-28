@@ -54,7 +54,14 @@ export function createWebAudioPlayer(
     },
 
     pause(soundId) {
-      players.get(soundId)?.pause();
+      const audio = players.get(soundId);
+      if (audio) {
+        audio.pause();
+        audio.src = "";
+        audio.load();
+        players.delete(soundId);
+        volumes.delete(soundId);
+      }
       return Promise.resolve();
     },
 

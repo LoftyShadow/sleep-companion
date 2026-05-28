@@ -6,7 +6,9 @@ function createSound(): SoundDefinition {
   return {
     id: "campfire",
     name: "篝火",
+    sourceKind: "built-in",
     androidResourceName: "campfire",
+    imageSrc: "/images/sounds/campfire.webp",
     sources: [{ src: "/audio/campfire.ogg", type: "audio/ogg" }],
   };
 }

@@ -30,7 +30,7 @@ describe("App", () => {
     render(<App player={createPlayer().player} />);
 
     expect(
-      screen.getByRole("heading", { name: "Sleep Companion" }),
+      screen.getByRole("heading", { name: "白噪音" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "一键混音" }),
@@ -39,6 +39,7 @@ describe("App", () => {
     expect(
       screen.getByRole("button", { name: "应用预设雨夜放松" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("添加自定义音频")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "大雨" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "图书馆" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "伞下雨声" })).toBeInTheDocument();

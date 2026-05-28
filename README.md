@@ -2,7 +2,7 @@
 
 Sleep Companion 是一个基于 Tauri、React 和 TypeScript 的睡眠声音助手。
 
-第一版目标是提供跨平台内置声音播放能力，覆盖 Web、Linux、Windows 和 Android 前台运行场景。当前内置 17 个声音，并提供场景预设混音。
+第一版目标是提供跨平台声音播放能力，覆盖 Web、Linux、Windows 和 Android 前台运行场景。当前内置 17 个声音，提供场景预设混音，并支持添加本地自定义音频。
 
 ## 技术栈
 
