@@ -1,0 +1,124 @@
+import { renderHook, waitFor } from "@testing-library/react";
+import { act } from "react";
+import { describe, expect, it, vi } from "vitest";
+import { BUILT_IN_SOUNDS } from "../sounds/soundCatalog";
+import {
+  BUILT_IN_PRESETS,
+  DEFAULT_SOUND_PRESET,
+} from "../sounds/soundPresets";
+import type { PlayerPort } from "./PlayerPort";
+import { useSoundMixer } from "./useSoundMixer";
+
+function createPlayer() {
+  const play = vi.fn<PlayerPort["play"]>(() => Promise.resolve());
+  const pause = vi.fn<PlayerPort["pause"]>(() => Promise.resolve());
+  const setVolume = vi.fn<PlayerPort["setVolume"]>(() => Promise.resolve());
+  const stopAll = vi.fn<PlayerPort["stopAll"]>(() => Promise.resolve());
+  const getState = vi.fn<PlayerPort["getState"]>(() =>
+    Promise.resolve({ sounds: [] }),
+  );
+  const destroy = vi.fn<PlayerPort["destroy"]>();
+  const player: PlayerPort = {
+    play,
+    pause,
+    setVolume,
+    stopAll,
+    getState,
+    destroy,
+  };
+
+  return { destroy, getState, pause, play, player, setVolume, stopAll };
+}
+
+describe("useSoundMixer", () => {
+  it("plays and pauses a sound through the player", async () => {
+    const { pause, play, player } = createPlayer();
+    const { result } = renderHook(() =>
+      useSoundMixer({ sounds: BUILT_IN_SOUNDS, player }),
+    );
+
+    await act(async () => {
+      await result.current.toggleSound("heavy_rain");
+    });
+
+    expect(play).toHaveBeenCalledWith(BUILT_IN_SOUNDS[0], 0.5);
+    expect(result.current.playingSoundIds.has("heavy_rain")).toBe(true);
+
+    await act(async () => {
+      await result.current.toggleSound("heavy_rain");
+    });
+
+    expect(pause).toHaveBeenCalledWith("heavy_rain");
+    expect(result.current.playingSoundIds.has("heavy_rain")).toBe(false);
+  });
+
+  it("sets volume and stops all sounds", async () => {
+    const { player, setVolume, stopAll } = createPlayer();
+    const { result } = renderHook(() =>
+      useSoundMixer({ sounds: BUILT_IN_SOUNDS, player }),
+    );
+
+    await act(async () => {
+      await result.current.setSoundVolume("campfire", 0.8);
+      await result.current.stopAll();
+    });
+
+    await waitFor(() => {
+      expect(setVolume).toHaveBeenCalledWith("campfire", 0.8);
+      expect(stopAll).toHaveBeenCalledTimes(1);
+      expect(result.current.playingSoundIds.size).toBe(0);
+    });
+  });
+
+  it("applies a preset by stopping the old mix and playing preset sounds", async () => {
+    const { play, player, stopAll } = createPlayer();
+    const preset = BUILT_IN_PRESETS[2];
+    const { result } = renderHook(() =>
+      useSoundMixer({ sounds: BUILT_IN_SOUNDS, player }),
+    );
+
+    await act(async () => {
+      await result.current.applyPreset(preset);
+    });
+
+    expect(stopAll).toHaveBeenCalledTimes(1);
+    expect(play).toHaveBeenCalledTimes(preset.items.length);
+    expect(
+      play.mock.calls.map(([sound, volume]) => [sound.id, volume]),
+    ).toEqual(
+      preset.items.map((item) => [
+        item.soundId,
+        item.volume,
+      ]),
+    );
+    expect(result.current.activePresetId).toBe(preset.id);
+    expect([...result.current.playingSoundIds]).toEqual(
+      preset.items.map((item) => item.soundId),
+    );
+  });
+
+  it("uses the unified playback toggle to start and stop the current mix", async () => {
+    const { play, player, stopAll } = createPlayer();
+    const { result } = renderHook(() =>
+      useSoundMixer({
+        sounds: BUILT_IN_SOUNDS,
+        player,
+        defaultPreset: DEFAULT_SOUND_PRESET,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.toggleUnifiedPlayback();
+    });
+
+    expect(play).toHaveBeenCalledTimes(DEFAULT_SOUND_PRESET.items.length);
+    expect(result.current.isAnySoundPlaying).toBe(true);
+
+    await act(async () => {
+      await result.current.toggleUnifiedPlayback();
+    });
+
+    expect(stopAll).toHaveBeenCalledTimes(1);
+    expect(result.current.isAnySoundPlaying).toBe(false);
+  });
+});
