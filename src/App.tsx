@@ -29,24 +29,39 @@ function SoundMixerView({ player }: { player: PlayerPort }) {
     player,
     defaultPreset: DEFAULT_SOUND_PRESET,
   });
+  const activeSoundNames = BUILT_IN_SOUNDS.filter((sound) =>
+    playingSoundIds.has(sound.id),
+  ).map((sound) => sound.name);
+  const activeSummary =
+    activeSoundNames.length > 0 ? activeSoundNames.join(" / ") : "待机";
+  const transportLabel = isAnySoundPlaying ? "停止播放" : "播放预设";
 
   return (
     <main className="app-shell">
-      <header className="app-header">
-        <div>
-          <p className="app-kicker">睡眠声音</p>
+      <header className="app-header" aria-label="播放总览">
+        <div className="brand-block">
+          <p className="app-kicker">睡眠声音调音台</p>
           <h1>Sleep Companion</h1>
+          <p className="mix-summary">{activeSummary}</p>
         </div>
-        <button
-          aria-pressed={isAnySoundPlaying}
-          className="transport-button"
-          type="button"
-          onClick={() => {
-            void toggleUnifiedPlayback();
-          }}
-        >
-          {isAnySoundPlaying ? "停止播放" : "播放预设"}
-        </button>
+
+        <div className="transport-panel">
+          <span className="transport-status">
+            {playingSoundIds.size} / {BUILT_IN_SOUNDS.length}
+          </span>
+          <button
+            aria-label={transportLabel}
+            aria-pressed={isAnySoundPlaying}
+            className="transport-button"
+            type="button"
+            onClick={() => {
+              void toggleUnifiedPlayback();
+            }}
+          >
+            <span className="transport-glyph" aria-hidden="true" />
+            <span>{transportLabel}</span>
+          </button>
+        </div>
       </header>
 
       {errorMessage ? (
@@ -86,7 +101,12 @@ function SoundMixerView({ player }: { player: PlayerPort }) {
                         void applyPreset(preset);
                       }}
                     >
-                      <span className="preset-name">{preset.name}</span>
+                      <span className="preset-topline">
+                        <span className="preset-name">{preset.name}</span>
+                        <span className="preset-count">
+                          {preset.items.length} 声音
+                        </span>
+                      </span>
                       <span className="preset-description">
                         {preset.description}
                       </span>
@@ -108,6 +128,7 @@ function SoundMixerView({ player }: { player: PlayerPort }) {
         {BUILT_IN_SOUNDS.map((sound) => {
           const isPlaying = playingSoundIds.has(sound.id);
           const volume = volumes[sound.id] ?? 0.5;
+          const volumePercent = Math.round(volume * 100);
 
           return (
             <article
@@ -123,20 +144,22 @@ function SoundMixerView({ player }: { player: PlayerPort }) {
                   void toggleSound(sound.id);
                 }}
               >
-                <span>{sound.name}</span>
+                <span className="sound-name">{sound.name}</span>
                 <span aria-hidden="true" className="sound-state">
                   {isPlaying ? "播放中" : "已暂停"}
                 </span>
               </button>
 
               <label className="volume-control">
-                <span>音量</span>
+                <span>
+                  音量 <strong>{volumePercent}%</strong>
+                </span>
                 <input
                   aria-label={`${sound.name}音量`}
                   max="100"
                   min="0"
                   type="range"
-                  value={Math.round(volume * 100)}
+                  value={volumePercent}
                   onChange={(event) => {
                     void setSoundVolume(
                       sound.id,
