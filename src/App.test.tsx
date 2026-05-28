@@ -72,4 +72,45 @@ describe("App", () => {
       "clock",
     ]);
   });
+
+  it("switches to the ASMR console and shows real ASMR sounds", async () => {
+    const user = userEvent.setup();
+    render(<App player={createPlayer().player} />);
+
+    await user.click(screen.getByRole("button", { name: "ASMR" }));
+
+    expect(
+      screen.getByRole("heading", { name: "ASMR 控制台" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "ASMR 预设" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "应用预设近耳清理" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "轻柔掏耳" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "气泡声" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "车顶雨点" }),
+    ).toBeInTheDocument();
+  });
+
+  it("uses the unified button to play the default ASMR preset in ASMR mode", async () => {
+    const user = userEvent.setup();
+    const { play, player, stopAll } = createPlayer();
+    render(<App player={player} />);
+
+    await user.click(screen.getByRole("button", { name: "ASMR" }));
+    await user.click(screen.getByRole("button", { name: "播放 ASMR" }));
+    await user.click(await screen.findByRole("button", { name: "停止播放" }));
+
+    expect(play.mock.calls.map(([sound]) => sound.id)).toEqual([
+      "asmr_ear_cleaning_soft",
+      "asmr_ear_cleaning_deep",
+      "asmr_paper_rub",
+    ]);
+    expect(stopAll).toHaveBeenCalledTimes(2);
+  });
 });

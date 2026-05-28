@@ -15,7 +15,17 @@ export type BuiltInSoundId =
   | "snow_walking"
   | "typewriter"
   | "umbrella_rain"
-  | "windmill";
+  | "windmill"
+  | "asmr_ear_cleaning_soft"
+  | "asmr_ear_cleaning_deep"
+  | "asmr_paper_rub"
+  | "asmr_keyboard_taps"
+  | "asmr_typewriter_ticks"
+  | "asmr_boiling_water"
+  | "asmr_bubbles"
+  | "asmr_gravel_steps"
+  | "asmr_leaf_steps"
+  | "asmr_car_roof_rain";
 
 export type CustomSoundId = `custom:${string}`;
 
@@ -48,7 +58,7 @@ export interface SoundDefinition {
   sources: AudioSourceDefinition[];
 }
 
-export const BUILT_IN_SOUNDS: SoundDefinition[] = [
+export const WHITE_NOISE_SOUNDS: SoundDefinition[] = [
   {
     id: "heavy_rain",
     name: "大雨",
@@ -185,6 +195,108 @@ export const BUILT_IN_SOUNDS: SoundDefinition[] = [
     imageSrc: "/images/sounds/windmill.webp",
     sources: [{ src: "/audio/windmill.ogg", type: "audio/ogg" }],
   },
+];
+
+export const ASMR_SOUNDS: SoundDefinition[] = [
+  {
+    id: "asmr_ear_cleaning_soft",
+    name: "轻柔掏耳",
+    sourceKind: "built-in",
+    androidResourceName: "asmr_ear_cleaning_soft",
+    imageSrc: "/images/sounds/asmr/asmr_ear_cleaning_soft.png",
+    sources: [
+      { src: "/audio/asmr/asmr_ear_cleaning_soft.ogg", type: "audio/ogg" },
+    ],
+  },
+  {
+    id: "asmr_ear_cleaning_deep",
+    name: "深度掏耳",
+    sourceKind: "built-in",
+    androidResourceName: "asmr_ear_cleaning_deep",
+    imageSrc: "/images/sounds/asmr/asmr_ear_cleaning_deep.png",
+    sources: [
+      { src: "/audio/asmr/asmr_ear_cleaning_deep.ogg", type: "audio/ogg" },
+    ],
+  },
+  {
+    id: "asmr_paper_rub",
+    name: "纸张摩擦",
+    sourceKind: "built-in",
+    androidResourceName: "asmr_paper_rub",
+    imageSrc: "/images/sounds/asmr/asmr_paper_rub.png",
+    sources: [{ src: "/audio/asmr/asmr_paper_rub.ogg", type: "audio/ogg" }],
+  },
+  {
+    id: "asmr_keyboard_taps",
+    name: "键盘轻敲",
+    sourceKind: "built-in",
+    androidResourceName: "asmr_keyboard_taps",
+    imageSrc: "/images/sounds/asmr/asmr_keyboard_taps.png",
+    sources: [
+      { src: "/audio/asmr/asmr_keyboard_taps.ogg", type: "audio/ogg" },
+    ],
+  },
+  {
+    id: "asmr_typewriter_ticks",
+    name: "打字机触发",
+    sourceKind: "built-in",
+    androidResourceName: "asmr_typewriter_ticks",
+    imageSrc: "/images/sounds/asmr/asmr_typewriter_ticks.png",
+    sources: [
+      { src: "/audio/asmr/asmr_typewriter_ticks.ogg", type: "audio/ogg" },
+    ],
+  },
+  {
+    id: "asmr_boiling_water",
+    name: "沸水细响",
+    sourceKind: "built-in",
+    androidResourceName: "asmr_boiling_water",
+    imageSrc: "/images/sounds/asmr/asmr_boiling_water.png",
+    sources: [
+      { src: "/audio/asmr/asmr_boiling_water.ogg", type: "audio/ogg" },
+    ],
+  },
+  {
+    id: "asmr_bubbles",
+    name: "气泡声",
+    sourceKind: "built-in",
+    androidResourceName: "asmr_bubbles",
+    imageSrc: "/images/sounds/asmr/asmr_bubbles.png",
+    sources: [{ src: "/audio/asmr/asmr_bubbles.ogg", type: "audio/ogg" }],
+  },
+  {
+    id: "asmr_gravel_steps",
+    name: "碎石脚步",
+    sourceKind: "built-in",
+    androidResourceName: "asmr_gravel_steps",
+    imageSrc: "/images/sounds/asmr/asmr_gravel_steps.png",
+    sources: [
+      { src: "/audio/asmr/asmr_gravel_steps.ogg", type: "audio/ogg" },
+    ],
+  },
+  {
+    id: "asmr_leaf_steps",
+    name: "落叶脚步",
+    sourceKind: "built-in",
+    androidResourceName: "asmr_leaf_steps",
+    imageSrc: "/images/sounds/asmr/asmr_leaf_steps.png",
+    sources: [{ src: "/audio/asmr/asmr_leaf_steps.ogg", type: "audio/ogg" }],
+  },
+  {
+    id: "asmr_car_roof_rain",
+    name: "车顶雨点",
+    sourceKind: "built-in",
+    androidResourceName: "asmr_car_roof_rain",
+    imageSrc: "/images/sounds/asmr/asmr_car_roof_rain.png",
+    sources: [
+      { src: "/audio/asmr/asmr_car_roof_rain.ogg", type: "audio/ogg" },
+    ],
+  },
+];
+
+export const BUILT_IN_SOUNDS: SoundDefinition[] = [
+  ...WHITE_NOISE_SOUNDS,
+  ...ASMR_SOUNDS,
 ];
 
 export function isCustomSoundId(soundId: SoundId): soundId is CustomSoundId {

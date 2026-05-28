@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { BUILT_IN_SOUNDS } from "./soundCatalog";
 import {
+  ASMR_PRESET_GROUPS,
   BUILT_IN_PRESETS,
+  DEFAULT_ASMR_PRESET,
   DEFAULT_SOUND_PRESET,
   PRESET_GROUPS,
 } from "./soundPresets";
@@ -17,8 +19,21 @@ describe("PRESET_GROUPS", () => {
     expect(DEFAULT_SOUND_PRESET.id).toBe("rainy_night");
   });
 
+  it("contains ASMR preset groups for the MVP console", () => {
+    expect(ASMR_PRESET_GROUPS.map((group) => group.id)).toEqual(["asmr"]);
+    expect(ASMR_PRESET_GROUPS[0].presets.map((preset) => preset.id)).toEqual([
+      "asmr_ear_care",
+      "asmr_desktop_taps",
+      "asmr_liquid_close",
+      "asmr_texture_walk",
+    ]);
+    expect(DEFAULT_ASMR_PRESET.id).toBe("asmr_ear_care");
+  });
+
   it("uses unique group and preset ids", () => {
-    const groupIds = PRESET_GROUPS.map((group) => group.id);
+    const groupIds = [...PRESET_GROUPS, ...ASMR_PRESET_GROUPS].map(
+      (group) => group.id,
+    );
     const presetIds = BUILT_IN_PRESETS.map((preset) => preset.id);
 
     expect(new Set(groupIds).size).toBe(groupIds.length);

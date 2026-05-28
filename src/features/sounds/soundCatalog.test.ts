@@ -1,11 +1,11 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { BUILT_IN_SOUNDS } from "./soundCatalog";
+import { ASMR_SOUNDS, BUILT_IN_SOUNDS, WHITE_NOISE_SOUNDS } from "./soundCatalog";
 
-describe("BUILT_IN_SOUNDS", () => {
-  it("contains the approved built-in sounds", () => {
-    expect(BUILT_IN_SOUNDS.map((sound) => sound.id)).toEqual([
+describe("sound catalog", () => {
+  it("contains the approved white-noise sounds", () => {
+    expect(WHITE_NOISE_SOUNDS.map((sound) => sound.id)).toEqual([
       "heavy_rain",
       "campfire",
       "forest_birds",
@@ -26,8 +26,27 @@ describe("BUILT_IN_SOUNDS", () => {
     ]);
   });
 
-  it("uses public audio paths for web playback", () => {
-    expect(BUILT_IN_SOUNDS.map((sound) => sound.sources[0])).toEqual([
+  it("contains the approved ASMR MVP sounds from XMSLEEP", () => {
+    expect(ASMR_SOUNDS.map((sound) => sound.id)).toEqual([
+      "asmr_ear_cleaning_soft",
+      "asmr_ear_cleaning_deep",
+      "asmr_paper_rub",
+      "asmr_keyboard_taps",
+      "asmr_typewriter_ticks",
+      "asmr_boiling_water",
+      "asmr_bubbles",
+      "asmr_gravel_steps",
+      "asmr_leaf_steps",
+      "asmr_car_roof_rain",
+    ]);
+  });
+
+  it("combines white-noise and ASMR sounds as built-in sounds", () => {
+    expect(BUILT_IN_SOUNDS).toEqual([...WHITE_NOISE_SOUNDS, ...ASMR_SOUNDS]);
+  });
+
+  it("uses public audio paths for white-noise web playback", () => {
+    expect(WHITE_NOISE_SOUNDS.map((sound) => sound.sources[0])).toEqual([
       { src: "/audio/heavy_rain.ogg", type: "audio/ogg" },
       { src: "/audio/campfire.ogg", type: "audio/ogg" },
       { src: "/audio/forest_birds.ogg", type: "audio/ogg" },
@@ -45,6 +64,30 @@ describe("BUILT_IN_SOUNDS", () => {
       { src: "/audio/typewriter.ogg", type: "audio/ogg" },
       { src: "/audio/umbrella_rain.ogg", type: "audio/ogg" },
       { src: "/audio/windmill.ogg", type: "audio/ogg" },
+    ]);
+  });
+
+  it("uses public ASMR audio paths for web playback", () => {
+    expect(ASMR_SOUNDS.map((sound) => sound.sources[0])).toEqual([
+      {
+        src: "/audio/asmr/asmr_ear_cleaning_soft.ogg",
+        type: "audio/ogg",
+      },
+      {
+        src: "/audio/asmr/asmr_ear_cleaning_deep.ogg",
+        type: "audio/ogg",
+      },
+      { src: "/audio/asmr/asmr_paper_rub.ogg", type: "audio/ogg" },
+      { src: "/audio/asmr/asmr_keyboard_taps.ogg", type: "audio/ogg" },
+      {
+        src: "/audio/asmr/asmr_typewriter_ticks.ogg",
+        type: "audio/ogg",
+      },
+      { src: "/audio/asmr/asmr_boiling_water.ogg", type: "audio/ogg" },
+      { src: "/audio/asmr/asmr_bubbles.ogg", type: "audio/ogg" },
+      { src: "/audio/asmr/asmr_gravel_steps.ogg", type: "audio/ogg" },
+      { src: "/audio/asmr/asmr_leaf_steps.ogg", type: "audio/ogg" },
+      { src: "/audio/asmr/asmr_car_roof_rain.ogg", type: "audio/ogg" },
     ]);
   });
 

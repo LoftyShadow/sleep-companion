@@ -5,11 +5,15 @@ import { createPlayer } from "./features/player/createPlayer";
 import type { PlayerPort } from "./features/player/PlayerPort";
 import { useSoundMixer } from "./features/player/useSoundMixer";
 import {
+  ASMR_SOUNDS,
   BUILT_IN_SOUNDS,
   isCustomSoundId,
   type SoundId,
+  WHITE_NOISE_SOUNDS,
 } from "./features/sounds/soundCatalog";
 import {
+  ASMR_PRESET_GROUPS,
+  DEFAULT_ASMR_PRESET,
   DEFAULT_SOUND_PRESET,
   PRESET_GROUPS,
 } from "./features/sounds/soundPresets";
@@ -18,7 +22,54 @@ interface AppProps {
   player?: PlayerPort;
 }
 
+type SoundLibraryMode = "sleep" | "asmr";
+
+interface SoundLibraryModeConfig {
+  id: SoundLibraryMode;
+  label: string;
+  kicker: string;
+  title: string;
+  emptySummary: string;
+  presetKicker: string;
+  presetHeading: string;
+  soundKicker: string;
+  soundHeading: string;
+  transportLabel: string;
+}
+
+const SOUND_LIBRARY_MODES: SoundLibraryModeConfig[] = [
+  {
+    id: "sleep",
+    label: "白噪音",
+    kicker: "XMSLEEP 风格声音调音台",
+    title: "白噪音",
+    emptySummary: "选择预设或点一个声音开始播放",
+    presetKicker: "快捷播放",
+    presetHeading: "一键混音",
+    soundKicker: "单独控制",
+    soundHeading: "声音库",
+    transportLabel: "播放预设",
+  },
+  {
+    id: "asmr",
+    label: "ASMR",
+    kicker: "真实素材触发控制台",
+    title: "ASMR 控制台",
+    emptySummary: "选择触发组合或点一个近距离声音开始播放",
+    presetKicker: "触发组合",
+    presetHeading: "ASMR 预设",
+    soundKicker: "真实素材",
+    soundHeading: "ASMR 声音",
+    transportLabel: "播放 ASMR",
+  },
+];
+
+const SOUND_LIBRARY_MODE_CONFIG = Object.fromEntries(
+  SOUND_LIBRARY_MODES.map((mode) => [mode.id, mode]),
+) as Record<SoundLibraryMode, SoundLibraryModeConfig>;
+
 function SoundMixerView({ player }: { player: PlayerPort }) {
+  const [activeMode, setActiveMode] = useState<SoundLibraryMode>("sleep");
   const {
     addCustomSoundFiles,
     customSoundErrorMessage,
@@ -31,6 +82,20 @@ function SoundMixerView({ player }: { player: PlayerPort }) {
     () => [...BUILT_IN_SOUNDS, ...customSounds],
     [customSounds],
   );
+  const visibleSounds = useMemo(
+    () => [
+      ...(activeMode === "asmr" ? ASMR_SOUNDS : WHITE_NOISE_SOUNDS),
+      ...customSounds,
+    ],
+    [activeMode, customSounds],
+  );
+  const modeConfig = SOUND_LIBRARY_MODE_CONFIG[activeMode];
+  const presetGroups =
+    activeMode === "asmr" ? ASMR_PRESET_GROUPS : PRESET_GROUPS;
+  const presetCount = presetGroups.reduce(
+    (count, group) => count + group.presets.length,
+    0,
+  );
   const {
     playingSoundIds,
     volumes,
@@ -38,6 +103,7 @@ function SoundMixerView({ player }: { player: PlayerPort }) {
     activePresetId,
     applyPreset,
     isAnySoundPlaying,
+    stopAll,
     toggleUnifiedPlayback,
     toggleSound,
     setSoundVolume,
@@ -52,8 +118,24 @@ function SoundMixerView({ player }: { player: PlayerPort }) {
   const activeSoundNames = activeSounds.map((sound) => sound.name);
   const activeSummary =
     activeSoundNames.length > 0 ? activeSoundNames.join(" / ") : "待机";
-  const transportLabel = isAnySoundPlaying ? "停止播放" : "播放预设";
+  const transportLabel = isAnySoundPlaying
+    ? "停止播放"
+    : modeConfig.transportLabel;
   const visibleErrorMessage = errorMessage ?? customSoundErrorMessage;
+
+  async function handleUnifiedPlayback() {
+    if (isAnySoundPlaying) {
+      await stopAll();
+      return;
+    }
+
+    if (activeMode === "asmr") {
+      await applyPreset(DEFAULT_ASMR_PRESET);
+      return;
+    }
+
+    await toggleUnifiedPlayback();
+  }
 
   async function handleRemoveCustomSound(soundId: SoundId) {
     if (!isCustomSoundId(soundId)) {
@@ -79,12 +161,31 @@ function SoundMixerView({ player }: { player: PlayerPort }) {
         <aside className="left-column">
           <header className="app-header glass-panel" aria-label="播放总览">
             <div className="brand-block">
-              <p className="app-kicker">XMSLEEP 风格声音调音台</p>
-              <h1>白噪音</h1>
+              <div
+                aria-label="声音模式"
+                className="mode-switch"
+                role="group"
+              >
+                {SOUND_LIBRARY_MODES.map((mode) => (
+                  <button
+                    aria-pressed={activeMode === mode.id}
+                    className="mode-switch-button"
+                    key={mode.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveMode(mode.id);
+                    }}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
+              <p className="app-kicker">{modeConfig.kicker}</p>
+              <h1>{modeConfig.title}</h1>
               <p className="mix-summary">
                 {isAnySoundPlaying
                   ? activeSummary
-                  : "选择预设或点一个声音开始播放"}
+                  : modeConfig.emptySummary}
               </p>
             </div>
           </header>
@@ -96,7 +197,7 @@ function SoundMixerView({ player }: { player: PlayerPort }) {
             </div>
             <div className="player-actions">
               <span className="transport-status">
-                {playingSoundIds.size} / {sounds.length}
+                {playingSoundIds.size} / {visibleSounds.length}
               </span>
               <button
                 aria-label={transportLabel}
@@ -104,7 +205,7 @@ function SoundMixerView({ player }: { player: PlayerPort }) {
                 className="transport-button"
                 type="button"
                 onClick={() => {
-                  void toggleUnifiedPlayback();
+                  void handleUnifiedPlayback();
                 }}
               >
                 <span className="transport-glyph" aria-hidden="true" />
@@ -119,14 +220,14 @@ function SoundMixerView({ player }: { player: PlayerPort }) {
           >
             <div className="section-heading">
               <div>
-                <p className="app-kicker">快捷播放</p>
-                <h2 id="preset-heading">一键混音</h2>
+                <p className="app-kicker">{modeConfig.presetKicker}</p>
+                <h2 id="preset-heading">{modeConfig.presetHeading}</h2>
               </div>
-              <span className="section-meta">{PRESET_GROUPS.length} 组预设</span>
+              <span className="section-meta">{presetCount} 个组合</span>
             </div>
 
             <div className="preset-groups">
-              {PRESET_GROUPS.map((group) => (
+              {presetGroups.map((group) => (
                 <section
                   aria-labelledby={`preset-group-${group.id}`}
                   className="preset-group"
@@ -175,10 +276,10 @@ function SoundMixerView({ player }: { player: PlayerPort }) {
         >
           <div className="section-heading sound-section-heading">
             <div>
-              <p className="app-kicker">单独控制</p>
-              <h2 id="sounds-heading">声音库</h2>
+              <p className="app-kicker">{modeConfig.soundKicker}</p>
+              <h2 id="sounds-heading">{modeConfig.soundHeading}</h2>
             </div>
-            <span className="section-meta">{sounds.length} 个声音</span>
+            <span className="section-meta">{visibleSounds.length} 个声音</span>
           </div>
 
           <section className="custom-audio-panel" aria-label="添加自定义音频">
@@ -211,15 +312,18 @@ function SoundMixerView({ player }: { player: PlayerPort }) {
           </section>
 
           <section className="sound-grid" aria-label="声音库">
-            {sounds.map((sound) => {
+            {visibleSounds.map((sound) => {
               const isPlaying = playingSoundIds.has(sound.id);
               const volume = volumes[sound.id] ?? 0.5;
               const volumePercent = Math.round(volume * 100);
               const isCustomSound = isCustomSoundId(sound.id);
+              const isAsmrSound = sound.id.startsWith("asmr_");
 
               return (
                 <article
-                  className={`sound-card${isPlaying ? " sound-card-playing" : ""}`}
+                  className={`sound-card${
+                    isPlaying ? " sound-card-playing" : ""
+                  }${isAsmrSound ? " sound-card-asmr" : ""}`}
                   key={sound.id}
                 >
                   <button
@@ -232,7 +336,13 @@ function SoundMixerView({ player }: { player: PlayerPort }) {
                     }}
                   >
                     <span className="sound-art-wrap" aria-hidden="true">
-                      <img className="sound-art" src={sound.imageSrc} alt="" />
+                      <img
+                        className={`sound-art${
+                          isAsmrSound ? " sound-art-waveform" : ""
+                        }`}
+                        src={sound.imageSrc}
+                        alt=""
+                      />
                       <span className="sound-visualizer">
                         <span />
                         <span />
