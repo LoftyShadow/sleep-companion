@@ -3,6 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import App from "./App";
 import type { PlayerPort } from "./features/player/PlayerPort";
+import type {
+  TtsEnginePort,
+  TtsPlaybackHandle,
+  TtsVoice,
+} from "./features/audiobook/TtsEnginePort";
 
 function createPlayer() {
   const play = vi.fn<PlayerPort["play"]>(() => Promise.resolve());
@@ -23,6 +28,36 @@ function createPlayer() {
   };
 
   return { destroy, getState, pause, play, player, setVolume, stopAll };
+}
+
+function createTtsEngine() {
+  const voices: TtsVoice[] = [
+    {
+      id: "voice:default",
+      name: "系统女声",
+      language: "zh-CN",
+      isDefault: true,
+      isLocal: true,
+    },
+  ];
+  const handle: TtsPlaybackHandle = {
+    cancel: vi.fn(),
+    pause: vi.fn(),
+    resume: vi.fn(),
+  };
+  const speak = vi.fn<TtsEnginePort["speak"]>(() => Promise.resolve(handle));
+  const engine: TtsEnginePort = {
+    engineId: "test-system",
+    label: "测试系统 TTS",
+    supportsPause: true,
+    isSupported: vi.fn(() => true),
+    listVoices: vi.fn(() => Promise.resolve(voices)),
+    speak,
+    cancel: vi.fn(),
+    destroy: vi.fn(),
+  };
+
+  return { engine, speak };
 }
 
 describe("App", () => {
@@ -112,5 +147,27 @@ describe("App", () => {
       "asmr_paper_rub",
     ]);
     expect(stopAll).toHaveBeenCalledTimes(2);
+  });
+
+  it("switches to the audiobook view and speaks text through the TTS port", async () => {
+    const user = userEvent.setup();
+    const { engine, speak } = createTtsEngine();
+    render(<App player={createPlayer().player} ttsEngine={engine} />);
+
+    await user.click(screen.getByRole("button", { name: "听书" }));
+
+    expect(screen.getByRole("heading", { name: "听书" })).toBeInTheDocument();
+    expect(await screen.findByText("系统女声 · zh-CN")).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText("书稿文本"));
+    await user.type(screen.getByLabelText("书稿文本"), "第一段。\n\n第二段。");
+    await user.click(screen.getByRole("button", { name: "播放" }));
+
+    expect(speak).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: "第一段。",
+        voiceId: "voice:default",
+      }),
+    );
   });
 });

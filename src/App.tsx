@@ -1,5 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import "./App.css";
+import {
+  AppModeSwitcher,
+  AudiobookView,
+} from "./features/audiobook/AudiobookView";
+import { createTtsEngine } from "./features/audiobook/createTtsEngine";
+import type { TtsEnginePort } from "./features/audiobook/TtsEnginePort";
 import { useCustomSounds } from "./features/customSounds/useCustomSounds";
 import { createPlayer } from "./features/player/createPlayer";
 import type { PlayerPort } from "./features/player/PlayerPort";
@@ -20,8 +26,10 @@ import {
 
 interface AppProps {
   player?: PlayerPort;
+  ttsEngine?: TtsEnginePort;
 }
 
+type AppMode = "mixer" | "audiobook";
 type SoundLibraryMode = "sleep" | "asmr";
 
 interface SoundLibraryModeConfig {
@@ -68,8 +76,17 @@ const SOUND_LIBRARY_MODE_CONFIG = Object.fromEntries(
   SOUND_LIBRARY_MODES.map((mode) => [mode.id, mode]),
 ) as Record<SoundLibraryMode, SoundLibraryModeConfig>;
 
-function SoundMixerView({ player }: { player: PlayerPort }) {
-  const [activeMode, setActiveMode] = useState<SoundLibraryMode>("sleep");
+function SoundMixerView({
+  activeAppMode,
+  onModeChange,
+  player,
+}: {
+  activeAppMode: AppMode;
+  onModeChange: (mode: AppMode) => void;
+  player: PlayerPort;
+}) {
+  const [activeSoundMode, setActiveSoundMode] =
+    useState<SoundLibraryMode>("sleep");
   const {
     addCustomSoundFiles,
     customSoundErrorMessage,
@@ -84,14 +101,14 @@ function SoundMixerView({ player }: { player: PlayerPort }) {
   );
   const visibleSounds = useMemo(
     () => [
-      ...(activeMode === "asmr" ? ASMR_SOUNDS : WHITE_NOISE_SOUNDS),
+      ...(activeSoundMode === "asmr" ? ASMR_SOUNDS : WHITE_NOISE_SOUNDS),
       ...customSounds,
     ],
-    [activeMode, customSounds],
+    [activeSoundMode, customSounds],
   );
-  const modeConfig = SOUND_LIBRARY_MODE_CONFIG[activeMode];
+  const modeConfig = SOUND_LIBRARY_MODE_CONFIG[activeSoundMode];
   const presetGroups =
-    activeMode === "asmr" ? ASMR_PRESET_GROUPS : PRESET_GROUPS;
+    activeSoundMode === "asmr" ? ASMR_PRESET_GROUPS : PRESET_GROUPS;
   const presetCount = presetGroups.reduce(
     (count, group) => count + group.presets.length,
     0,
@@ -129,7 +146,7 @@ function SoundMixerView({ player }: { player: PlayerPort }) {
       return;
     }
 
-    if (activeMode === "asmr") {
+    if (activeSoundMode === "asmr") {
       await applyPreset(DEFAULT_ASMR_PRESET);
       return;
     }
@@ -151,6 +168,11 @@ function SoundMixerView({ player }: { player: PlayerPort }) {
 
   return (
     <main className="app-shell">
+      <AppModeSwitcher
+        activeMode={activeAppMode}
+        onModeChange={onModeChange}
+      />
+
       {visibleErrorMessage ? (
         <p className="error-message" role="alert">
           {visibleErrorMessage}
@@ -168,12 +190,12 @@ function SoundMixerView({ player }: { player: PlayerPort }) {
               >
                 {SOUND_LIBRARY_MODES.map((mode) => (
                   <button
-                    aria-pressed={activeMode === mode.id}
+                    aria-pressed={activeSoundMode === mode.id}
                     className="mode-switch-button"
                     key={mode.id}
                     type="button"
                     onClick={() => {
-                      setActiveMode(mode.id);
+                      setActiveSoundMode(mode.id);
                     }}
                   >
                     {mode.label}
@@ -398,8 +420,16 @@ function SoundMixerView({ player }: { player: PlayerPort }) {
   );
 }
 
-function App({ player }: AppProps) {
+function App({ player, ttsEngine }: AppProps) {
+  const [activeAppMode, setActiveAppMode] = useState<AppMode>("mixer");
   const [runtimePlayer, setRuntimePlayer] = useState<PlayerPort | null>(null);
+  const audiobookEngine = useMemo(
+    () => ttsEngine ?? createTtsEngine(),
+    [ttsEngine],
+  );
+  const handleAppModeChange = useCallback((mode: AppMode) => {
+    setActiveAppMode(mode);
+  }, []);
 
   useEffect(() => {
     if (player) {
@@ -426,9 +456,29 @@ function App({ player }: AppProps) {
 
   const activePlayer = player ?? runtimePlayer;
 
+  useEffect(() => {
+    if (activeAppMode === "audiobook") {
+      void activePlayer?.stopAll();
+    }
+  }, [activeAppMode, activePlayer]);
+
+  if (activeAppMode === "audiobook") {
+    return (
+      <AudiobookView
+        activeMode={activeAppMode}
+        engine={audiobookEngine}
+        onModeChange={handleAppModeChange}
+      />
+    );
+  }
+
   if (!activePlayer) {
     return (
       <main className="app-shell app-loading">
+        <AppModeSwitcher
+          activeMode={activeAppMode}
+          onModeChange={handleAppModeChange}
+        />
         <p className="app-kicker">睡眠声音</p>
         <h1>白噪音</h1>
         <p role="status">正在准备播放器</p>
@@ -436,7 +486,13 @@ function App({ player }: AppProps) {
     );
   }
 
-  return <SoundMixerView player={activePlayer} />;
+  return (
+    <SoundMixerView
+      activeAppMode={activeAppMode}
+      player={activePlayer}
+      onModeChange={handleAppModeChange}
+    />
+  );
 }
 
 export default App;
