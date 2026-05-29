@@ -1,0 +1,40 @@
+.app-mode-nav {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(92px, 1fr));
+  gap: 5px;
+  margin: 0 0 12px;
+  padding: 4px;
+  border: 1px solid rgba(63, 111, 90, 0.13);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
+  box-shadow: 0 10px 28px rgba(20, 33, 28, 0.1);
+  backdrop-filter: blur(18px) saturate(1.12);
+}
+
+.app-mode-button {
+  min-height: 38px;
+  min-width: 0;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 0.84rem;
+  font-weight: 950;
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.app-mode-button[aria-pressed="true"] {
+  color: white;
+  background: linear-gradient(135deg, var(--primary-strong), var(--teal));
+  box-shadow: 0 9px 18px rgba(36, 75, 59, 0.18);
+}
+
+@media (max-width: 680px) {
+  .app-mode-nav {
+    width: 100%;
+  }
+}
