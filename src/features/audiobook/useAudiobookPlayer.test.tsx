@@ -2,6 +2,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { createTtsEngineTestDouble } from "../../test/audioTestDoubles";
+import type { AudiobookSegment } from "./audiobookTypes";
 import type { TtsVoice } from "./TtsEnginePort";
 import { useAudiobookPlayer } from "./useAudiobookPlayer";
 
@@ -16,11 +17,31 @@ function renderAudiobookPlayer(text: string, engine = createTtsEngine().engine) 
   return renderHook(() => useAudiobookPlayer({ text, engine }));
 }
 
+function renderSegmentedAudiobookPlayer(
+  segments: AudiobookSegment[],
+  engine = createTtsEngine().engine,
+) {
+  return renderHook(() => useAudiobookPlayer({ segments, engine }));
+}
+
 async function renderReadyAudiobookPlayer(
   text: string,
   engine = createTtsEngine().engine,
 ) {
   const rendered = renderAudiobookPlayer(text, engine);
+
+  await waitFor(() => {
+    expect(rendered.result.current.isLoadingVoices).toBe(false);
+  });
+
+  return rendered;
+}
+
+async function renderReadySegmentedAudiobookPlayer(
+  segments: AudiobookSegment[],
+  engine = createTtsEngine().engine,
+) {
+  const rendered = renderSegmentedAudiobookPlayer(segments, engine);
 
   await waitFor(() => {
     expect(rendered.result.current.isLoadingVoices).toBe(false);
@@ -247,5 +268,127 @@ describe("useAudiobookPlayer", () => {
         voiceId: "voice:en",
       }),
     );
+  });
+
+  it("plays pre-segmented book content without rebuilding from a full text", async () => {
+    const tts = createTtsEngine();
+    const segments: AudiobookSegment[] = [
+      {
+        chapterTitle: "第一章",
+        id: "epub-1-1",
+        order: 1,
+        sourceHref: "OPS/Text/chapter1.xhtml",
+        text: "第一段。",
+      },
+      {
+        chapterTitle: "第二章",
+        id: "epub-2-1",
+        order: 2,
+        sourceHref: "OPS/Text/chapter2.xhtml",
+        text: "第二段。",
+      },
+    ];
+    const { result } = await renderReadySegmentedAudiobookPlayer(
+      segments,
+      tts.engine,
+    );
+
+    expect(result.current.segments).toBe(segments);
+    expect(result.current.chapters).toHaveLength(2);
+    expect(result.current.currentChapter?.title).toBe("第一章");
+
+    await act(async () => {
+      await result.current.play();
+    });
+
+    expect(tts.speak).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: "第一段。",
+        voiceId: "voice:default",
+      }),
+    );
+
+    act(() => {
+      tts.complete();
+    });
+
+    await waitFor(() => {
+      expect(tts.speak).toHaveBeenCalledTimes(2);
+    });
+    expect(tts.speak).toHaveBeenLastCalledWith(
+      expect.objectContaining({ text: "第二段。" }),
+    );
+    expect(result.current.currentChapter?.title).toBe("第二章");
+  });
+
+  it("plays chapter boundaries from pre-segmented book content", async () => {
+    const tts = createTtsEngine();
+    const segments: AudiobookSegment[] = [
+      {
+        chapterTitle: "第一章",
+        id: "epub-1-1",
+        order: 1,
+        sourceHref: "OPS/Text/chapter1.xhtml",
+        text: "第一章",
+      },
+      {
+        chapterTitle: "第一章",
+        id: "epub-1-2",
+        order: 2,
+        sourceHref: "OPS/Text/chapter1.xhtml",
+        text: "第一段。",
+      },
+      {
+        chapterTitle: "第二章",
+        id: "epub-2-1",
+        order: 3,
+        sourceHref: "OPS/Text/chapter2.xhtml",
+        text: "第二章",
+      },
+      {
+        chapterTitle: "第二章",
+        id: "epub-2-2",
+        order: 4,
+        sourceHref: "OPS/Text/chapter2.xhtml",
+        text: "第二段。",
+      },
+    ];
+    const { result } = await renderReadySegmentedAudiobookPlayer(
+      segments,
+      tts.engine,
+    );
+
+    expect(result.current.chapters.map((chapter) => chapter.title)).toEqual([
+      "第一章",
+      "第二章",
+    ]);
+    expect(result.current.currentChapterIndex).toBe(0);
+
+    await act(async () => {
+      await result.current.playNextChapter();
+    });
+
+    expect(result.current.currentSegmentIndex).toBe(2);
+    expect(result.current.currentChapter?.title).toBe("第二章");
+    expect(tts.speak).toHaveBeenLastCalledWith(
+      expect.objectContaining({ text: "第二章" }),
+    );
+
+    await act(async () => {
+      await result.current.playPreviousChapter();
+    });
+
+    expect(result.current.currentSegmentIndex).toBe(0);
+    expect(result.current.currentChapter?.title).toBe("第一章");
+    expect(tts.speak).toHaveBeenLastCalledWith(
+      expect.objectContaining({ text: "第一章" }),
+    );
+
+    await act(async () => {
+      await result.current.playChapterAt(1);
+    });
+
+    expect(result.current.currentSegmentIndex).toBe(2);
+    expect(result.current.currentChapter?.title).toBe("第二章");
   });
 });

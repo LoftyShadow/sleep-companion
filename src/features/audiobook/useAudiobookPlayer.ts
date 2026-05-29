@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AudiobookPlaybackStatus } from "./audiobookTypes";
+import type {
+  AudiobookPlaybackStatus,
+  AudiobookSegment,
+} from "./audiobookTypes";
+import {
+  buildAudiobookChapters,
+  findChapterIndexForSegment,
+} from "./chapterGrouping";
 import { segmentBookText } from "./textSegmentation";
 import type {
   TtsEnginePort,
@@ -9,8 +16,9 @@ import type {
 import { normalizeSpeechRate } from "./TtsEnginePort";
 
 interface UseAudiobookPlayerOptions {
-  text: string;
   engine: TtsEnginePort;
+  segments?: AudiobookSegment[];
+  text?: string;
 }
 
 const DEFAULT_SPEECH_LANGUAGE = "zh-CN";
@@ -80,10 +88,15 @@ function findPreferredVoiceId(
 }
 
 export function useAudiobookPlayer({
-  text,
   engine,
+  segments: inputSegments,
+  text,
 }: UseAudiobookPlayerOptions) {
-  const segments = useMemo(() => segmentBookText(text), [text]);
+  const segments = useMemo(
+    () => inputSegments ?? segmentBookText(text ?? ""),
+    [inputSegments, text],
+  );
+  const chapters = useMemo(() => buildAudiobookChapters(segments), [segments]);
   const [status, setStatus] = useState<AudiobookPlaybackStatus>("idle");
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0);
   const [voices, setVoices] = useState<TtsVoice[]>([]);
@@ -278,6 +291,43 @@ export function useAudiobookPlayer({
     await playSegment(Math.min(segments.length - 1, currentSegmentIndex + 1));
   }, [currentSegmentIndex, playSegment, segments.length]);
 
+  const currentChapterIndex = useMemo(
+    () => findChapterIndexForSegment(chapters, currentSegmentIndex),
+    [chapters, currentSegmentIndex],
+  );
+  const currentChapter =
+    currentChapterIndex >= 0 ? (chapters[currentChapterIndex] ?? null) : null;
+
+  const playChapterAt = useCallback(
+    async (chapterIndex: number) => {
+      const chapter = chapters[chapterIndex];
+      if (!chapter) {
+        setErrorMessage("没有可朗读的章节");
+        setStatus("error");
+        return;
+      }
+
+      await playSegment(chapter.startSegmentIndex);
+    },
+    [chapters, playSegment],
+  );
+
+  const playPreviousChapter = useCallback(async () => {
+    if (currentChapterIndex < 0) {
+      return;
+    }
+
+    await playChapterAt(Math.max(0, currentChapterIndex - 1));
+  }, [currentChapterIndex, playChapterAt]);
+
+  const playNextChapter = useCallback(async () => {
+    if (currentChapterIndex < 0) {
+      return;
+    }
+
+    await playChapterAt(Math.min(chapters.length - 1, currentChapterIndex + 1));
+  }, [chapters.length, currentChapterIndex, playChapterAt]);
+
   const selectVoice = useCallback(
     (voiceId: string | null) => {
       stopPlayback();
@@ -301,6 +351,9 @@ export function useAudiobookPlayer({
       : 0;
 
   return {
+    chapters,
+    currentChapter,
+    currentChapterIndex,
     currentSegment,
     currentSegmentIndex,
     errorMessage,
@@ -308,9 +361,12 @@ export function useAudiobookPlayer({
     isLoadingVoices,
     pause,
     play,
+    playChapterAt,
     playSegmentAt: playSegment,
     playNext,
+    playNextChapter,
     playPrevious,
+    playPreviousChapter,
     progressPercent,
     rate,
     resume,

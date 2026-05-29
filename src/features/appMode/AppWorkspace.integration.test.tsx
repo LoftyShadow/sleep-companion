@@ -1,10 +1,11 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import {
   createPlayerPortTestDouble,
   createTtsEngineTestDouble,
 } from "../../test/audioTestDoubles";
+import { createMinimalEpubFile } from "../../test/epubTestDoubles";
 import { AppWorkspace } from "./AppWorkspace";
 
 describe("AppWorkspace integration", () => {
@@ -143,5 +144,55 @@ describe("AppWorkspace integration", () => {
         voiceId: "voice:default",
       }),
     );
+  });
+
+  it("imports an EPUB book as pre-segmented audiobook content", async () => {
+    const user = userEvent.setup();
+    const { engine, speak } = createTtsEngineTestDouble();
+    render(
+      <AppWorkspace
+        player={createPlayerPortTestDouble().player}
+        ttsEngine={engine}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "听书" }));
+    await user.upload(
+      screen.getByLabelText("导入听书书稿"),
+      await createMinimalEpubFile(),
+    );
+
+    expect(await screen.findByText("已导入 测试 EPUB · 5 段")).toBeInTheDocument();
+    expect(screen.queryByLabelText("书稿文本")).not.toBeInTheDocument();
+    expect(screen.getByText("EPUB · 2 章 · 5 个朗读片段")).toBeInTheDocument();
+    expect(screen.getByText("正在播放章节")).toBeInTheDocument();
+    expect(screen.getByText("3 段 · 第 1 / 2 章")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "选择章节，当前 第一章" }),
+    );
+    expect(screen.getByRole("listbox", { name: "章节列表" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /第一章.*3 段/u }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /第二章.*2 段/u }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("第三段。第四段。")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "下一章" }));
+
+    await waitFor(() => {
+      expect(speak).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: "第二章",
+          voiceId: "voice:default",
+        }),
+      );
+    });
+    expect(
+      screen.getByRole("button", { name: "选择章节，当前 第二章" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("第三段。第四段。")).toBeInTheDocument();
+    expect(screen.queryByText("第一段。")).not.toBeInTheDocument();
   });
 });

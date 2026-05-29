@@ -1,4 +1,5 @@
 import { useId } from "react";
+import { AUDIOBOOK_FILE_ACCEPT } from "./bookImport";
 
 interface AudiobookImportPanelProps {
   bookTitle: string;
@@ -35,10 +36,10 @@ export function AudiobookImportPanel({
       />
 
       <label className="custom-audio-button audiobook-file-button">
-        <span>{isImporting ? "导入中" : "导入文本"}</span>
+        <span>{isImporting ? "导入中" : "导入书稿"}</span>
         <input
-          accept=".txt,.md,.markdown,text/plain,text/markdown"
-          aria-label="导入文本书稿"
+          accept={AUDIOBOOK_FILE_ACCEPT}
+          aria-label="导入听书书稿"
           className="custom-audio-input"
           disabled={isImporting}
           type="file"
@@ -55,4 +56,3 @@ export function AudiobookImportPanel({
     </section>
   );
 }
-

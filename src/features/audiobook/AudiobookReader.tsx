@@ -1,24 +1,47 @@
 import { useId } from "react";
-import type { AudiobookSegment } from "./audiobookTypes";
+import type { AudiobookChapter, AudiobookSegment } from "./audiobookTypes";
+import { AudiobookChapterNavigation } from "./AudiobookChapterNavigation";
 
 interface AudiobookReaderProps {
-  bookText: string;
+  bookText: string | null;
+  chapters: AudiobookChapter[];
+  currentChapter: AudiobookChapter | null;
+  currentChapterIndex: number;
   currentSegmentIndex: number;
   progressPercent: number;
   segments: AudiobookSegment[];
-  onBookTextChange: (text: string) => void;
+  sourceLabel: string;
+  onBookTextChange?: (text: string) => void;
+  onChapterChange: (chapterIndex: number) => void;
+  onNextChapter: () => void;
   onPlaySegmentAt: (index: number) => void;
+  onPreviousChapter: () => void;
 }
 
 export function AudiobookReader({
   bookText,
+  chapters,
+  currentChapter,
+  currentChapterIndex,
   currentSegmentIndex,
   progressPercent,
   segments,
+  sourceLabel,
   onBookTextChange,
+  onChapterChange,
+  onNextChapter,
   onPlaySegmentAt,
+  onPreviousChapter,
 }: AudiobookReaderProps) {
   const textInputId = useId();
+  const isTextEditable = bookText !== null && onBookTextChange !== undefined;
+  const visibleSegmentStartIndex = currentChapter?.startSegmentIndex ?? 0;
+  const visibleSegments = currentChapter
+    ? segments.slice(
+        currentChapter.startSegmentIndex,
+        currentChapter.endSegmentIndex + 1,
+      )
+    : segments;
 
   return (
     <section
@@ -27,32 +50,50 @@ export function AudiobookReader({
     >
       <div className="section-heading sound-section-heading">
         <div>
-          <p className="app-kicker">文本书稿</p>
+          <p className="app-kicker">{isTextEditable ? "文本书稿" : "EPUB 书稿"}</p>
           <h2 id="audiobook-reader-heading">朗读内容</h2>
         </div>
         <span className="section-meta">{progressPercent}%</span>
       </div>
 
-      <label className="field-label" htmlFor={textInputId}>
-        书稿文本
-      </label>
-      <textarea
-        className="audiobook-textarea"
-        id={textInputId}
-        value={bookText}
-        onChange={(event) => {
-          onBookTextChange(event.currentTarget.value);
-        }}
-      />
+      {isTextEditable ? (
+        <>
+          <label className="field-label" htmlFor={textInputId}>
+            书稿文本
+          </label>
+          <textarea
+            className="audiobook-textarea"
+            id={textInputId}
+            value={bookText}
+            onChange={(event) => {
+              onBookTextChange(event.currentTarget.value);
+            }}
+          />
+        </>
+      ) : (
+        <p className="audiobook-source-summary">{sourceLabel}</p>
+      )}
+
+      {chapters.length > 0 ? (
+        <AudiobookChapterNavigation
+          chapters={chapters}
+          currentChapter={currentChapter}
+          currentChapterIndex={currentChapterIndex}
+          onChapterChange={onChapterChange}
+          onNextChapter={onNextChapter}
+          onPreviousChapter={onPreviousChapter}
+        />
+      ) : null}
 
       <div className="segment-list" aria-label="朗读片段">
-        {segments.length === 0 ? (
+        {visibleSegments.length === 0 ? (
           <p className="empty-segment-message" role="status">
             暂无可朗读片段
           </p>
         ) : (
-          segments.map((segment, index) => {
-            const isActive = index === currentSegmentIndex;
+          visibleSegments.map((segment, visibleIndex) => {
+            const segmentIndex = visibleSegmentStartIndex + visibleIndex;
+            const isActive = segmentIndex === currentSegmentIndex;
 
             return (
               <button
@@ -63,13 +104,20 @@ export function AudiobookReader({
                 key={segment.id}
                 type="button"
                 onClick={() => {
-                  onPlaySegmentAt(index);
+                  onPlaySegmentAt(segmentIndex);
                 }}
               >
                 <span className="segment-order">
                   {String(segment.order).padStart(2, "0")}
                 </span>
-                <span className="segment-text">{segment.text}</span>
+                <span className="segment-text">
+                  {segment.chapterTitle ? (
+                    <span className="segment-chapter">
+                      {segment.chapterTitle}
+                    </span>
+                  ) : null}
+                  <span>{segment.text}</span>
+                </span>
               </button>
             );
           })
@@ -78,4 +126,3 @@ export function AudiobookReader({
     </section>
   );
 }
-

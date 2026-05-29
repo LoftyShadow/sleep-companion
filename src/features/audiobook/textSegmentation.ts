@@ -41,9 +41,13 @@ interface SegmentBookTextOptions {
   targetLength?: number;
   hardLimit?: number;
   language?: string;
+  idPrefix?: string;
+  startingOrder?: number;
+  chapterTitle?: string;
+  sourceHref?: string;
 }
 
-function getFileExtension(fileName: string): string {
+export function getFileExtension(fileName: string): string {
   const dotIndex = fileName.lastIndexOf(".");
   return dotIndex >= 0 ? fileName.slice(dotIndex).toLowerCase() : "";
 }
@@ -184,6 +188,7 @@ export async function readPlainTextBookFile(file: File): Promise<PlainTextBook> 
   }
 
   return {
+    kind: "plain-text",
     title: getPlainTextBookTitle(file.name),
     text: await file.text(),
   };
@@ -196,6 +201,8 @@ export function segmentBookText(
   const targetLength = options.targetLength ?? DEFAULT_TARGET_LENGTH;
   const hardLimit = options.hardLimit ?? DEFAULT_HARD_LIMIT;
   const language = options.language;
+  const idPrefix = options.idPrefix ?? "segment";
+  const startingOrder = options.startingOrder ?? 1;
   const paragraphs = text
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
@@ -207,9 +214,15 @@ export function segmentBookText(
     splitParagraph(paragraph, targetLength, hardLimit, language),
   );
 
-  return segmentTexts.map((segmentText, index) => ({
-    id: `segment-${index + 1}`,
-    order: index + 1,
-    text: segmentText,
-  }));
+  return segmentTexts.map((segmentText, index) => {
+    const order = startingOrder + index;
+
+    return {
+      id: `${idPrefix}-${index + 1}`,
+      order,
+      text: segmentText,
+      ...(options.chapterTitle ? { chapterTitle: options.chapterTitle } : {}),
+      ...(options.sourceHref ? { sourceHref: options.sourceHref } : {}),
+    };
+  });
 }
