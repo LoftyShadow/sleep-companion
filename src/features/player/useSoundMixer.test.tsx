@@ -31,6 +31,17 @@ function createPlayer() {
   return { destroy, getState, pause, play, player, setVolume, stopAll };
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+
+  return { promise, reject, resolve };
+}
+
 describe("useSoundMixer", () => {
   it("plays and pauses a sound through the player", async () => {
     const { pause, play, player } = createPlayer();
@@ -69,6 +80,52 @@ describe("useSoundMixer", () => {
       expect(stopAll).toHaveBeenCalledTimes(1);
       expect(result.current.playingSoundIds.size).toBe(0);
     });
+  });
+
+  it("uses a just-updated volume when playing before the next render", async () => {
+    const { play, player, setVolume } = createPlayer();
+    const { result } = renderHook(() =>
+      useSoundMixer({ sounds: BUILT_IN_SOUNDS, player }),
+    );
+    const setCampfireVolume = result.current.setSoundVolume;
+    const toggleCampfire = result.current.toggleSound;
+
+    await act(async () => {
+      await setCampfireVolume("campfire", 0.82);
+      await toggleCampfire("campfire");
+    });
+
+    expect(setVolume).toHaveBeenCalledWith("campfire", 0.82);
+    expect(play).toHaveBeenCalledWith(BUILT_IN_SOUNDS[1], 0.82);
+    expect(result.current.volumes.campfire).toBe(0.82);
+  });
+
+  it("keeps every sound that starts while play promises resolve out of order", async () => {
+    const playRequests: Array<ReturnType<typeof createDeferred<void>>> = [];
+    const playerMocks = createPlayer();
+    playerMocks.play.mockImplementation(() => {
+      const deferred = createDeferred<void>();
+      playRequests.push(deferred);
+      return deferred.promise;
+    });
+    const { result } = renderHook(() =>
+      useSoundMixer({ sounds: BUILT_IN_SOUNDS, player: playerMocks.player }),
+    );
+
+    await act(async () => {
+      const rainPlay = result.current.toggleSound("heavy_rain");
+      const campfirePlay = result.current.toggleSound("campfire");
+
+      playRequests[1].resolve();
+      await campfirePlay;
+      playRequests[0].resolve();
+      await rainPlay;
+    });
+
+    expect([...result.current.playingSoundIds]).toEqual([
+      "campfire",
+      "heavy_rain",
+    ]);
   });
 
   it("applies a preset by stopping the old mix and playing preset sounds", async () => {

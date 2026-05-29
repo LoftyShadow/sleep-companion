@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SoundDefinition, SoundId } from "../sounds/soundCatalog";
 import type { SoundPreset, SoundPresetId } from "../sounds/soundPresets";
 import type { PlayerPort } from "./PlayerPort";
@@ -11,6 +11,32 @@ interface UseSoundMixerOptions {
 }
 
 type VolumeState = Record<SoundId, number>;
+
+function logMixerEvent(
+  eventName: string,
+  details: Record<string, unknown>,
+): void {
+  if (!import.meta.env.DEV || import.meta.env.MODE === "test") {
+    return;
+  }
+
+  console.info(`[sound-mixer] ${eventName}`, details);
+}
+
+function logMixerError(
+  eventName: string,
+  error: unknown,
+  details: Record<string, unknown>,
+): void {
+  if (!import.meta.env.DEV || import.meta.env.MODE === "test") {
+    return;
+  }
+
+  console.warn(`[sound-mixer] ${eventName}`, {
+    ...details,
+    error: error instanceof Error ? error.message : String(error),
+  });
+}
 
 function createInitialVolumes(
   sounds: SoundDefinition[],
@@ -40,7 +66,10 @@ function getSoundVolume(volumes: VolumeState, soundId: SoundId): number {
 }
 
 function hasSameSoundIds(left: SoundId[], right: SoundId[]): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
 }
 
 function applyPresetVolumes(
@@ -71,58 +100,84 @@ export function useSoundMixer({
   const [playingSoundIds, setPlayingSoundIds] = useState<Set<SoundId>>(
     () => new Set(),
   );
+  const playingSoundIdsRef = useRef<Set<SoundId>>(new Set());
   const [volumes, setVolumes] = useState<VolumeState>(() =>
     createInitialVolumes(sounds, defaultPreset),
   );
+  const volumesRef = useRef<VolumeState>(volumes);
   const [resumeSoundIds, setResumeSoundIds] = useState<SoundId[]>(() =>
     defaultPreset
       ? getPresetSoundIds(defaultPreset)
       : sounds.map((sound) => sound.id),
   );
+  const resumeSoundIdsRef = useRef<SoundId[]>(resumeSoundIds);
   const [activePresetId, setActivePresetId] = useState<SoundPresetId | null>(
     defaultPreset?.id ?? null,
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const replacePlayingSoundIds = useCallback((nextSoundIds: Set<SoundId>) => {
+    playingSoundIdsRef.current = nextSoundIds;
+    setPlayingSoundIds(nextSoundIds);
+  }, []);
+
+  const replaceVolumes = useCallback((nextVolumes: VolumeState) => {
+    volumesRef.current = nextVolumes;
+    setVolumes(nextVolumes);
+  }, []);
+
+  const replaceResumeSoundIds = useCallback((nextSoundIds: SoundId[]) => {
+    resumeSoundIdsRef.current = nextSoundIds;
+    setResumeSoundIds(nextSoundIds);
+  }, []);
 
   useEffect(() => {
     const availableSoundIds = new Set(sounds.map((sound) => sound.id));
     const fallbackResumeSoundIds = defaultPreset
       ? getPresetSoundIds(defaultPreset)
       : sounds.map((sound) => sound.id);
+    const currentPlayingSoundIds = playingSoundIdsRef.current;
 
-    setPlayingSoundIds((current) => {
-      const nextSoundIds = [...current].filter((soundId) =>
-        availableSoundIds.has(soundId),
-      );
-      return nextSoundIds.length === current.size ? current : new Set(nextSoundIds);
-    });
+    const nextPlayingSoundIds = [...currentPlayingSoundIds].filter((soundId) =>
+      availableSoundIds.has(soundId),
+    );
+    if (nextPlayingSoundIds.length !== currentPlayingSoundIds.size) {
+      replacePlayingSoundIds(new Set(nextPlayingSoundIds));
+    }
 
-    setResumeSoundIds((current) => {
-      const nextSoundIds = current.filter((soundId) =>
-        availableSoundIds.has(soundId),
-      );
-      const normalizedSoundIds =
-        nextSoundIds.length > 0 ? nextSoundIds : fallbackResumeSoundIds;
+    const currentResumeSoundIds = resumeSoundIdsRef.current;
+    const nextResumeSoundIds = currentResumeSoundIds.filter((soundId) =>
+      availableSoundIds.has(soundId),
+    );
+    const normalizedResumeSoundIds =
+      nextResumeSoundIds.length > 0
+        ? nextResumeSoundIds
+        : fallbackResumeSoundIds;
 
-      return hasSameSoundIds(current, normalizedSoundIds)
-        ? current
-        : normalizedSoundIds;
-    });
+    if (!hasSameSoundIds(currentResumeSoundIds, normalizedResumeSoundIds)) {
+      replaceResumeSoundIds(normalizedResumeSoundIds);
+    }
 
-    setVolumes((current) => {
-      let hasChange = false;
-      const nextVolumes = { ...current };
+    let hasVolumeChange = false;
+    const nextVolumes = { ...volumesRef.current };
 
-      for (const sound of sounds) {
-        if (nextVolumes[sound.id] === undefined) {
-          nextVolumes[sound.id] = 0.5;
-          hasChange = true;
-        }
+    for (const sound of sounds) {
+      if (nextVolumes[sound.id] === undefined) {
+        nextVolumes[sound.id] = 0.5;
+        hasVolumeChange = true;
       }
+    }
 
-      return hasChange ? nextVolumes : current;
-    });
-  }, [defaultPreset, sounds]);
+    if (hasVolumeChange) {
+      replaceVolumes(nextVolumes);
+    }
+  }, [
+    defaultPreset,
+    replacePlayingSoundIds,
+    replaceResumeSoundIds,
+    replaceVolumes,
+    sounds,
+  ]);
 
   const playSoundIds = useCallback(
     async (soundIds: SoundId[], nextVolumes: VolumeState) => {
@@ -152,84 +207,143 @@ export function useSoundMixer({
 
       try {
         setErrorMessage(null);
-        if (playingSoundIds.has(soundId)) {
+        if (playingSoundIdsRef.current.has(soundId)) {
+          logMixerEvent("pause-request", {
+            soundId,
+            playingSoundIds: [...playingSoundIdsRef.current],
+          });
           await player.pause(soundId);
-          const nextPlayingSoundIds = new Set(playingSoundIds);
+          const nextPlayingSoundIds = new Set(playingSoundIdsRef.current);
           nextPlayingSoundIds.delete(soundId);
-          setPlayingSoundIds(nextPlayingSoundIds);
-          setResumeSoundIds(
+          replacePlayingSoundIds(nextPlayingSoundIds);
+          replaceResumeSoundIds(
             nextPlayingSoundIds.size > 0
               ? [...nextPlayingSoundIds]
               : [soundId],
           );
           setActivePresetId(null);
+          logMixerEvent("pause-success", {
+            soundId,
+            playingSoundIds: [...nextPlayingSoundIds],
+          });
           return;
         }
 
-        await player.play(sound, getSoundVolume(volumes, soundId));
-        const nextPlayingSoundIds = new Set(playingSoundIds).add(soundId);
-        setPlayingSoundIds(nextPlayingSoundIds);
-        setResumeSoundIds([...nextPlayingSoundIds]);
+        const nextVolume = getSoundVolume(volumesRef.current, soundId);
+        logMixerEvent("play-request", {
+          soundId,
+          volume: nextVolume,
+          playingSoundIds: [...playingSoundIdsRef.current],
+        });
+        await player.play(sound, nextVolume);
+        const nextPlayingSoundIds = new Set(playingSoundIdsRef.current).add(
+          soundId,
+        );
+        replacePlayingSoundIds(nextPlayingSoundIds);
+        replaceResumeSoundIds([...nextPlayingSoundIds]);
         setActivePresetId(null);
+        logMixerEvent("play-success", {
+          soundId,
+          volume: nextVolume,
+          playingSoundIds: [...nextPlayingSoundIds],
+        });
       } catch (error) {
+        logMixerError("toggle-failed", error, { soundId });
         setErrorMessage(error instanceof Error ? error.message : "播放失败");
       }
     },
-    [player, playingSoundIds, soundById, volumes],
+    [player, replacePlayingSoundIds, replaceResumeSoundIds, soundById],
   );
 
   const setSoundVolume = useCallback(
     async (soundId: SoundId, volume: number) => {
       const nextVolume = normalizeVolume(volume);
-      setVolumes((current) => ({ ...current, [soundId]: nextVolume }));
+      replaceVolumes({ ...volumesRef.current, [soundId]: nextVolume });
       try {
         setErrorMessage(null);
+        logMixerEvent("set-volume-request", {
+          soundId,
+          volume: nextVolume,
+          isPlaying: playingSoundIdsRef.current.has(soundId),
+        });
         await player.setVolume(soundId, nextVolume);
         setActivePresetId(null);
+        logMixerEvent("set-volume-success", {
+          soundId,
+          volume: nextVolume,
+          isPlaying: playingSoundIdsRef.current.has(soundId),
+        });
       } catch (error) {
+        logMixerError("set-volume-failed", error, {
+          soundId,
+          volume: nextVolume,
+        });
         setErrorMessage(error instanceof Error ? error.message : "音量调整失败");
       }
     },
-    [player],
+    [player, replaceVolumes],
   );
 
   const stopAll = useCallback(async () => {
     try {
       setErrorMessage(null);
+      const previousPlayingSoundIds = [...playingSoundIdsRef.current];
+      logMixerEvent("stop-all-request", {
+        playingSoundIds: previousPlayingSoundIds,
+      });
       await player.stopAll();
-      if (playingSoundIds.size > 0) {
-        setResumeSoundIds([...playingSoundIds]);
+      if (previousPlayingSoundIds.length > 0) {
+        replaceResumeSoundIds(previousPlayingSoundIds);
       }
-      setPlayingSoundIds(new Set());
+      replacePlayingSoundIds(new Set());
+      logMixerEvent("stop-all-success", {
+        resumeSoundIds: previousPlayingSoundIds,
+      });
     } catch (error) {
+      logMixerError("stop-all-failed", error, {});
       setErrorMessage(error instanceof Error ? error.message : "停止播放失败");
     }
-  }, [player, playingSoundIds]);
+  }, [player, replacePlayingSoundIds, replaceResumeSoundIds]);
 
   const applyPreset = useCallback(
     async (preset: SoundPreset) => {
-      const nextVolumes = applyPresetVolumes(volumes, preset);
+      const nextVolumes = applyPresetVolumes(volumesRef.current, preset);
       const nextSoundIds = getPresetSoundIds(preset);
 
       try {
         setErrorMessage(null);
+        logMixerEvent("apply-preset-request", {
+          presetId: preset.id,
+          soundIds: nextSoundIds,
+        });
         await player.stopAll();
         const playedSoundIds = await playSoundIds(nextSoundIds, nextVolumes);
-        setVolumes(nextVolumes);
-        setPlayingSoundIds(new Set(playedSoundIds));
-        setResumeSoundIds(playedSoundIds);
+        replaceVolumes(nextVolumes);
+        replacePlayingSoundIds(new Set(playedSoundIds));
+        replaceResumeSoundIds(playedSoundIds);
         setActivePresetId(preset.id);
+        logMixerEvent("apply-preset-success", {
+          presetId: preset.id,
+          soundIds: playedSoundIds,
+        });
       } catch (error) {
         await player.stopAll().catch(() => undefined);
-        setPlayingSoundIds(new Set());
+        replacePlayingSoundIds(new Set());
+        logMixerError("apply-preset-failed", error, { presetId: preset.id });
         setErrorMessage(error instanceof Error ? error.message : "预设播放失败");
       }
     },
-    [player, playSoundIds, volumes],
+    [
+      player,
+      playSoundIds,
+      replacePlayingSoundIds,
+      replaceResumeSoundIds,
+      replaceVolumes,
+    ],
   );
 
   const toggleUnifiedPlayback = useCallback(async () => {
-    if (playingSoundIds.size > 0) {
+    if (playingSoundIdsRef.current.size > 0) {
       await stopAll();
       return;
     }
@@ -237,25 +351,27 @@ export function useSoundMixer({
     try {
       setErrorMessage(null);
       const soundIds =
-        resumeSoundIds.length > 0
-          ? resumeSoundIds
+        resumeSoundIdsRef.current.length > 0
+          ? resumeSoundIdsRef.current
           : sounds.map((sound) => sound.id);
-      const playedSoundIds = await playSoundIds(soundIds, volumes);
-      setPlayingSoundIds(new Set(playedSoundIds));
-      setResumeSoundIds(playedSoundIds);
+      logMixerEvent("toggle-unified-play-request", { soundIds });
+      const playedSoundIds = await playSoundIds(soundIds, volumesRef.current);
+      replacePlayingSoundIds(new Set(playedSoundIds));
+      replaceResumeSoundIds(playedSoundIds);
+      logMixerEvent("toggle-unified-play-success", { soundIds: playedSoundIds });
     } catch (error) {
       await player.stopAll().catch(() => undefined);
-      setPlayingSoundIds(new Set());
+      replacePlayingSoundIds(new Set());
+      logMixerError("toggle-unified-play-failed", error, {});
       setErrorMessage(error instanceof Error ? error.message : "播放失败");
     }
   }, [
     playSoundIds,
     player,
-    playingSoundIds,
-    resumeSoundIds,
+    replacePlayingSoundIds,
+    replaceResumeSoundIds,
     sounds,
     stopAll,
-    volumes,
   ]);
 
   return {

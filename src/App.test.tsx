@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -106,6 +106,28 @@ describe("App", () => {
       "keyboard",
       "clock",
     ]);
+  });
+
+  it("keeps a white-noise sound volume when starting an ASMR sound", async () => {
+    const user = userEvent.setup();
+    const { play, player, setVolume } = createPlayer();
+    render(<App player={player} />);
+
+    fireEvent.change(screen.getByLabelText("大雨音量"), {
+      target: { value: "73" },
+    });
+    await user.click(screen.getByRole("button", { name: "大雨" }));
+    await user.click(screen.getByRole("button", { name: "ASMR" }));
+    await user.click(screen.getByRole("button", { name: "轻柔掏耳" }));
+    await user.click(screen.getByRole("button", { name: "白噪音" }));
+
+    expect(setVolume).toHaveBeenCalledTimes(1);
+    expect(setVolume).toHaveBeenCalledWith("heavy_rain", 0.73);
+    expect(play.mock.calls.map(([sound, volume]) => [sound.id, volume])).toEqual([
+      ["heavy_rain", 0.73],
+      ["asmr_ear_cleaning_soft", 0.5],
+    ]);
+    expect(screen.getByLabelText("大雨音量")).toHaveValue("73");
   });
 
   it("switches to the ASMR console and shows real ASMR sounds", async () => {
