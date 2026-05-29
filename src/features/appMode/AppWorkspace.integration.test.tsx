@@ -1,68 +1,15 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
-import App from "./App";
-import type { PlayerPort } from "./features/player/PlayerPort";
-import type {
-  TtsEnginePort,
-  TtsPlaybackHandle,
-  TtsVoice,
-} from "./features/audiobook/TtsEnginePort";
+import { describe, expect, it } from "vitest";
+import {
+  createPlayerPortTestDouble,
+  createTtsEngineTestDouble,
+} from "../../test/audioTestDoubles";
+import { AppWorkspace } from "./AppWorkspace";
 
-function createPlayer() {
-  const play = vi.fn<PlayerPort["play"]>(() => Promise.resolve());
-  const pause = vi.fn<PlayerPort["pause"]>(() => Promise.resolve());
-  const setVolume = vi.fn<PlayerPort["setVolume"]>(() => Promise.resolve());
-  const stopAll = vi.fn<PlayerPort["stopAll"]>(() => Promise.resolve());
-  const getState = vi.fn<PlayerPort["getState"]>(() =>
-    Promise.resolve({ sounds: [] }),
-  );
-  const destroy = vi.fn<PlayerPort["destroy"]>();
-  const player: PlayerPort = {
-    play,
-    pause,
-    setVolume,
-    stopAll,
-    getState,
-    destroy,
-  };
-
-  return { destroy, getState, pause, play, player, setVolume, stopAll };
-}
-
-function createTtsEngine() {
-  const voices: TtsVoice[] = [
-    {
-      id: "voice:default",
-      name: "系统女声",
-      language: "zh-CN",
-      isDefault: true,
-      isLocal: true,
-    },
-  ];
-  const handle: TtsPlaybackHandle = {
-    cancel: vi.fn(),
-    pause: vi.fn(),
-    resume: vi.fn(),
-  };
-  const speak = vi.fn<TtsEnginePort["speak"]>(() => Promise.resolve(handle));
-  const engine: TtsEnginePort = {
-    engineId: "test-system",
-    label: "测试系统 TTS",
-    supportsPause: true,
-    isSupported: vi.fn(() => true),
-    listVoices: vi.fn(() => Promise.resolve(voices)),
-    speak,
-    cancel: vi.fn(),
-    destroy: vi.fn(),
-  };
-
-  return { engine, speak };
-}
-
-describe("App", () => {
+describe("AppWorkspace integration", () => {
   it("renders the built-in sound grid", () => {
-    render(<App player={createPlayer().player} />);
+    render(<AppWorkspace player={createPlayerPortTestDouble().player} />);
 
     expect(
       screen.getByRole("heading", { name: "白噪音" }),
@@ -82,8 +29,8 @@ describe("App", () => {
 
   it("uses the unified button to play and stop the default preset", async () => {
     const user = userEvent.setup();
-    const { play, player, stopAll } = createPlayer();
-    render(<App player={player} />);
+    const { play, player, stopAll } = createPlayerPortTestDouble();
+    render(<AppWorkspace player={player} />);
 
     await user.click(screen.getByRole("button", { name: "播放预设" }));
     await user.click(await screen.findByRole("button", { name: "停止播放" }));
@@ -94,8 +41,8 @@ describe("App", () => {
 
   it("applies grouped presets through the player port", async () => {
     const user = userEvent.setup();
-    const { play, player, stopAll } = createPlayer();
-    render(<App player={player} />);
+    const { play, player, stopAll } = createPlayerPortTestDouble();
+    render(<AppWorkspace player={player} />);
 
     await user.click(screen.getByRole("button", { name: "应用预设图书馆专注" }));
 
@@ -110,8 +57,8 @@ describe("App", () => {
 
   it("keeps a white-noise sound volume when starting an ASMR sound", async () => {
     const user = userEvent.setup();
-    const { play, player, setVolume } = createPlayer();
-    render(<App player={player} />);
+    const { play, player, setVolume } = createPlayerPortTestDouble();
+    render(<AppWorkspace player={player} />);
 
     fireEvent.change(screen.getByLabelText("大雨音量"), {
       target: { value: "73" },
@@ -132,7 +79,7 @@ describe("App", () => {
 
   it("switches to the ASMR console and shows real ASMR sounds", async () => {
     const user = userEvent.setup();
-    render(<App player={createPlayer().player} />);
+    render(<AppWorkspace player={createPlayerPortTestDouble().player} />);
 
     await user.click(screen.getByRole("button", { name: "ASMR" }));
 
@@ -156,8 +103,8 @@ describe("App", () => {
 
   it("uses the unified button to play the default ASMR preset in ASMR mode", async () => {
     const user = userEvent.setup();
-    const { play, player, stopAll } = createPlayer();
-    render(<App player={player} />);
+    const { play, player, stopAll } = createPlayerPortTestDouble();
+    render(<AppWorkspace player={player} />);
 
     await user.click(screen.getByRole("button", { name: "ASMR" }));
     await user.click(screen.getByRole("button", { name: "播放 ASMR" }));
@@ -173,8 +120,13 @@ describe("App", () => {
 
   it("switches to the audiobook view and speaks text through the TTS port", async () => {
     const user = userEvent.setup();
-    const { engine, speak } = createTtsEngine();
-    render(<App player={createPlayer().player} ttsEngine={engine} />);
+    const { engine, speak } = createTtsEngineTestDouble();
+    render(
+      <AppWorkspace
+        player={createPlayerPortTestDouble().player}
+        ttsEngine={engine}
+      />,
+    );
 
     await user.click(screen.getByRole("button", { name: "听书" }));
 

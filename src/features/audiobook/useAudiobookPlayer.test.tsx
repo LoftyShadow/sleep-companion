@@ -1,82 +1,66 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
-import type {
-  TtsEnginePort,
-  TtsPlaybackHandle,
-  TtsSpeakInput,
-  TtsVoice,
-} from "./TtsEnginePort";
+import { createTtsEngineTestDouble } from "../../test/audioTestDoubles";
+import type { TtsVoice } from "./TtsEnginePort";
 import { useAudiobookPlayer } from "./useAudiobookPlayer";
 
 function createTtsEngine(
-  voices: TtsVoice[] = [
-    {
-      id: "voice:default",
-      name: "系统女声",
-      language: "zh-CN",
-      isDefault: true,
-      isLocal: true,
-    },
-  ],
+  voices?: TtsVoice[],
   supportsPause = true,
 ) {
-  const handleCancel = vi.fn();
-  const handlePause = vi.fn();
-  const handleResume = vi.fn();
-  const handle: TtsPlaybackHandle = {
-    cancel: handleCancel,
-    pause: handlePause,
-    resume: handleResume,
-  };
-  const cancel = vi.fn();
-  const destroy = vi.fn();
-  const isSupported = vi.fn(() => true);
-  const listVoices = vi.fn(() => Promise.resolve(voices));
-  let activeInput: TtsSpeakInput | null = null;
-  const speak = vi.fn<TtsEnginePort["speak"]>((input) => {
-    activeInput = input;
-    return Promise.resolve(handle);
-  });
-  const engine: TtsEnginePort = {
-    engineId: "test-system",
-    label: "测试系统 TTS",
-    supportsPause,
-    isSupported,
-    listVoices,
-    speak,
-    cancel,
-    destroy,
-  };
+  return createTtsEngineTestDouble({ supportsPause, voices });
+}
 
-  return {
-    activeInput: () => activeInput,
-    complete() {
-      activeInput?.onEnd?.();
-    },
-    cancel,
-    engine,
-    handleCancel,
-    handlePause,
-    handleResume,
-    isSupported,
-    speak,
-  };
+function renderAudiobookPlayer(text: string, engine = createTtsEngine().engine) {
+  return renderHook(() => useAudiobookPlayer({ text, engine }));
+}
+
+async function renderReadyAudiobookPlayer(
+  text: string,
+  engine = createTtsEngine().engine,
+) {
+  const rendered = renderAudiobookPlayer(text, engine);
+
+  await waitFor(() => {
+    expect(rendered.result.current.isLoadingVoices).toBe(false);
+  });
+
+  return rendered;
+}
+
+async function renderPlayingAudiobookPlayer(
+  text: string,
+  engine = createTtsEngine().engine,
+) {
+  const rendered = await renderReadyAudiobookPlayer(text, engine);
+
+  await act(async () => {
+    await rendered.result.current.play();
+  });
+
+  return rendered;
 }
 
 describe("useAudiobookPlayer", () => {
-  it("loads voices and plays text segments continuously", async () => {
+  it("does not cancel the TTS engine before any speech has started", async () => {
     const tts = createTtsEngine();
-    const { result } = renderHook(() =>
-      useAudiobookPlayer({
-        text: "第一段。\n\n第二段。",
-        engine: tts.engine,
-      }),
-    );
+    renderAudiobookPlayer("第一段。", tts.engine);
 
     await waitFor(() => {
-      expect(result.current.isLoadingVoices).toBe(false);
+      expect(tts.listVoices).toHaveBeenCalledTimes(1);
     });
+
+    expect(tts.cancel).not.toHaveBeenCalled();
+    expect(tts.handleCancel).not.toHaveBeenCalled();
+  });
+
+  it("loads voices and plays text segments continuously", async () => {
+    const tts = createTtsEngine();
+    const { result } = await renderReadyAudiobookPlayer(
+      "第一段。\n\n第二段。",
+      tts.engine,
+    );
 
     expect(result.current.selectedVoiceId).toBeNull();
     expect(result.current.segments).toHaveLength(2);
@@ -114,20 +98,10 @@ describe("useAudiobookPlayer", () => {
 
   it("pauses, resumes and stops the active speech handle", async () => {
     const tts = createTtsEngine();
-    const { result } = renderHook(() =>
-      useAudiobookPlayer({
-        text: "第一段。",
-        engine: tts.engine,
-      }),
+    const { result } = await renderPlayingAudiobookPlayer(
+      "第一段。",
+      tts.engine,
     );
-
-    await waitFor(() => {
-      expect(result.current.isLoadingVoices).toBe(false);
-    });
-
-    await act(async () => {
-      await result.current.play();
-    });
 
     act(() => {
       result.current.pause();
@@ -154,20 +128,10 @@ describe("useAudiobookPlayer", () => {
 
   it("does not expose pause behavior for engines without pause support", async () => {
     const tts = createTtsEngine(undefined, false);
-    const { result } = renderHook(() =>
-      useAudiobookPlayer({
-        text: "第一段。",
-        engine: tts.engine,
-      }),
+    const { result } = await renderPlayingAudiobookPlayer(
+      "第一段。",
+      tts.engine,
     );
-
-    await waitFor(() => {
-      expect(result.current.isLoadingVoices).toBe(false);
-    });
-
-    await act(async () => {
-      await result.current.play();
-    });
 
     act(() => {
       result.current.pause();
@@ -180,16 +144,7 @@ describe("useAudiobookPlayer", () => {
   it("surfaces unsupported system TTS as an error state", async () => {
     const tts = createTtsEngine();
     tts.isSupported.mockReturnValue(false);
-    const { result } = renderHook(() =>
-      useAudiobookPlayer({
-        text: "第一段。",
-        engine: tts.engine,
-      }),
-    );
-
-    await waitFor(() => {
-      expect(result.current.isLoadingVoices).toBe(false);
-    });
+    const { result } = await renderReadyAudiobookPlayer("第一段。", tts.engine);
 
     await act(async () => {
       await result.current.play();
@@ -208,16 +163,7 @@ describe("useAudiobookPlayer", () => {
           rejectUnknown("command not allowed");
         }),
     );
-    const { result } = renderHook(() =>
-      useAudiobookPlayer({
-        text: "第一段。",
-        engine: tts.engine,
-      }),
-    );
-
-    await waitFor(() => {
-      expect(result.current.isLoadingVoices).toBe(false);
-    });
+    const { result } = await renderReadyAudiobookPlayer("第一段。", tts.engine);
 
     expect(result.current.errorMessage).toBe("command not allowed");
   });
@@ -232,16 +178,10 @@ describe("useAudiobookPlayer", () => {
         isLocal: true,
       },
     ]);
-    const { result } = renderHook(() =>
-      useAudiobookPlayer({
-        text: "雨声落在窗外。",
-        engine: tts.engine,
-      }),
+    const { result } = await renderReadyAudiobookPlayer(
+      "雨声落在窗外。",
+      tts.engine,
     );
-
-    await waitFor(() => {
-      expect(result.current.isLoadingVoices).toBe(false);
-    });
 
     expect(result.current.selectedVoiceId).toBeNull();
 
@@ -275,16 +215,10 @@ describe("useAudiobookPlayer", () => {
         isLocal: true,
       },
     ]);
-    const { result } = renderHook(() =>
-      useAudiobookPlayer({
-        text: "雨声落在窗外。\n\nGood night.",
-        engine: tts.engine,
-      }),
+    const { result } = await renderReadyAudiobookPlayer(
+      "雨声落在窗外。\n\nGood night.",
+      tts.engine,
     );
-
-    await waitFor(() => {
-      expect(result.current.isLoadingVoices).toBe(false);
-    });
 
     await act(async () => {
       await result.current.play();

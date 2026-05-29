@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { AppModeSwitcher } from "../appMode/AppModeSwitcher";
-import type { AppMode } from "../appMode/appModeTypes";
 import { AudiobookImportPanel } from "./AudiobookImportPanel";
 import { AudiobookReader } from "./AudiobookReader";
 import { AudiobookSettingsPanel } from "./AudiobookSettingsPanel";
@@ -23,9 +21,7 @@ const DEFAULT_AUDIOBOOK_TEXT = `雨声落在窗外，房间里只剩下很轻的
 如果今晚睡不着，就让声音慢慢读下去。读到句子变远，读到世界安静下来。`;
 
 interface AudiobookViewProps {
-  activeMode: AppMode;
   engine: TtsEnginePort;
-  onModeChange: (mode: AppMode) => void;
 }
 
 function getPrimaryActionLabel(
@@ -44,11 +40,7 @@ function getPrimaryActionLabel(
   return "播放";
 }
 
-export function AudiobookView({
-  activeMode,
-  engine,
-  onModeChange,
-}: AudiobookViewProps) {
+export function AudiobookView({ engine }: AudiobookViewProps) {
   const [bookTitle, setBookTitle] = useState(DEFAULT_AUDIOBOOK_TITLE);
   const [bookText, setBookText] = useState(DEFAULT_AUDIOBOOK_TEXT);
   const [importMessage, setImportMessage] = useState<string | null>(null);
@@ -115,9 +107,7 @@ export function AudiobookView({
   }
 
   return (
-    <main className="app-shell audiobook-shell">
-      <AppModeSwitcher activeMode={activeMode} onModeChange={onModeChange} />
-
+    <div className="audiobook-view">
       {visibleErrorMessage ? (
         <p className="error-message" role="alert">
           {visibleErrorMessage}
@@ -188,6 +178,6 @@ export function AudiobookView({
           }}
         />
       </div>
-    </main>
+    </div>
   );
 }

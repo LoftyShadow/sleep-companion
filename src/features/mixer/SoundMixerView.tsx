@@ -1,6 +1,4 @@
 import { useMemo, useState } from "react";
-import { AppModeSwitcher } from "../appMode/AppModeSwitcher";
-import type { AppMode } from "../appMode/appModeTypes";
 import { useCustomSounds } from "../customSounds/useCustomSounds";
 import type { PlayerPort } from "../player/PlayerPort";
 import { useSoundMixer } from "../player/useSoundMixer";
@@ -29,16 +27,10 @@ import {
 import "./SoundMixerView.css";
 
 interface SoundMixerViewProps {
-  activeAppMode: AppMode;
-  onModeChange: (mode: AppMode) => void;
   player: PlayerPort;
 }
 
-export function SoundMixerView({
-  activeAppMode,
-  onModeChange,
-  player,
-}: SoundMixerViewProps) {
+export function SoundMixerView({ player }: SoundMixerViewProps) {
   const [activeSoundMode, setActiveSoundMode] =
     useState<SoundLibraryMode>("sleep");
   const {
@@ -126,12 +118,7 @@ export function SoundMixerView({
   }
 
   return (
-    <main className="app-shell">
-      <AppModeSwitcher
-        activeMode={activeAppMode}
-        onModeChange={onModeChange}
-      />
-
+    <div className="sound-mixer-view">
       {visibleErrorMessage ? (
         <p className="error-message" role="alert">
           {visibleErrorMessage}
@@ -207,6 +194,6 @@ export function SoundMixerView({
           />
         </section>
       </div>
-    </main>
+    </div>
   );
 }

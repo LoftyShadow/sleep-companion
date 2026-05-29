@@ -1,8 +1,3 @@
-.audiobook-shell {
-  display: grid;
-  align-content: start;
-}
-
 .audiobook-layout {
   display: grid;
   grid-template-columns: minmax(326px, 396px) minmax(0, 1fr);

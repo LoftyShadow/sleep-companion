@@ -142,10 +142,13 @@ export function useAudiobookPlayer({
   }, [voices]);
 
   const stopPlayback = useCallback(() => {
+    const activePlaybackHandle = playbackHandleRef.current;
     requestIdRef.current += 1;
-    playbackHandleRef.current?.cancel();
+    activePlaybackHandle?.cancel();
     playbackHandleRef.current = null;
-    engine.cancel();
+    if (activePlaybackHandle) {
+      engine.cancel();
+    }
     setStatus("idle");
   }, [engine]);
 

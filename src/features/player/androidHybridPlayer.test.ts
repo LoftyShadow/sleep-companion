@@ -1,28 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
-import type { PlayerPort } from "./PlayerPort";
+import { describe, expect, it } from "vitest";
+import { createPlayerPortTestDouble as createPlayerMock } from "../../test/audioTestDoubles";
 import { createAndroidHybridPlayer } from "./androidHybridPlayer";
 import type { SoundDefinition } from "../sounds/soundCatalog";
-
-function createPlayerMock() {
-  const play = vi.fn<PlayerPort["play"]>(() => Promise.resolve());
-  const pause = vi.fn<PlayerPort["pause"]>(() => Promise.resolve());
-  const setVolume = vi.fn<PlayerPort["setVolume"]>(() => Promise.resolve());
-  const stopAll = vi.fn<PlayerPort["stopAll"]>(() => Promise.resolve());
-  const getState = vi.fn<PlayerPort["getState"]>(() =>
-    Promise.resolve({ sounds: [] }),
-  );
-  const destroy = vi.fn<PlayerPort["destroy"]>();
-  const player: PlayerPort = {
-    play,
-    pause,
-    setVolume,
-    stopAll,
-    getState,
-    destroy,
-  };
-
-  return { destroy, getState, pause, play, player, setVolume, stopAll };
-}
 
 const builtInSound: SoundDefinition = {
   id: "campfire",

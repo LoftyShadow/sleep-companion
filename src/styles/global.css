@@ -1,0 +1,126 @@
+:root {
+  --bg: #eaf1ec;
+  --surface: rgba(255, 255, 255, 0.58);
+  --surface-strong: rgba(255, 255, 255, 0.76);
+  --surface-soft: rgba(243, 249, 245, 0.72);
+  --ink: #14211c;
+  --muted: #53675d;
+  --line: rgba(36, 75, 59, 0.14);
+  --primary: #3f6f5a;
+  --primary-strong: #244b3b;
+  --primary-soft: #dceee4;
+  --teal: #2d7d82;
+  --copper: #bd7542;
+  --danger: #b14c43;
+  --shadow: 0 24px 68px rgba(20, 33, 28, 0.15);
+  --small-shadow: 0 12px 30px rgba(20, 33, 28, 0.11);
+  font-family:
+    "SF Pro Rounded",
+    "MiSans",
+    "Noto Sans CJK SC",
+    "Microsoft YaHei",
+    system-ui,
+    sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  font-synthesis: none;
+  line-height: 1.45;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  background: var(--bg);
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  /* Vite serves public assets from the app root; RustRover does not resolve this URL. */
+  /*noinspection CssUnknownTarget*/
+  background:
+    linear-gradient(
+      90deg,
+      rgba(235, 244, 237, 0.94) 0%,
+      rgba(235, 244, 237, 0.76) 42%,
+      rgba(248, 238, 224, 0.66) 100%
+    ) center top / cover fixed,
+    image-set(url("/images/backgrounds/xmsleep_mist.png") 1x) center top / cover fixed,
+    linear-gradient(135deg, #d8e6dd, #f5eadb 56%, #d2e6e9) center top / cover fixed;
+}
+
+body::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0)),
+    repeating-linear-gradient(
+      135deg,
+      rgba(36, 75, 59, 0.035) 0 1px,
+      transparent 1px 10px
+    );
+  content: "";
+  pointer-events: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(45, 125, 130, 0.36);
+  outline-offset: 3px;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+h1 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 3.35rem;
+  font-weight: 950;
+  line-height: 0.96;
+  letter-spacing: 0;
+}
+
+h2,
+h3 {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+@media (max-width: 980px) {
+  body {
+    background-attachment: scroll;
+    background-position: 52% top;
+  }
+}
+
+@media (max-width: 680px) {
+  h1 {
+    font-size: 2.55rem;
+  }
+}

@@ -1,35 +1,14 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { act } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import { createPlayerPortTestDouble as createPlayer } from "../../test/audioTestDoubles";
 import { BUILT_IN_SOUNDS } from "../sounds/soundCatalog";
 import {
   BUILT_IN_PRESETS,
   DEFAULT_SOUND_PRESET,
 } from "../sounds/soundPresets";
 import type { SoundDefinition } from "../sounds/soundCatalog";
-import type { PlayerPort } from "./PlayerPort";
 import { useSoundMixer } from "./useSoundMixer";
-
-function createPlayer() {
-  const play = vi.fn<PlayerPort["play"]>(() => Promise.resolve());
-  const pause = vi.fn<PlayerPort["pause"]>(() => Promise.resolve());
-  const setVolume = vi.fn<PlayerPort["setVolume"]>(() => Promise.resolve());
-  const stopAll = vi.fn<PlayerPort["stopAll"]>(() => Promise.resolve());
-  const getState = vi.fn<PlayerPort["getState"]>(() =>
-    Promise.resolve({ sounds: [] }),
-  );
-  const destroy = vi.fn<PlayerPort["destroy"]>();
-  const player: PlayerPort = {
-    play,
-    pause,
-    setVolume,
-    stopAll,
-    getState,
-    destroy,
-  };
-
-  return { destroy, getState, pause, play, player, setVolume, stopAll };
-}
 
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
