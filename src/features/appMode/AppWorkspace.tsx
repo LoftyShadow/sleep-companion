@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { AudiobookView } from "../audiobook/AudiobookView";
 import { createTtsEngine } from "../audiobook/createTtsEngine";
 import type { TtsEnginePort } from "../audiobook/TtsEnginePort";
 import { SoundMixerView } from "../mixer/SoundMixerView";
-import { createPlayer } from "../player/createPlayer";
 import type { PlayerPort } from "../player/PlayerPort";
-import { SleepTimerControl, type SleepTimerStatus } from "../sleepTimer/SleepTimerControl";
+import { useRuntimePlayer } from "../player/useRuntimePlayer";
+import { useGlobalSleepTimer } from "../sleepTimer/useGlobalSleepTimer";
+import { SleepTimerControl } from "../sleepTimer/SleepTimerControl";
 import { VideoListeningView } from "../videoListening/VideoListeningView";
 import { AppModeSwitcher } from "./AppModeSwitcher";
 import type { AppMode } from "./appModeTypes";
@@ -20,12 +21,8 @@ export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
   const [activeAppMode, setActiveAppMode] = useState<AppMode>("mixer");
   const [hasOpenedAudiobook, setHasOpenedAudiobook] = useState(false);
   const [hasOpenedVideo, setHasOpenedVideo] = useState(false);
-  const [sleepTimerDurationMinutes, setSleepTimerDurationMinutes] = useState(30);
-  const [sleepTimerRemainingSeconds, setSleepTimerRemainingSeconds] = useState(0);
-  const [sleepTimerStatus, setSleepTimerStatus] =
-    useState<SleepTimerStatus>("idle");
-  const [globalStopRequestId, setGlobalStopRequestId] = useState(0);
-  const [runtimePlayer, setRuntimePlayer] = useState<PlayerPort | null>(null);
+  const activePlayer = useRuntimePlayer(player);
+  const sleepTimer = useGlobalSleepTimer();
   const audiobookEngine = useMemo(
     () => ttsEngine ?? createTtsEngine(),
     [ttsEngine],
@@ -40,64 +37,6 @@ export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
     }
   }, []);
 
-  const handleSleepTimerStart = useCallback(() => {
-    setSleepTimerRemainingSeconds(sleepTimerDurationMinutes * 60);
-    setSleepTimerStatus("running");
-  }, [sleepTimerDurationMinutes]);
-
-  const handleSleepTimerCancel = useCallback(() => {
-    setSleepTimerRemainingSeconds(0);
-    setSleepTimerStatus("idle");
-  }, []);
-
-  useEffect(() => {
-    if (player) {
-      return undefined;
-    }
-
-    let isMounted = true;
-    let createdPlayer: PlayerPort | null = null;
-
-    void createPlayer().then((nextPlayer) => {
-      if (!isMounted) {
-        nextPlayer.destroy();
-        return;
-      }
-      createdPlayer = nextPlayer;
-      setRuntimePlayer(nextPlayer);
-    });
-
-    return () => {
-      isMounted = false;
-      createdPlayer?.destroy();
-    };
-  }, [player]);
-
-  useEffect(() => {
-    if (sleepTimerStatus !== "running") {
-      return undefined;
-    }
-
-    const timerId = window.setInterval(() => {
-      setSleepTimerRemainingSeconds((currentSeconds) => {
-        if (currentSeconds <= 1) {
-          window.clearInterval(timerId);
-          setSleepTimerStatus("completed");
-          setGlobalStopRequestId((currentId) => currentId + 1);
-          return 0;
-        }
-
-        return currentSeconds - 1;
-      });
-    }, 1000);
-
-    return () => {
-      window.clearInterval(timerId);
-    };
-  }, [sleepTimerStatus]);
-
-  const activePlayer = player ?? runtimePlayer;
-
   return (
     <main className="app-shell">
       <AppModeSwitcher
@@ -105,12 +44,12 @@ export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
         onModeChange={handleAppModeChange}
       />
       <SleepTimerControl
-        durationMinutes={sleepTimerDurationMinutes}
-        remainingSeconds={sleepTimerRemainingSeconds}
-        status={sleepTimerStatus}
-        onCancel={handleSleepTimerCancel}
-        onDurationChange={setSleepTimerDurationMinutes}
-        onStart={handleSleepTimerStart}
+        durationMinutes={sleepTimer.durationMinutes}
+        remainingSeconds={sleepTimer.remainingSeconds}
+        status={sleepTimer.status}
+        onCancel={sleepTimer.cancel}
+        onDurationChange={sleepTimer.setDurationMinutes}
+        onStart={sleepTimer.start}
       />
 
       <section
@@ -120,7 +59,7 @@ export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
       >
         {activePlayer ? (
           <SoundMixerView
-            globalStopRequestId={globalStopRequestId}
+            globalStopRequestId={sleepTimer.globalStopRequestId}
             player={activePlayer}
           />
         ) : (
@@ -140,7 +79,7 @@ export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
         {hasOpenedAudiobook ? (
           <AudiobookView
             engine={audiobookEngine}
-            globalStopRequestId={globalStopRequestId}
+            globalStopRequestId={sleepTimer.globalStopRequestId}
           />
         ) : null}
       </section>
@@ -151,7 +90,9 @@ export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
         aria-label="听视频"
       >
         {hasOpenedVideo ? (
-          <VideoListeningView globalStopRequestId={globalStopRequestId} />
+          <VideoListeningView
+            globalStopRequestId={sleepTimer.globalStopRequestId}
+          />
         ) : null}
       </section>
     </main>
