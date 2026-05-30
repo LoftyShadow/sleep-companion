@@ -8,6 +8,7 @@ const UNSUPPORTED_PLATFORM: &str = "native-tts is only available on Linux";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) struct NativeTtsSpeakInput {
     text: String,
     voice_id: Option<String>,
@@ -49,6 +50,7 @@ fn speech_dispatcher_voice_types() -> Vec<NativeTtsVoice> {
     .collect()
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn normalize_language_for_spd(language: Option<&str>) -> String {
     let normalized = language.unwrap_or("zh-CN").to_lowercase();
 
@@ -73,6 +75,7 @@ fn normalize_language_for_spd(language: Option<&str>) -> String {
         .to_string()
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn normalize_rate_for_spd(rate: f64) -> i32 {
     let clamped_rate = rate.clamp(0.6, 1.8);
     (((clamped_rate - 1.0) / 0.8) * 100.0)
@@ -80,14 +83,17 @@ fn normalize_rate_for_spd(rate: f64) -> i32 {
         .clamp(-100.0, 100.0) as i32
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn normalize_pitch_for_spd(pitch: Option<f64>) -> i32 {
     (((pitch.unwrap_or(1.0).clamp(0.0, 2.0) - 1.0) * 100.0).round()).clamp(-100.0, 100.0) as i32
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn normalize_volume_for_spd(volume: Option<f64>) -> i32 {
     ((volume.unwrap_or(1.0).clamp(0.0, 1.0) * 200.0) - 100.0).round() as i32
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn voice_type_from_id(voice_id: Option<&str>) -> Option<&'static str> {
     match voice_id {
         Some("speech-dispatcher:female1") => Some("female1"),

@@ -1,4 +1,5 @@
-import { useId } from "react";
+import { useId, useState } from "react";
+import type { DragEvent } from "react";
 import { AUDIOBOOK_FILE_ACCEPT } from "./bookImport";
 
 interface AudiobookImportPanelProps {
@@ -19,9 +20,65 @@ export function AudiobookImportPanel({
   onBookTitleChange,
 }: AudiobookImportPanelProps) {
   const titleInputId = useId();
+  const [isDragActive, setIsDragActive] = useState(false);
+
+  function hasDraggedFiles(event: DragEvent<HTMLElement>) {
+    return Array.from(event.dataTransfer.types).includes("Files");
+  }
+
+  function handleDragEnter(event: DragEvent<HTMLElement>) {
+    if (isImporting || !hasDraggedFiles(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    setIsDragActive(true);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLElement>) {
+    if (isImporting || !hasDraggedFiles(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setIsDragActive(true);
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLElement>) {
+    if (
+      event.relatedTarget instanceof Node &&
+      event.currentTarget.contains(event.relatedTarget)
+    ) {
+      return;
+    }
+
+    setIsDragActive(false);
+  }
+
+  function handleDrop(event: DragEvent<HTMLElement>) {
+    if (isImporting) {
+      return;
+    }
+
+    event.preventDefault();
+    setIsDragActive(false);
+    onBookFiles(Array.from(event.dataTransfer.files));
+  }
 
   return (
-    <section className="audiobook-import-panel" aria-label="导入书稿">
+    <section
+      className={
+        isDragActive
+          ? "audiobook-import-panel audiobook-import-panel-drop-active"
+          : "audiobook-import-panel"
+      }
+      aria-label="导入书稿"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       <label className="field-label" htmlFor={titleInputId}>
         书名
       </label>
@@ -51,7 +108,9 @@ export function AudiobookImportPanel({
         />
       </label>
       <p className="custom-audio-status" role="status">
-        {importMessage ?? `${segmentCount} 个朗读片段`}
+        {isDragActive
+          ? "松开导入书稿"
+          : (importMessage ?? `${segmentCount} 个朗读片段`)}
       </p>
     </section>
   );

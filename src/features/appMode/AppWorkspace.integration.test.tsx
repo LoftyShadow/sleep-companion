@@ -195,4 +195,25 @@ describe("AppWorkspace integration", () => {
     expect(screen.getByText("第三段。第四段。")).toBeInTheDocument();
     expect(screen.queryByText("第一段。")).not.toBeInTheDocument();
   });
+
+  it("imports an EPUB book dropped onto the audiobook import panel", async () => {
+    const user = userEvent.setup();
+    render(
+      <AppWorkspace
+        player={createPlayerPortTestDouble().player}
+        ttsEngine={createTtsEngineTestDouble().engine}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "听书" }));
+    fireEvent.drop(screen.getByRole("region", { name: "导入书稿" }), {
+      dataTransfer: {
+        files: [await createMinimalEpubFile()],
+      },
+    });
+
+    expect(await screen.findByText("已导入 测试 EPUB · 5 段")).toBeInTheDocument();
+    expect(screen.queryByLabelText("书稿文本")).not.toBeInTheDocument();
+    expect(screen.getByText("EPUB · 2 章 · 5 个朗读片段")).toBeInTheDocument();
+  });
 });
