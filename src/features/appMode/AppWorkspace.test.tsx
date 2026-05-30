@@ -73,8 +73,8 @@ describe("AppWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "听书" }));
     await user.click(screen.getByRole("button", { name: "播放" }));
     await user.click(screen.getByRole("button", { name: "听视频" }));
-    await user.type(screen.getByLabelText("视频链接"), "BV1xx411c7mD");
-    await user.click(screen.getByRole("button", { name: "载入视频" }));
+    await user.type(screen.getByLabelText("视频或直播链接"), "BV1xx411c7mD");
+    await user.click(screen.getByRole("button", { name: "载入" }));
 
     expect(play).toHaveBeenCalledWith(
       expect.objectContaining({ id: "heavy_rain" }),
@@ -85,7 +85,9 @@ describe("AppWorkspace", () => {
         text: "雨声落在窗外，房间里只剩下很轻的呼吸声。",
       }),
     );
-    expect(screen.getByTitle("B 站播放器 BV BV1xx411c7mD")).toBeInTheDocument();
+    expect(
+      screen.getByTitle("B 站视频播放器 BV BV1xx411c7mD"),
+    ).toBeInTheDocument();
 
     vi.useFakeTimers();
     fireEvent.change(screen.getByLabelText("自定义"), {
@@ -103,7 +105,7 @@ describe("AppWorkspace", () => {
     expect(stopAll).toHaveBeenCalledTimes(1);
     expect(cancel).toHaveBeenCalledTimes(1);
     expect(
-      screen.queryByTitle("B 站播放器 BV BV1xx411c7mD"),
+      screen.queryByTitle("B 站视频播放器 BV BV1xx411c7mD"),
     ).not.toBeInTheDocument();
   });
 

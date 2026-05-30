@@ -72,14 +72,152 @@
   padding: 16px;
 }
 
+.video-listening-card {
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  min-height: 156px;
+  padding: 16px;
+  border: 1px solid rgba(63, 111, 90, 0.16);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(219, 236, 225, 0.46)),
+    rgba(255, 255, 255, 0.46);
+  box-shadow: 0 16px 36px rgba(20, 33, 28, 0.1);
+}
+
+.video-listening-art {
+  display: grid;
+  grid-template-columns: repeat(3, 12px);
+  align-items: end;
+  justify-content: center;
+  gap: 8px;
+  width: 112px;
+  aspect-ratio: 1;
+  padding: 28px;
+  border: 1px solid rgba(45, 125, 130, 0.16);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(45, 125, 130, 0.22), transparent 54%),
+    linear-gradient(145deg, rgba(63, 111, 90, 0.18), rgba(255, 255, 255, 0.64));
+}
+
+.video-listening-art span {
+  display: block;
+  min-height: 22px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--teal), var(--primary));
+  opacity: 0.88;
+}
+
+.video-listening-art span:nth-child(2) {
+  min-height: 44px;
+}
+
+.video-listening-art span:nth-child(3) {
+  min-height: 32px;
+}
+
+.video-listening-copy {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.video-listening-copy h3 {
+  color: var(--ink);
+  font-size: 1.34rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.video-listening-copy p:not(.app-kicker) {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 820;
+}
+
+.video-listening-controls {
+  display: grid;
+  grid-template-columns: minmax(150px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid rgba(63, 111, 90, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.video-playback-button {
+  min-height: 48px;
+}
+
+.video-playback-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
+}
+
+.video-volume-control {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.video-volume-control strong {
+  color: var(--teal);
+  font-size: 0.78rem;
+}
+
+.video-volume-range {
+  width: 100%;
+  min-height: 30px;
+  accent-color: var(--teal);
+}
+
+.video-control-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 780;
+  line-height: 1.5;
+}
+
+.video-source-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--primary-strong);
+  font-size: 0.82rem;
+  font-weight: 950;
+}
+
+.video-source-toggle {
+  min-height: 38px;
+  min-width: 118px;
+}
+
 .video-player-frame-shell {
+  position: relative;
   width: 100%;
   overflow: hidden;
   border: 1px solid rgba(63, 111, 90, 0.16);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.5);
   box-shadow: 0 14px 34px rgba(20, 33, 28, 0.1);
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 16 / 7;
+}
+
+.video-player-frame-shell-collapsed {
+  min-height: 74px;
+  aspect-ratio: auto;
+  background:
+    linear-gradient(135deg, rgba(20, 33, 28, 0.82), rgba(36, 75, 59, 0.72)),
+    rgba(20, 33, 28, 0.86);
 }
 
 .video-player-frame {
@@ -88,6 +226,26 @@
   height: 100%;
   border: 0;
   background: #0f1714;
+}
+
+.video-player-frame-shell-collapsed .video-player-frame {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.video-player-collapsed-cover {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.86);
+  background:
+    linear-gradient(135deg, rgba(20, 33, 28, 0.9), rgba(45, 125, 130, 0.62)),
+    rgba(20, 33, 28, 0.88);
+  font-size: 0.88rem;
+  font-weight: 920;
 }
 
 .video-player-empty {
@@ -111,6 +269,21 @@
 
   .video-player-panel {
     min-height: 0;
+  }
+}
+
+@media (max-width: 680px) {
+  .video-listening-card {
+    grid-template-columns: 1fr;
+  }
+
+  .video-listening-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .video-listening-art {
+    width: 100%;
+    max-width: 128px;
   }
 }
 

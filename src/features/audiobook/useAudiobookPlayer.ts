@@ -22,6 +22,10 @@ interface UseAudiobookPlayerOptions {
   text?: string;
 }
 
+interface PlaySegmentOptions {
+  isContinuation?: boolean;
+}
+
 function getTtsErrorMessage(error: unknown, fallbackMessage: string): string {
   if (error instanceof Error) {
     return error.message;
@@ -53,7 +57,8 @@ export function useAudiobookPlayer({
   const playbackHandleRef = useRef<TtsPlaybackHandle | null>(null);
   const requestIdRef = useRef(0);
   const playSegmentRef = useRef<
-    ((segmentIndex: number) => Promise<void>) | null
+    | ((segmentIndex: number, options?: PlaySegmentOptions) => Promise<void>)
+    | null
   >(null);
 
   useEffect(() => {
@@ -127,7 +132,10 @@ export function useAudiobookPlayer({
   );
 
   const playSegment = useCallback(
-    async (segmentIndex: number) => {
+    async (
+      segmentIndex: number,
+      { isContinuation = false }: PlaySegmentOptions = {},
+    ) => {
       const segment = segments[segmentIndex];
       if (!segment) {
         setErrorMessage("没有可朗读的文本");
@@ -143,11 +151,13 @@ export function useAudiobookPlayer({
 
       const requestId = requestIdRef.current + 1;
       requestIdRef.current = requestId;
-      playbackHandleRef.current?.cancel();
+      if (!isContinuation) {
+        playbackHandleRef.current?.cancel();
+      }
       playbackHandleRef.current = null;
       setCurrentSegmentIndex(segmentIndex);
       setErrorMessage(null);
-      setStatus("loading");
+      setStatus(isContinuation ? "playing" : "loading");
 
       try {
         const speechLanguage = detectSpeechLanguage(segment.text);
@@ -163,7 +173,10 @@ export function useAudiobookPlayer({
             }
 
             if (segmentIndex + 1 < segments.length) {
-              void playSegmentRef.current?.(segmentIndex + 1);
+              playbackHandleRef.current = null;
+              void playSegmentRef.current?.(segmentIndex + 1, {
+                isContinuation: true,
+              });
               return;
             }
 

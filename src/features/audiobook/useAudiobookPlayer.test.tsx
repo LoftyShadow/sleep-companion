@@ -107,6 +107,8 @@ describe("useAudiobookPlayer", () => {
       expect(tts.speak).toHaveBeenCalledTimes(2);
       expect(result.current.currentSegmentIndex).toBe(1);
     });
+    expect(result.current.status).toBe("playing");
+    expect(tts.handleCancel).not.toHaveBeenCalled();
 
     act(() => {
       tts.complete();

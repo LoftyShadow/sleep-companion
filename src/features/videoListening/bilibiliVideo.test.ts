@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildBilibiliPlayerUrl,
-  createBilibiliVideoSource,
-  parseBilibiliVideoInput,
+  BilibiliSourceKind,
+  createBilibiliPlaybackSource,
+  parseBilibiliInput,
 } from "./bilibiliVideo";
 
 describe("bilibiliVideo", () => {
   it("parses BV video links", () => {
     expect(
-      parseBilibiliVideoInput(
+      parseBilibiliInput(
         "https://www.bilibili.com/video/BV1xx411c7mD/?spm_id_from=333",
       ),
     ).toEqual({
@@ -19,7 +19,7 @@ describe("bilibiliVideo", () => {
 
   it("parses av video links", () => {
     expect(
-      parseBilibiliVideoInput("https://www.bilibili.com/video/av170001"),
+      parseBilibiliInput("https://www.bilibili.com/video/av170001"),
     ).toEqual({
       kind: "aid",
       value: "170001",
@@ -28,58 +28,79 @@ describe("bilibiliVideo", () => {
 
   it("parses episode links", () => {
     expect(
-      parseBilibiliVideoInput("https://www.bilibili.com/bangumi/play/ep12345"),
+      parseBilibiliInput("https://www.bilibili.com/bangumi/play/ep12345"),
     ).toEqual({
       kind: "ep",
       value: "12345",
     });
   });
 
+  it("parses live room links", () => {
+    expect(parseBilibiliInput("https://live.bilibili.com/23058")).toEqual({
+      kind: "live",
+      value: "23058",
+    });
+    expect(
+      parseBilibiliInput("https://live.bilibili.com/blanc/23058?spm_id_from=333"),
+    ).toEqual({
+      kind: "live",
+      value: "23058",
+    });
+  });
+
   it("parses direct identifiers", () => {
-    expect(parseBilibiliVideoInput("BV1xx411c7mD")).toEqual({
+    expect(parseBilibiliInput("BV1xx411c7mD")).toEqual({
       kind: "bvid",
       value: "BV1xx411c7mD",
     });
-    expect(parseBilibiliVideoInput("av170001")).toEqual({
+    expect(parseBilibiliInput("av170001")).toEqual({
       kind: "aid",
       value: "170001",
     });
-    expect(parseBilibiliVideoInput("ep12345")).toEqual({
+    expect(parseBilibiliInput("ep12345")).toEqual({
       kind: "ep",
       value: "12345",
+    });
+    expect(parseBilibiliInput("live23058")).toEqual({
+      kind: "live",
+      value: "23058",
     });
   });
 
   it("rejects unsupported links", () => {
-    expect(parseBilibiliVideoInput("https://example.com/video/BV1xx411c7mD")).toBe(
+    expect(parseBilibiliInput("https://example.com/video/BV1xx411c7mD")).toBe(
       null,
     );
-    expect(parseBilibiliVideoInput("https://b23.tv/shortlink")).toBe(null);
-  });
-
-  it("builds official player urls", () => {
-    expect(
-      buildBilibiliPlayerUrl({ kind: "bvid", value: "BV1xx411c7mD" }),
-    ).toBe(
-      "https://player.bilibili.com/player.html?autoplay=1&bvid=BV1xx411c7mD",
-    );
-    expect(buildBilibiliPlayerUrl({ kind: "aid", value: "170001" })).toBe(
-      "https://player.bilibili.com/player.html?autoplay=1&aid=170001",
-    );
-    expect(buildBilibiliPlayerUrl({ kind: "ep", value: "12345" })).toBe(
-      "https://player.bilibili.com/player.html?autoplay=1&episodeId=12345",
-    );
+    expect(parseBilibiliInput("https://b23.tv/shortlink")).toBe(null);
   });
 
   it("creates a display source for valid input", () => {
-    expect(createBilibiliVideoSource("BV1xx411c7mD")).toEqual({
+    expect(createBilibiliPlaybackSource("BV1xx411c7mD")).toEqual({
       embedUrl:
         "https://player.bilibili.com/player.html?autoplay=1&bvid=BV1xx411c7mD",
       label: "BV BV1xx411c7mD",
+      playerLabel: "B 站视频播放器",
       reference: {
         kind: "bvid",
         value: "BV1xx411c7mD",
       },
+      sourceKind: BilibiliSourceKind.Video,
+    });
+  });
+
+  it("creates a live source for live room links", () => {
+    expect(
+      createBilibiliPlaybackSource("https://live.bilibili.com/23058"),
+    ).toEqual({
+      embedUrl:
+        "https://www.bilibili.com/blackboard/live/live-activity-player.html?cid=23058&mute=0",
+      label: "直播间 23058",
+      playerLabel: "B 站直播播放器",
+      reference: {
+        kind: "live",
+        value: "23058",
+      },
+      sourceKind: BilibiliSourceKind.Live,
     });
   });
 });

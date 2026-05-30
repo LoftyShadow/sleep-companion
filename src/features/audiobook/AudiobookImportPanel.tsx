@@ -107,6 +107,9 @@ export function AudiobookImportPanel({
           }}
         />
       </label>
+      <p className="audiobook-import-hint">
+        支持 txt、Markdown 和 EPUB，也可以直接把文件拖进来。
+      </p>
       <p className="custom-audio-status" role="status">
         {isDragActive
           ? "松开导入书稿"

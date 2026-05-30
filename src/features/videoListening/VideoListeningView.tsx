@@ -1,11 +1,13 @@
 import { useEffect, useId, useRef, useState } from "react";
 import {
-  createBilibiliVideoSource,
-  type BilibiliVideoSource,
+  BilibiliSourceKind,
+  createBilibiliPlaybackSource,
+  type BilibiliPlaybackSource,
 } from "./bilibiliVideo";
 import "./VideoListeningView.css";
 
 const DEFAULT_VIDEO_INPUT = "";
+const DEFAULT_LISTENING_VOLUME = 70;
 
 interface VideoListeningViewProps {
   globalStopRequestId: number;
@@ -16,11 +18,30 @@ export function VideoListeningView({
 }: VideoListeningViewProps) {
   const inputId = useId();
   const [videoInput, setVideoInput] = useState(DEFAULT_VIDEO_INPUT);
-  const [videoSource, setVideoSource] = useState<BilibiliVideoSource | null>(
+  const [videoSource, setVideoSource] = useState<BilibiliPlaybackSource | null>(
     null,
   );
+  const [isPlaybackMounted, setIsPlaybackMounted] = useState(false);
+  const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
+  const [listeningVolume, setListeningVolume] = useState(
+    DEFAULT_LISTENING_VOLUME,
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const handledGlobalStopRequestIdRef = useRef(globalStopRequestId);
+  const canControlOfficialPlayer =
+    videoSource?.sourceKind === BilibiliSourceKind.Live;
+
+  function postLivePlayerCommand(type: string, value: unknown) {
+    if (!canControlOfficialPlayer || !iframeRef.current?.contentWindow) {
+      return;
+    }
+
+    iframeRef.current.contentWindow.postMessage(
+      `setPlayer-${JSON.stringify({ type, value })}`,
+      "https://www.bilibili.com",
+    );
+  }
 
   useEffect(() => {
     if (globalStopRequestId === handledGlobalStopRequestIdRef.current) {
@@ -29,25 +50,57 @@ export function VideoListeningView({
 
     handledGlobalStopRequestIdRef.current = globalStopRequestId;
     setVideoSource(null);
+    setIsPlaybackMounted(false);
+    setIsPlayerExpanded(false);
   }, [globalStopRequestId]);
 
   function handleLoadVideo() {
     const trimmedInput = videoInput.trim();
     if (!trimmedInput) {
       setVideoSource(null);
-      setErrorMessage("请输入 B 站视频链接");
+      setIsPlaybackMounted(false);
+      setIsPlayerExpanded(false);
+      setErrorMessage("请输入 B 站视频或直播链接");
       return;
     }
 
-    const nextVideoSource = createBilibiliVideoSource(trimmedInput);
+    const nextVideoSource = createBilibiliPlaybackSource(trimmedInput);
     if (!nextVideoSource) {
       setVideoSource(null);
-      setErrorMessage("暂时只支持 B 站 BV、av 和 ep 链接");
+      setIsPlaybackMounted(false);
+      setIsPlayerExpanded(false);
+      setErrorMessage("暂时只支持 B 站 BV、av、ep 和直播间链接");
       return;
     }
 
     setVideoSource(nextVideoSource);
+    setIsPlaybackMounted(true);
+    setIsPlayerExpanded(false);
     setErrorMessage(null);
+  }
+
+  function handleTogglePlayback() {
+    if (!videoSource) {
+      setErrorMessage("请先载入 B 站视频或直播链接");
+      return;
+    }
+
+    setIsPlaybackMounted((currentValue) => {
+      const nextValue = !currentValue;
+      postLivePlayerCommand("play", nextValue);
+      return nextValue;
+    });
+    setErrorMessage(null);
+  }
+
+  function handlePlayerFrameLoad() {
+    postLivePlayerCommand("changeVolume", { volume: listeningVolume });
+    postLivePlayerCommand("play", isPlaybackMounted);
+  }
+
+  function handleListeningVolumeChange(nextVolume: number) {
+    setListeningVolume(nextVolume);
+    postLivePlayerCommand("changeVolume", { volume: nextVolume });
   }
 
   async function handlePasteVideoLink() {
@@ -82,19 +135,19 @@ export function VideoListeningView({
             <p className="app-kicker">B 站官方播放器</p>
             <h1>听视频</h1>
             <p className="mix-summary">
-              {videoSource?.label ?? "粘贴 B 站链接后载入"}
+              {videoSource?.label ?? "粘贴 B 站视频或直播链接后载入"}
             </p>
           </header>
 
-          <section className="video-link-panel" aria-label="B 站视频链接">
+          <section className="video-link-panel" aria-label="B 站视频或直播链接">
             <label className="field-label" htmlFor={inputId}>
-              视频链接
+              视频或直播链接
             </label>
             <div className="video-link-row">
               <input
                 className="video-link-input"
                 id={inputId}
-                placeholder="https://www.bilibili.com/video/BV..."
+                placeholder="https://www.bilibili.com/video/BV... 或 https://live.bilibili.com/..."
                 type="url"
                 value={videoInput}
                 onChange={(event) => {
@@ -124,12 +177,12 @@ export function VideoListeningView({
               type="button"
               onClick={handleLoadVideo}
             >
-              载入视频
+              载入
             </button>
             <p className="custom-audio-status" role="status">
               {videoSource
                 ? `已载入 ${videoSource.label}`
-                : "支持 BV、av 和 ep 链接"}
+                : "支持 BV、av、ep 和直播间链接"}
             </p>
           </section>
         </aside>
@@ -140,26 +193,113 @@ export function VideoListeningView({
         >
           <div className="section-heading sound-section-heading">
             <div>
-              <p className="app-kicker">官方嵌入播放</p>
-              <h2 id="video-player-heading">视频播放</h2>
+              <p className="app-kicker">音频收听</p>
+              <h2 id="video-player-heading">收听面板</h2>
             </div>
             <span className="section-meta">B 站</span>
           </div>
 
-          <div className="video-player-frame-shell">
-            {videoSource ? (
-              <iframe
-                allow="autoplay; fullscreen; picture-in-picture"
-                allowFullScreen
-                className="video-player-frame"
-                key={videoSource.embedUrl}
-                referrerPolicy="strict-origin-when-cross-origin"
-                src={videoSource.embedUrl}
-                title={`B 站播放器 ${videoSource.label}`}
+          <div className="video-listening-card">
+            <div className="video-listening-art" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+            <div className="video-listening-copy">
+              <p className="app-kicker">
+                {videoSource?.playerLabel ?? "等待来源"}
+              </p>
+              <h3>{videoSource?.label ?? "尚未载入"}</h3>
+              <p>
+                {videoSource && isPlaybackMounted
+                  ? "已连接官方播放源"
+                  : videoSource
+                    ? "已暂停官方播放源"
+                  : "粘贴链接后开始收听"}
+              </p>
+            </div>
+          </div>
+
+          <section className="video-listening-controls" aria-label="收听控制">
+            <button
+              className="transport-button video-playback-button"
+              type="button"
+              aria-pressed={videoSource ? isPlaybackMounted : false}
+              disabled={!videoSource}
+              onClick={handleTogglePlayback}
+            >
+              <span className="transport-glyph" aria-hidden="true" />
+              <span>{isPlaybackMounted ? "暂停" : "播放"}</span>
+            </button>
+            <label className="video-volume-control">
+              <span className="field-label">
+                <span>收听音量</span>
+                <strong>{listeningVolume}%</strong>
+              </span>
+              <input
+                aria-label="收听音量"
+                className="video-volume-range"
+                disabled={!canControlOfficialPlayer}
+                min="0"
+                max="100"
+                type="range"
+                value={listeningVolume}
+                onChange={(event) => {
+                  handleListeningVolumeChange(Number(event.currentTarget.value));
+                }}
               />
+            </label>
+            <p className="video-control-hint">
+              {canControlOfficialPlayer
+                ? "音量会同步到 B 站直播播放器。"
+                : "普通视频外链未提供外部音量接口，请在官方播放源内调整音量。"}
+            </p>
+          </section>
+
+          <div className="video-source-header">
+            <span>官方播放源</span>
+            <button
+              className="secondary-control-button video-source-toggle"
+              type="button"
+              disabled={!videoSource}
+              onClick={() => {
+                setIsPlayerExpanded((currentValue) => !currentValue);
+              }}
+            >
+              {isPlayerExpanded ? "收起播放源" : "展开播放源"}
+            </button>
+          </div>
+
+          <div
+            className={
+              isPlayerExpanded
+                ? "video-player-frame-shell"
+                : "video-player-frame-shell video-player-frame-shell-collapsed"
+            }
+            aria-label="官方播放源"
+          >
+            {videoSource && (isPlaybackMounted || canControlOfficialPlayer) ? (
+              <>
+                <iframe
+                  allow="autoplay; fullscreen; picture-in-picture"
+                  allowFullScreen
+                  className="video-player-frame"
+                  key={videoSource.embedUrl}
+                  ref={iframeRef}
+                  referrerPolicy="strict-origin-when-cross-origin"
+                  src={videoSource.embedUrl}
+                  title={`${videoSource.playerLabel} ${videoSource.label}`}
+                  onLoad={handlePlayerFrameLoad}
+                />
+                {!isPlayerExpanded ? (
+                  <div className="video-player-collapsed-cover" aria-hidden="true">
+                    <span>画面已收起，继续收听声音</span>
+                  </div>
+                ) : null}
+              </>
             ) : (
               <div className="video-player-empty" role="status">
-                <p>等待载入 B 站视频</p>
+                <p>{videoSource ? "播放源已暂停" : "等待载入 B 站视频或直播"}</p>
               </div>
             )}
           </div>

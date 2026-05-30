@@ -83,7 +83,7 @@ describe("createSystemTtsEngine", () => {
       | FakeUtterance
       | undefined;
 
-    expect(speechSynthesis.cancel).toHaveBeenCalledTimes(1);
+    expect(speechSynthesis.cancel).not.toHaveBeenCalled();
     expect(utterance?.text).toBe("你好。");
     expect(utterance?.voice).toBe(voice);
     expect(utterance?.rate).toBe(1.3);
@@ -97,7 +97,7 @@ describe("createSystemTtsEngine", () => {
 
     expect(speechSynthesis.pause).toHaveBeenCalledTimes(1);
     expect(speechSynthesis.resume).toHaveBeenCalledTimes(1);
-    expect(speechSynthesis.cancel).toHaveBeenCalledTimes(2);
+    expect(speechSynthesis.cancel).toHaveBeenCalledTimes(1);
   });
 
   it("reports unsupported environments", async () => {

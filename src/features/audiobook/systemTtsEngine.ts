@@ -115,7 +115,6 @@ export function createSystemTtsEngine(
           );
         };
 
-        activeSpeechSynthesis.cancel();
         activeSpeechSynthesis.speak(utterance);
 
         return {
