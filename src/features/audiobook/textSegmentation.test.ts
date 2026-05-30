@@ -32,6 +32,12 @@ describe("segmentBookText", () => {
     ]);
   });
 
+  it("uses shorter default segments for long readable text", () => {
+    const segments = segmentBookText("一".repeat(181));
+
+    expect(segments.map((segment) => segment.text.length)).toEqual([180, 1]);
+  });
+
   it("uses sentence segmentation without splitting common English abbreviations", () => {
     const segments = segmentBookText("Dr. Lin arrived. It rained.", {
       language: "en",

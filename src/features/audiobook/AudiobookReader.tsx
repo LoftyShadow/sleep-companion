@@ -1,6 +1,8 @@
-import { useId } from "react";
+import { useEffect, useId, useRef } from "react";
 import type { AudiobookChapter, AudiobookSegment } from "./audiobookTypes";
 import { AudiobookChapterNavigation } from "./AudiobookChapterNavigation";
+
+const AUTO_LOCATE_DELAY_MS = 2000;
 
 interface AudiobookReaderProps {
   bookText: string | null;
@@ -34,6 +36,8 @@ export function AudiobookReader({
   onPreviousChapter,
 }: AudiobookReaderProps) {
   const textInputId = useId();
+  const activeSegmentButtonRef = useRef<HTMLButtonElement | null>(null);
+  const autoLocateTimerRef = useRef<number | null>(null);
   const isTextEditable = bookText !== null && onBookTextChange !== undefined;
   const visibleSegmentStartIndex = currentChapter?.startSegmentIndex ?? 0;
   const visibleSegments = currentChapter
@@ -42,6 +46,44 @@ export function AudiobookReader({
         currentChapter.endSegmentIndex + 1,
       )
     : segments;
+
+  useEffect(() => {
+    activeSegmentButtonRef.current?.scrollIntoView?.({
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [currentSegmentIndex]);
+
+  useEffect(
+    () => () => {
+      if (autoLocateTimerRef.current !== null) {
+        window.clearTimeout(autoLocateTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  function handleLocateCurrentSegment() {
+    if (autoLocateTimerRef.current !== null) {
+      window.clearTimeout(autoLocateTimerRef.current);
+      autoLocateTimerRef.current = null;
+    }
+
+    activeSegmentButtonRef.current?.scrollIntoView?.({
+      block: "center",
+      inline: "nearest",
+    });
+  }
+
+  function handleSegmentListScroll() {
+    if (autoLocateTimerRef.current !== null) {
+      window.clearTimeout(autoLocateTimerRef.current);
+    }
+
+    autoLocateTimerRef.current = window.setTimeout(() => {
+      handleLocateCurrentSegment();
+    }, AUTO_LOCATE_DELAY_MS);
+  }
 
   return (
     <section
@@ -85,7 +127,11 @@ export function AudiobookReader({
         />
       ) : null}
 
-      <div className="segment-list" aria-label="朗读片段">
+      <div
+        className="segment-list"
+        aria-label="朗读片段"
+        onScroll={handleSegmentListScroll}
+      >
         {visibleSegments.length === 0 ? (
           <p className="empty-segment-message" role="status">
             暂无可朗读片段
@@ -102,6 +148,11 @@ export function AudiobookReader({
                   isActive ? " segment-button-active" : ""
                 }`}
                 key={segment.id}
+                ref={(node) => {
+                  if (isActive) {
+                    activeSegmentButtonRef.current = node;
+                  }
+                }}
                 type="button"
                 onClick={() => {
                   onPlaySegmentAt(segmentIndex);
@@ -118,6 +169,16 @@ export function AudiobookReader({
           })
         )}
       </div>
+
+      {visibleSegments.length > 0 ? (
+        <button
+          className="secondary-control-button segment-locate-button"
+          type="button"
+          onClick={handleLocateCurrentSegment}
+        >
+          定位到当前正在阅读
+        </button>
+      ) : null}
     </section>
   );
 }

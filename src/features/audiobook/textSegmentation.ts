@@ -7,8 +7,8 @@ const SUPPORTED_TEXT_MIME_TYPES = new Set([
   "text/x-markdown",
 ]);
 const SENTENCE_CHUNK_PATTERN = /[^。！？；;.!?]+[。！？；;.!?]*/gu;
-const DEFAULT_TARGET_LENGTH = 240;
-const DEFAULT_HARD_LIMIT = 380;
+const DEFAULT_TARGET_LENGTH = 120;
+const DEFAULT_HARD_LIMIT = 180;
 const COMMON_ENGLISH_ABBREVIATIONS = new Set([
   "dr.",
   "mr.",

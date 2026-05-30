@@ -253,6 +253,12 @@
 .segment-list {
   display: grid;
   gap: 8px;
+  max-height: min(438px, 46vh);
+  overflow: auto;
+  padding-right: 4px;
+  scroll-behavior: smooth;
+  scrollbar-color: rgba(63, 111, 90, 0.34) transparent;
+  scrollbar-width: thin;
 }
 
 .segment-button {
@@ -281,6 +287,7 @@
 }
 
 .segment-button-active {
+  scroll-margin: 12px;
   background:
     linear-gradient(135deg, rgba(219, 236, 225, 0.94), rgba(255, 255, 255, 0.72)),
     var(--primary-soft);
@@ -308,6 +315,11 @@
   font-weight: 760;
   line-height: 1.62;
   overflow-wrap: anywhere;
+}
+
+.segment-locate-button {
+  justify-self: end;
+  min-width: 148px;
 }
 
 .empty-segment-message {
