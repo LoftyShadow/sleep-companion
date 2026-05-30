@@ -92,6 +92,25 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
+      - name: 打包 Windows 便携版
+        if: matrix.runner == 'windows-latest'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force portable
+          Compress-Archive `
+            -Path src-tauri/target/release/sleep-companion.exe `
+            -DestinationPath "portable/sleep-companion-${env:RELEASE_TAG}-windows-portable.zip" `
+            -Force
+
+      - name: 上传 Windows 便携包到草稿 Release
+        if: matrix.runner == 'windows-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          draft: true
+          files: |
+            portable/*.zip
+
   build-android:
     name: 安卓端-apk
     runs-on: ubuntu-22.04
@@ -143,7 +162,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: 构建 Android APK
-        run: pnpm tauri android build -- --apk --target aarch64 --ci
+        run: pnpm tauri android build --apk --target aarch64 --ci
 
       - name: 上传 Android APK 到草稿 Release
         uses: softprops/action-gh-release@v2

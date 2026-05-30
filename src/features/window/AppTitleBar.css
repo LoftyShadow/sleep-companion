@@ -1,0 +1,168 @@
+.app-title-bar {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  height: 44px;
+  padding: 6px 10px 6px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.52);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(239, 248, 243, 0.5)),
+    rgba(234, 241, 236, 0.72);
+  box-shadow: 0 12px 34px rgba(20, 33, 28, 0.1);
+  backdrop-filter: blur(22px) saturate(1.18);
+  user-select: none;
+}
+
+.app-title-bar__brand {
+  display: inline-grid;
+  grid-template-columns: 24px auto;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.app-title-bar__mark {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid rgba(63, 111, 90, 0.18);
+  border-radius: 8px;
+  color: white;
+  background: linear-gradient(135deg, var(--primary), var(--teal));
+  box-shadow: 0 8px 18px rgba(45, 125, 130, 0.22);
+  font-size: 0.78rem;
+  font-weight: 950;
+}
+
+.app-title-bar__name {
+  min-width: 0;
+  color: var(--primary-strong);
+  font-size: 0.86rem;
+  font-weight: 950;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-title-bar__controls {
+  display: grid;
+  grid-template-columns: repeat(3, 34px);
+  align-items: center;
+  gap: 6px;
+}
+
+.app-title-bar__control {
+  display: grid;
+  width: 34px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid rgba(63, 111, 90, 0.12);
+  border-radius: 8px;
+  color: var(--primary-strong);
+  background: rgba(255, 255, 255, 0.5);
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.app-title-bar__control:hover {
+  border-color: rgba(45, 125, 130, 0.24);
+  background: rgba(255, 255, 255, 0.78);
+  transform: translateY(-1px);
+}
+
+.app-title-bar__control--close:hover {
+  border-color: rgba(177, 76, 67, 0.2);
+  color: #8f332c;
+  background: rgba(255, 236, 232, 0.9);
+}
+
+.app-title-bar__icon {
+  position: relative;
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.app-title-bar__icon--minimize::before {
+  position: absolute;
+  right: 2px;
+  bottom: 3px;
+  left: 2px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+}
+
+.app-title-bar__icon--maximize::before {
+  position: absolute;
+  inset: 2px;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  content: "";
+}
+
+.app-title-bar__icon--restore::before,
+.app-title-bar__icon--restore::after {
+  position: absolute;
+  width: 9px;
+  height: 8px;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  content: "";
+}
+
+.app-title-bar__icon--restore::before {
+  top: 1px;
+  right: 1px;
+  opacity: 0.64;
+}
+
+.app-title-bar__icon--restore::after {
+  right: 4px;
+  bottom: 1px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.app-title-bar__icon--close::before,
+.app-title-bar__icon--close::after {
+  position: absolute;
+  top: 6px;
+  left: 1px;
+  width: 12px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+}
+
+.app-title-bar__icon--close::before {
+  transform: rotate(45deg);
+}
+
+.app-title-bar__icon--close::after {
+  transform: rotate(-45deg);
+}
+
+@media (max-width: 680px) {
+  .app-title-bar {
+    height: 42px;
+    padding-inline: 10px 8px;
+  }
+
+  .app-title-bar__controls {
+    grid-template-columns: repeat(3, 32px);
+    gap: 4px;
+  }
+
+  .app-title-bar__control {
+    width: 32px;
+  }
+}

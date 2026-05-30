@@ -134,4 +134,35 @@ describe("AppWorkspace", () => {
       screen.getByRole("button", { name: "选择定时时长，当前 7 分钟" }),
     ).toBeInTheDocument();
   });
+
+  it("shows the scroll indicator only while the workspace is scrolling", () => {
+    vi.useFakeTimers();
+    const { container } = render(
+      <AppWorkspace player={createPlayerPortTestDouble().player} />,
+    );
+    const shell = container.querySelector(".app-shell") as HTMLElement;
+    Object.defineProperty(shell, "clientHeight", {
+      configurable: true,
+      value: 100,
+    });
+    Object.defineProperty(shell, "scrollHeight", {
+      configurable: true,
+      value: 300,
+    });
+    Object.defineProperty(shell, "scrollTop", {
+      configurable: true,
+      value: 80,
+    });
+
+    fireEvent.scroll(shell);
+
+    const indicator = container.querySelector(".app-scroll-indicator");
+    expect(indicator).toHaveClass("is-visible");
+
+    act(() => {
+      vi.advanceTimersByTime(900);
+    });
+
+    expect(indicator).not.toHaveClass("is-visible");
+  });
 });
