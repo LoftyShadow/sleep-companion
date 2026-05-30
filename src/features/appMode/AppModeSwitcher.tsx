@@ -32,6 +32,16 @@ export function AppModeSwitcher({
       >
         听书
       </button>
+      <button
+        aria-pressed={activeMode === "video"}
+        className="app-mode-button"
+        type="button"
+        onClick={() => {
+          onModeChange("video");
+        }}
+      >
+        听视频
+      </button>
     </nav>
   );
 }

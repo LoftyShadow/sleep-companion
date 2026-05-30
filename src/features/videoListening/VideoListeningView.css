@@ -1,0 +1,121 @@
+.video-listening-layout {
+  display: grid;
+  grid-template-columns: minmax(326px, 396px) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.video-listening-control {
+  position: sticky;
+  top: 20px;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.video-listening-header,
+.video-link-panel,
+.video-player-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.video-link-panel {
+  padding: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.54);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.66), rgba(219, 236, 225, 0.36)),
+    rgba(255, 255, 255, 0.42);
+  box-shadow: 0 10px 28px rgba(20, 33, 28, 0.08);
+}
+
+.video-link-input {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid rgba(63, 111, 90, 0.16);
+  border-radius: 8px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.72);
+  font-weight: 850;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.56);
+}
+
+.video-link-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(76px, auto);
+  gap: 8px;
+  align-items: center;
+}
+
+.video-paste-button {
+  min-height: 42px;
+}
+
+.video-link-hint {
+  margin: -2px 0 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 780;
+  line-height: 1.5;
+}
+
+.video-load-button {
+  width: 100%;
+}
+
+.video-player-panel {
+  min-height: calc(100vh - 84px);
+  align-content: start;
+  padding: 16px;
+}
+
+.video-player-frame-shell {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(63, 111, 90, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 14px 34px rgba(20, 33, 28, 0.1);
+  aspect-ratio: 16 / 9;
+}
+
+.video-player-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #0f1714;
+}
+
+.video-player-empty {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 260px;
+  place-items: center;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+@media (max-width: 980px) {
+  .video-listening-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .video-listening-control {
+    position: static;
+  }
+
+  .video-player-panel {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 520px) {
+  .video-link-row {
+    grid-template-columns: 1fr;
+  }
+}

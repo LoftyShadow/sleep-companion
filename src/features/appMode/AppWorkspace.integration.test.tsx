@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createPlayerPortTestDouble,
   createTtsEngineTestDouble,
@@ -167,6 +167,10 @@ describe("AppWorkspace integration", () => {
     expect(screen.getByText("EPUB · 2 章 · 5 个朗读片段")).toBeInTheDocument();
     expect(screen.getByText("正在播放章节")).toBeInTheDocument();
     expect(screen.getByText("3 段 · 第 1 / 2 章")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "02第一段。" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /第一章\s+第一段。/u }),
+    ).not.toBeInTheDocument();
     await user.click(
       screen.getByRole("button", { name: "选择章节，当前 第一章" }),
     );
@@ -215,5 +219,41 @@ describe("AppWorkspace integration", () => {
     expect(await screen.findByText("已导入 测试 EPUB · 5 段")).toBeInTheDocument();
     expect(screen.queryByLabelText("书稿文本")).not.toBeInTheDocument();
     expect(screen.getByText("EPUB · 2 章 · 5 个朗读片段")).toBeInTheDocument();
+  });
+
+  it("loads a Bilibili link in the official video player", async () => {
+    const user = userEvent.setup();
+    render(<AppWorkspace player={createPlayerPortTestDouble().player} />);
+
+    await user.click(screen.getByRole("button", { name: "听视频" }));
+    expect(screen.getByRole("heading", { name: "听视频" })).toBeInTheDocument();
+
+    await user.type(
+      screen.getByLabelText("视频链接"),
+      "https://www.bilibili.com/video/BV1xx411c7mD/",
+    );
+    await user.click(screen.getByRole("button", { name: "载入视频" }));
+
+    expect(screen.getByText("已载入 BV BV1xx411c7mD")).toBeInTheDocument();
+    expect(screen.getByTitle("B 站播放器 BV BV1xx411c7mD")).toHaveAttribute(
+      "src",
+      "https://player.bilibili.com/player.html?autoplay=1&bvid=BV1xx411c7mD",
+    );
+  });
+
+  it("pastes a Bilibili link from the clipboard", async () => {
+    const user = userEvent.setup();
+    const readText = vi.fn().mockResolvedValue("BV1xx411c7mD");
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { readText },
+    });
+    render(<AppWorkspace player={createPlayerPortTestDouble().player} />);
+
+    await user.click(screen.getByRole("button", { name: "听视频" }));
+    await user.click(screen.getByRole("button", { name: "粘贴" }));
+
+    expect(readText).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText("视频链接")).toHaveValue("BV1xx411c7mD");
   });
 });

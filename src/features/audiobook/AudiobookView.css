@@ -444,12 +444,6 @@
   overflow-wrap: anywhere;
 }
 
-.segment-chapter {
-  color: var(--teal);
-  font-size: 0.73rem;
-  font-weight: 950;
-}
-
 .empty-segment-message {
   margin: 0;
   padding: 14px;

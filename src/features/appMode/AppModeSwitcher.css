@@ -1,6 +1,6 @@
 .app-mode-nav {
   display: inline-grid;
-  grid-template-columns: repeat(2, minmax(92px, 1fr));
+  grid-template-columns: repeat(3, minmax(92px, 1fr));
   gap: 5px;
   margin: 0 0 12px;
   padding: 4px;

@@ -1,2 +1,1 @@
-export type AppMode = "mixer" | "audiobook";
-
+export type AppMode = "mixer" | "audiobook" | "video";

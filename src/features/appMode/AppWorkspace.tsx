@@ -5,6 +5,7 @@ import type { TtsEnginePort } from "../audiobook/TtsEnginePort";
 import { SoundMixerView } from "../mixer/SoundMixerView";
 import { createPlayer } from "../player/createPlayer";
 import type { PlayerPort } from "../player/PlayerPort";
+import { VideoListeningView } from "../videoListening/VideoListeningView";
 import { AppModeSwitcher } from "./AppModeSwitcher";
 import type { AppMode } from "./appModeTypes";
 import "./AppWorkspace.css";
@@ -17,6 +18,7 @@ interface AppWorkspaceProps {
 export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
   const [activeAppMode, setActiveAppMode] = useState<AppMode>("mixer");
   const [hasOpenedAudiobook, setHasOpenedAudiobook] = useState(false);
+  const [hasOpenedVideo, setHasOpenedVideo] = useState(false);
   const [runtimePlayer, setRuntimePlayer] = useState<PlayerPort | null>(null);
   const audiobookEngine = useMemo(
     () => ttsEngine ?? createTtsEngine(),
@@ -26,6 +28,9 @@ export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
     setActiveAppMode(mode);
     if (mode === "audiobook") {
       setHasOpenedAudiobook(true);
+    }
+    if (mode === "video") {
+      setHasOpenedVideo(true);
     }
   }, []);
 
@@ -83,6 +88,14 @@ export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
         aria-label="听书"
       >
         {hasOpenedAudiobook ? <AudiobookView engine={audiobookEngine} /> : null}
+      </section>
+
+      <section
+        className="app-mode-panel"
+        hidden={activeAppMode !== "video"}
+        aria-label="听视频"
+      >
+        {hasOpenedVideo ? <VideoListeningView /> : null}
       </section>
     </main>
   );

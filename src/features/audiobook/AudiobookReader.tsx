@@ -111,11 +111,6 @@ export function AudiobookReader({
                   {String(segment.order).padStart(2, "0")}
                 </span>
                 <span className="segment-text">
-                  {segment.chapterTitle ? (
-                    <span className="segment-chapter">
-                      {segment.chapterTitle}
-                    </span>
-                  ) : null}
                   <span>{segment.text}</span>
                 </span>
               </button>

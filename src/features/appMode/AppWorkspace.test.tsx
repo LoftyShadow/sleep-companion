@@ -41,4 +41,20 @@ describe("AppWorkspace", () => {
       within(screen.getByRole("button", { name: "大雨" })).getByText("播放中"),
     ).toBeInTheDocument();
   });
+
+  it("keeps ambient sounds playing when opening video listening", async () => {
+    const user = userEvent.setup();
+    const { play, player, stopAll } = createPlayerPortTestDouble();
+    render(<AppWorkspace player={player} />);
+
+    await user.click(screen.getByRole("button", { name: "大雨" }));
+    await user.click(screen.getByRole("button", { name: "听视频" }));
+
+    expect(screen.getByRole("heading", { name: "听视频" })).toBeInTheDocument();
+    expect(play).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "heavy_rain" }),
+      0.62,
+    );
+    expect(stopAll).not.toHaveBeenCalled();
+  });
 });
