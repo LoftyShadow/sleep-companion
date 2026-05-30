@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   createBilibiliVideoSource,
   type BilibiliVideoSource,
@@ -7,13 +7,29 @@ import "./VideoListeningView.css";
 
 const DEFAULT_VIDEO_INPUT = "";
 
-export function VideoListeningView() {
+interface VideoListeningViewProps {
+  globalStopRequestId: number;
+}
+
+export function VideoListeningView({
+  globalStopRequestId,
+}: VideoListeningViewProps) {
   const inputId = useId();
   const [videoInput, setVideoInput] = useState(DEFAULT_VIDEO_INPUT);
   const [videoSource, setVideoSource] = useState<BilibiliVideoSource | null>(
     null,
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const handledGlobalStopRequestIdRef = useRef(globalStopRequestId);
+
+  useEffect(() => {
+    if (globalStopRequestId === handledGlobalStopRequestIdRef.current) {
+      return;
+    }
+
+    handledGlobalStopRequestIdRef.current = globalStopRequestId;
+    setVideoSource(null);
+  }, [globalStopRequestId]);
 
   function handleLoadVideo() {
     const trimmedInput = videoInput.trim();

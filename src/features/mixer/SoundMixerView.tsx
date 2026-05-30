@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useCustomSounds } from "../customSounds/useCustomSounds";
 import type { PlayerPort } from "../player/PlayerPort";
 import { useSoundMixer } from "../player/useSoundMixer";
@@ -27,10 +27,14 @@ import {
 import "./SoundMixerView.css";
 
 interface SoundMixerViewProps {
+  globalStopRequestId: number;
   player: PlayerPort;
 }
 
-export function SoundMixerView({ player }: SoundMixerViewProps) {
+export function SoundMixerView({
+  globalStopRequestId,
+  player,
+}: SoundMixerViewProps) {
   const [activeSoundMode, setActiveSoundMode] =
     useState<SoundLibraryMode>("sleep");
   const {
@@ -90,6 +94,16 @@ export function SoundMixerView({ player }: SoundMixerViewProps) {
     ? "停止播放"
     : modeConfig.transportLabel;
   const visibleErrorMessage = errorMessage ?? customSoundErrorMessage;
+  const handledGlobalStopRequestIdRef = useRef(globalStopRequestId);
+
+  useEffect(() => {
+    if (globalStopRequestId === handledGlobalStopRequestIdRef.current) {
+      return;
+    }
+
+    handledGlobalStopRequestIdRef.current = globalStopRequestId;
+    void stopAll();
+  }, [globalStopRequestId, stopAll]);
 
   async function handleUnifiedPlayback() {
     if (isAnySoundPlaying) {

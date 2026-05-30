@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AudiobookImportPanel } from "./AudiobookImportPanel";
 import { AudiobookReader } from "./AudiobookReader";
 import { AudiobookSettingsPanel } from "./AudiobookSettingsPanel";
@@ -31,6 +31,7 @@ const DEFAULT_AUDIOBOOK_BOOK: PlainTextBook = {
 
 interface AudiobookViewProps {
   engine: TtsEnginePort;
+  globalStopRequestId: number;
 }
 
 function getPrimaryActionLabel(
@@ -49,7 +50,10 @@ function getPrimaryActionLabel(
   return "播放";
 }
 
-export function AudiobookView({ engine }: AudiobookViewProps) {
+export function AudiobookView({
+  engine,
+  globalStopRequestId,
+}: AudiobookViewProps) {
   const [book, setBook] = useState<ImportedAudiobookBook>(
     DEFAULT_AUDIOBOOK_BOOK,
   );
@@ -76,6 +80,16 @@ export function AudiobookView({ engine }: AudiobookViewProps) {
     book.kind === "plain-text"
       ? `${audiobook.segments.length} 个朗读片段`
       : `EPUB · ${audiobook.chapters.length} 章 · ${audiobook.segments.length} 个朗读片段`;
+  const handledGlobalStopRequestIdRef = useRef(globalStopRequestId);
+
+  useEffect(() => {
+    if (globalStopRequestId === handledGlobalStopRequestIdRef.current) {
+      return;
+    }
+
+    handledGlobalStopRequestIdRef.current = globalStopRequestId;
+    audiobook.stop();
+  }, [audiobook, globalStopRequestId]);
 
   async function handleBookFiles(files: readonly File[]) {
     const file = files[0];
