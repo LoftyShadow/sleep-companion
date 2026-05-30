@@ -164,10 +164,99 @@ jobs:
       - name: 构建 Android APK
         run: pnpm tauri android build --apk --target aarch64 --ci
 
-      - name: 上传 Android APK 到草稿 Release
+      - name: 准备 Android 内测签名
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p android-signing signed-apk
+
+          if [ -n "${ANDROID_KEYSTORE_BASE64}" ]; then
+            : "${ANDROID_KEYSTORE_PASSWORD:?需要配置 ANDROID_KEYSTORE_PASSWORD secret}"
+            : "${ANDROID_KEY_ALIAS:?需要配置 ANDROID_KEY_ALIAS secret}"
+            printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > android-signing/release.keystore
+            if [ -z "${ANDROID_KEY_PASSWORD}" ]; then
+              ANDROID_KEY_PASSWORD="${ANDROID_KEYSTORE_PASSWORD}"
+            fi
+          else
+            ANDROID_KEYSTORE_PASSWORD="$(openssl rand -base64 24)"
+            ANDROID_KEY_PASSWORD="${ANDROID_KEYSTORE_PASSWORD}"
+            ANDROID_KEY_ALIAS="sleep-companion-ci"
+            keytool -genkeypair \
+              -keystore android-signing/release.keystore \
+              -storepass "${ANDROID_KEYSTORE_PASSWORD}" \
+              -keypass "${ANDROID_KEY_PASSWORD}" \
+              -alias "${ANDROID_KEY_ALIAS}" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Sleep Companion Internal,O=Sleep Companion,C=CN"
+            echo "未配置 ANDROID_KEYSTORE_BASE64，已生成临时内测签名；后续版本覆盖安装可能需要先卸载旧包。"
+          fi
+
+          {
+            echo "ANDROID_SIGNING_KEYSTORE=${PWD}/android-signing/release.keystore"
+            echo "ANDROID_SIGNING_KEYSTORE_PASSWORD=${ANDROID_KEYSTORE_PASSWORD}"
+            echo "ANDROID_SIGNING_KEY_ALIAS=${ANDROID_KEY_ALIAS}"
+            echo "ANDROID_SIGNING_KEY_PASSWORD=${ANDROID_KEY_PASSWORD}"
+          } >> "${GITHUB_ENV}"
+
+      - name: 签名并验证 Android APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s globstar nullglob
+
+          build_tools_dir="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          if [ -z "${build_tools_dir}" ]; then
+            echo "未找到 Android build-tools，无法签名 APK。"
+            exit 1
+          fi
+
+          unsigned_apks=(src-tauri/gen/android/app/build/outputs/**/*-unsigned.apk)
+          if [ "${#unsigned_apks[@]}" -eq 0 ]; then
+            echo "未找到待签名的 *-unsigned.apk。"
+            exit 1
+          fi
+
+          for apk in "${unsigned_apks[@]}"; do
+            base_name="$(basename "${apk%-unsigned.apk}")"
+            aligned_apk="signed-apk/${base_name}-aligned.apk"
+            signed_apk="signed-apk/${base_name}-signed.apk"
+
+            "${build_tools_dir}/zipalign" -p -f 4 "${apk}" "${aligned_apk}"
+            "${build_tools_dir}/apksigner" sign \
+              --ks "${ANDROID_SIGNING_KEYSTORE}" \
+              --ks-key-alias "${ANDROID_SIGNING_KEY_ALIAS}" \
+              --ks-pass "pass:${ANDROID_SIGNING_KEYSTORE_PASSWORD}" \
+              --key-pass "pass:${ANDROID_SIGNING_KEY_PASSWORD}" \
+              --out "${signed_apk}" \
+              "${aligned_apk}"
+            "${build_tools_dir}/apksigner" verify --verbose "${signed_apk}"
+          done
+
+      - name: 清理草稿 Release 中的旧未签名 APK
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release view "${RELEASE_TAG}" --json assets --jq '.assets[] | select(.name | endswith("-unsigned.apk")) | .name' |
+            while IFS= read -r asset_name; do
+              if [ -n "${asset_name}" ]; then
+                gh release delete-asset "${RELEASE_TAG}" "${asset_name}" --yes
+              fi
+            done
+
+      - name: 上传已签名 Android APK 到草稿 Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           draft: true
           files: |
-            src-tauri/gen/android/app/build/outputs/**/*.apk
+            signed-apk/*-signed.apk

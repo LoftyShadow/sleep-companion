@@ -20,6 +20,8 @@
 - [x] 桌面端使用 `tauri-apps/tauri-action@v0` 上传草稿 Release。
 - [x] Android 使用 `softprops/action-gh-release@v2` 上传 APK。
 - [x] 运行本地质量门禁和 workflow 静态校验。
+- [x] Android Release APK 增加内测签名和 `apksigner verify` 验证。
+- [x] 上传 Android APK 前清理草稿 Release 中遗留的 `*-unsigned.apk`。
 
 ## 影响文件
 
@@ -40,5 +42,6 @@ rtk git diff --check
 
 - macOS 后续再做。
 - Android 第一版 CI 只产出 `aarch64` APK，不产出 AAB。
-- 未配置签名，产物定位为内测安装包。
+- 未配置固定 GitHub Secrets 时，CI 会使用临时内测签名；这种包可以安装，但后续版本可能无法覆盖升级，需要先卸载旧包。
+- 如需稳定内测升级，需要配置 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`，必要时配置 `ANDROID_KEY_PASSWORD`。
 - 首次 tag 触发后需要查看 GitHub Actions 实际输出，必要时收紧 Android APK 的上传路径。
