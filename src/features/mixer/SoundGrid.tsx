@@ -3,11 +3,12 @@ import {
   type SoundDefinition,
   type SoundId,
 } from "../sounds/soundCatalog";
+import { getSoundVolume, type VolumeState } from "../player/soundMixerState";
 
 interface SoundGridProps {
   playingSoundIds: Set<SoundId>;
   sounds: SoundDefinition[];
-  volumes: Record<SoundId, number>;
+  volumes: VolumeState;
   onRemoveCustomSound: (soundId: SoundId) => void;
   onSetSoundVolume: (soundId: SoundId, volume: number) => void;
   onToggleSound: (soundId: SoundId) => void;
@@ -25,7 +26,7 @@ export function SoundGrid({
     <section className="sound-grid" aria-label="声音库">
       {sounds.map((sound) => {
         const isPlaying = playingSoundIds.has(sound.id);
-        const volume = volumes[sound.id] ?? 0.5;
+        const volume = getSoundVolume(volumes, sound.id);
         const volumePercent = Math.round(volume * 100);
         const isCustomSound = isCustomSoundId(sound.id);
         const isAsmrSound = sound.id.startsWith("asmr_");
