@@ -1,5 +1,6 @@
 import type { SoundPreset, SoundPresetGroup } from "../sounds/soundPresets";
 import type { SoundLibraryModeConfig } from "./soundLibraryModes";
+import "./PresetGroups.css";
 
 interface PresetGroupsProps {
   activePresetId: string | null;

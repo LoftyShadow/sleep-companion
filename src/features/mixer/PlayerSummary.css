@@ -1,0 +1,18 @@
+.player-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.player-actions {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+@media (max-width: 680px) {
+  .player-actions {
+    grid-template-columns: 1fr;
+  }
+}

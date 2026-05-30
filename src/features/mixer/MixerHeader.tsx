@@ -3,6 +3,7 @@ import {
   type SoundLibraryMode,
   type SoundLibraryModeConfig,
 } from "./soundLibraryModes";
+import "./MixerHeader.css";
 
 interface MixerHeaderProps {
   activeSoundMode: SoundLibraryMode;

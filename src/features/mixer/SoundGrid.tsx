@@ -4,6 +4,7 @@ import {
   type SoundId,
 } from "../sounds/soundCatalog";
 import { getSoundVolume, type VolumeState } from "../player/soundMixerState";
+import "./SoundGrid.css";
 
 interface SoundGridProps {
   playingSoundIds: Set<SoundId>;

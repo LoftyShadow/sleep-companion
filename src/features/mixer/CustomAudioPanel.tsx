@@ -1,3 +1,5 @@
+import "./CustomAudioPanel.css";
+
 interface CustomAudioPanelProps {
   customSoundCount: number;
   customSoundMessage: string | null;

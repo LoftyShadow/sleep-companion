@@ -1,3 +1,5 @@
+import "./PlayerSummary.css";
+
 interface PlayerSummaryProps {
   activeSummary: string;
   isAnySoundPlaying: boolean;
