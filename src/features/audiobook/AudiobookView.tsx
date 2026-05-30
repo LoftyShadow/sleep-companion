@@ -81,6 +81,7 @@ export function AudiobookView({
       ? `${audiobook.segments.length} 个朗读片段`
       : `EPUB · ${audiobook.chapters.length} 章 · ${audiobook.segments.length} 个朗读片段`;
   const handledGlobalStopRequestIdRef = useRef(globalStopRequestId);
+  const stopAudiobook = audiobook.stop;
 
   useEffect(() => {
     if (globalStopRequestId === handledGlobalStopRequestIdRef.current) {
@@ -88,8 +89,8 @@ export function AudiobookView({
     }
 
     handledGlobalStopRequestIdRef.current = globalStopRequestId;
-    audiobook.stop();
-  }, [audiobook, globalStopRequestId]);
+    stopAudiobook();
+  }, [globalStopRequestId, stopAudiobook]);
 
   async function handleBookFiles(files: readonly File[]) {
     const file = files[0];
