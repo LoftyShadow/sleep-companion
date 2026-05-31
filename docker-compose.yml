@@ -1,0 +1,13 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "3817:3817"
+    environment:
+      APP_ENV: production
+      APP_DATABASE__URL: ${APP_DATABASE__URL}
+      APP_AUTH__JWT_SECRET: ${APP_AUTH__JWT_SECRET}
+      APP_ID_GENERATOR__WORKER_ID: ${APP_ID_GENERATOR__WORKER_ID:-1}
+    restart: unless-stopped

@@ -14,6 +14,7 @@ export default defineConfig([
       "node_modules/**",
       "src-tauri/gen/**",
       "src-tauri/target/**",
+      "target/**",
     ],
   },
   {

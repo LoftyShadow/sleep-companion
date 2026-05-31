@@ -24,9 +24,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:rust": "cd src-tauri && cargo test",
+    "test:rust": "cargo test --workspace",
     "test:all": "pnpm run test && pnpm run test:rust",
-    "check:rust": "cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings",
+    "check:rust": "cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings",
     "check": "pnpm run lint && pnpm run check:rust && pnpm run test:all && pnpm run build",
     "tauri": "tauri"
   },

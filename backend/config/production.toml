@@ -1,0 +1,16 @@
+[server]
+host = "0.0.0.0"
+
+[database]
+max_connections = 20
+
+[logging]
+format = "json"
+write_to_file = false
+
+[openapi]
+enabled = false
+swagger_ui_enabled = false
+
+[scheduler]
+enabled = false

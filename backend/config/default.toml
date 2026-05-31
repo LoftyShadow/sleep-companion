@@ -1,0 +1,44 @@
+[server]
+host = "127.0.0.1"
+port = 3817
+
+[database]
+host = "localhost"
+port = 5432
+database = "sleep_companion_dev"
+username = "postgres"
+password = "123456"
+ssl_mode = "disable"
+max_connections = 10
+
+[id_generator]
+worker_id = 1
+
+[auth]
+access_token_ttl_seconds = 900
+refresh_token_ttl_days = 30
+password_min_length = 6
+
+[logging]
+level = "info,tower_http=info"
+format = "pretty"
+write_to_file = true
+file_path = "backend/logs/backend-dev.log"
+
+[openapi]
+enabled = true
+swagger_ui_enabled = true
+
+[scheduler]
+enabled = true
+
+[scheduler.jobs.cleanup_expired_tokens]
+enabled = true
+cron = "0 0/30 * * * *"
+
+[rate_limit.login]
+window_seconds = 900
+block_seconds = 900
+ip_attempts = 30
+email_attempts = 10
+ip_email_attempts = 5

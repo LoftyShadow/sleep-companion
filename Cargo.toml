@@ -1,0 +1,16 @@
+[workspace]
+members = [
+  "backend",
+  "backend-migration",
+  "src-tauri",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal"] }
+tracing = "0.1"

@@ -1,0 +1,11 @@
+[database]
+database = "sleep_companion_test"
+
+[auth]
+jwt_secret = "test-only-change-me"
+
+[logging]
+write_to_file = false
+
+[scheduler]
+enabled = false
