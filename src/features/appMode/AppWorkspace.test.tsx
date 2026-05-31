@@ -220,6 +220,40 @@ describe("AppWorkspace", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("retracts and restores the floating playback dock", async () => {
+    const user = userEvent.setup();
+    const { play, player } = createPlayerPortTestDouble();
+    render(<AppWorkspace player={player} />);
+
+    await user.click(screen.getByRole("button", { name: "收回悬浮播放控制" }));
+
+    expect(screen.queryByText("播放全部")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "播放全部" }));
+
+    await waitFor(() => {
+      expect(play).toHaveBeenCalledTimes(3);
+    });
+    expect(
+      screen.queryByRole("button", { name: "展开模块播放控制" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "展开定时停止设置" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "展开悬浮播放控制" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "展开悬浮播放控制" }));
+
+    expect(screen.getByRole("button", { name: "暂停全部" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "展开模块播放控制" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "展开定时停止设置" }),
+    ).toBeInTheDocument();
+  });
+
   it("switches between floating timer and module panels", async () => {
     const user = userEvent.setup();
     render(<AppWorkspace player={createPlayerPortTestDouble().player} />);
@@ -331,10 +365,14 @@ describe("AppWorkspace", () => {
     );
     const shell = container.querySelector(".app-shell") as HTMLElement;
     shell.scrollTop = 420;
+    document.documentElement.scrollTop = 420;
+    document.body.scrollTop = 420;
 
     await user.click(screen.getByRole("button", { name: "听书" }));
 
     expect(shell.scrollTop).toBe(0);
+    expect(document.documentElement.scrollTop).toBe(0);
+    expect(document.body.scrollTop).toBe(0);
   });
 
   it("shows the scroll indicator only while the workspace is scrolling", () => {

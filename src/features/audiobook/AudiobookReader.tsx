@@ -38,6 +38,7 @@ export function AudiobookReader({
   const textInputId = useId();
   const activeSegmentButtonRef = useRef<HTMLButtonElement | null>(null);
   const autoLocateTimerRef = useRef<number | null>(null);
+  const hasMountedRef = useRef(false);
   const isTextEditable = bookText !== null && onBookTextChange !== undefined;
   const visibleSegmentStartIndex = currentChapter?.startSegmentIndex ?? 0;
   const visibleSegments = currentChapter
@@ -48,6 +49,11 @@ export function AudiobookReader({
     : segments;
 
   useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
+
     activeSegmentButtonRef.current?.scrollIntoView?.({
       block: "nearest",
       inline: "nearest",
