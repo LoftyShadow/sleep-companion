@@ -114,18 +114,37 @@ export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
   return (
     <>
       <main className="app-shell" ref={shellRef} onScroll={handleShellScroll}>
-        <AppModeSwitcher
-          activeMode={activeAppMode}
-          onModeChange={handleAppModeChange}
-        />
-        <SleepTimerControl
-          durationMinutes={sleepTimer.durationMinutes}
-          remainingSeconds={sleepTimer.remainingSeconds}
-          status={sleepTimer.status}
-          onCancel={sleepTimer.cancel}
-          onDurationChange={sleepTimer.setDurationMinutes}
-          onStart={sleepTimer.start}
-        />
+        <section className="workspace-command-center" aria-label="工作台控制">
+          <div className="workspace-brand">
+            <span className="workspace-brand__mark" aria-hidden="true">
+              S
+            </span>
+            <div className="workspace-brand__copy">
+              <p className="app-kicker">Sleep Companion</p>
+              <strong>
+                {activeAppMode === "mixer"
+                  ? "声音工作台"
+                  : activeAppMode === "audiobook"
+                    ? "听书工作台"
+                    : "听视频工作台"}
+              </strong>
+            </div>
+          </div>
+
+          <AppModeSwitcher
+            activeMode={activeAppMode}
+            onModeChange={handleAppModeChange}
+          />
+
+          <SleepTimerControl
+            durationMinutes={sleepTimer.durationMinutes}
+            remainingSeconds={sleepTimer.remainingSeconds}
+            status={sleepTimer.status}
+            onCancel={sleepTimer.cancel}
+            onDurationChange={sleepTimer.setDurationMinutes}
+            onStart={sleepTimer.start}
+          />
+        </section>
 
         <section
           className="app-mode-panel"

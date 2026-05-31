@@ -2,14 +2,16 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 14px;
-  padding: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.54);
+  gap: 16px;
+  padding: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.62);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.64), rgba(219, 236, 225, 0.4)),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.74), rgba(219, 236, 225, 0.44)),
     rgba(255, 255, 255, 0.44);
-  box-shadow: 0 10px 28px rgba(20, 33, 28, 0.08);
+  box-shadow:
+    0 12px 28px rgba(20, 33, 28, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.56);
 }
 
 .custom-audio-copy {
@@ -17,13 +19,13 @@
 }
 
 .custom-audio-copy h3 {
-  font-size: 1.02rem;
+  font-size: 1.06rem;
   line-height: 1.2;
 }
 
 .custom-audio-copy p:not(.app-kicker) {
   margin: 7px 0 0;
-  color: var(--muted);
+  color: var(--muted-strong);
   font-size: 0.82rem;
   font-weight: 760;
 }

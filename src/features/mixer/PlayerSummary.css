@@ -1,14 +1,83 @@
 .player-card {
+  position: relative;
   display: grid;
-  gap: 12px;
-  padding: 14px;
+  align-content: space-between;
+  gap: 20px;
+  overflow: hidden;
+  padding: 22px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.88), rgba(235, 244, 239, 0.56) 58%, rgba(250, 241, 229, 0.36)),
+    var(--surface);
+}
+
+.player-card::before {
+  position: absolute;
+  inset: auto 22px 22px auto;
+  width: 120px;
+  height: 120px;
+  border: 1px solid rgba(63, 111, 90, 0.12);
+  border-radius: 999px;
+  background: rgba(45, 125, 130, 0.08);
+  content: "";
+}
+
+.player-orbit {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 128px;
+  aspect-ratio: 1;
+  place-items: center;
+  justify-self: center;
+  border: 1px solid rgba(63, 111, 90, 0.14);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, 0.9) 0 32%, transparent 33%),
+    linear-gradient(135deg, rgba(63, 111, 90, 0.16), rgba(45, 125, 130, 0.16));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.64),
+    0 18px 34px rgba(20, 33, 28, 0.1);
+}
+
+.player-orbit span {
+  position: absolute;
+  border: 2px solid rgba(45, 125, 130, 0.18);
+  border-radius: 999px;
+}
+
+.player-orbit span:nth-child(1) {
+  inset: 16px;
+}
+
+.player-orbit span:nth-child(2) {
+  inset: 31px;
+  border-color: rgba(185, 111, 66, 0.2);
+}
+
+.player-orbit span:nth-child(3) {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  background: linear-gradient(135deg, var(--primary), var(--teal));
+  box-shadow: 0 8px 18px rgba(45, 125, 130, 0.24);
 }
 
 .player-actions {
+  position: relative;
+  z-index: 1;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: 1fr;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+}
+
+.player-card .transport-status {
+  justify-self: stretch;
+  text-align: center;
+}
+
+.player-card .transport-button {
+  min-height: 56px;
 }
 
 @media (max-width: 680px) {

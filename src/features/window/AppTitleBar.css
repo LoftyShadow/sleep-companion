@@ -7,12 +7,12 @@
   align-items: center;
   height: 44px;
   padding: 6px 10px 6px 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.52);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.62);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(239, 248, 243, 0.5)),
-    rgba(234, 241, 236, 0.72);
-  box-shadow: 0 12px 34px rgba(20, 33, 28, 0.1);
-  backdrop-filter: blur(22px) saturate(1.18);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(239, 248, 243, 0.56)),
+    rgba(234, 241, 236, 0.78);
+  box-shadow: 0 12px 32px rgba(20, 33, 28, 0.09);
+  backdrop-filter: blur(24px) saturate(1.14);
   user-select: none;
 }
 
@@ -32,7 +32,9 @@
   border: 1px solid rgba(63, 111, 90, 0.18);
   border-radius: 8px;
   color: white;
-  background: linear-gradient(135deg, var(--primary), var(--teal));
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0)),
+    linear-gradient(135deg, var(--primary), var(--teal));
   box-shadow: 0 8px 18px rgba(45, 125, 130, 0.22);
   font-size: 0.78rem;
   font-weight: 950;
@@ -63,7 +65,9 @@
   border: 1px solid rgba(63, 111, 90, 0.12);
   border-radius: 8px;
   color: var(--primary-strong);
-  background: rgba(255, 255, 255, 0.5);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(242, 248, 245, 0.5)),
+    rgba(255, 255, 255, 0.5);
   transition:
     background 160ms ease,
     border-color 160ms ease,
@@ -73,7 +77,9 @@
 
 .app-title-bar__control:hover {
   border-color: rgba(45, 125, 130, 0.24);
-  background: rgba(255, 255, 255, 0.78);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(242, 248, 245, 0.68)),
+    rgba(255, 255, 255, 0.78);
   transform: translateY(-1px);
 }
 

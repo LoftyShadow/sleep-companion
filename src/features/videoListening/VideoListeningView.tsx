@@ -127,137 +127,153 @@ export function VideoListeningView({
       ) : null}
 
       <div className="video-listening-layout">
-        <aside
-          className="video-listening-control glass-panel"
-          aria-label="听视频控制"
-        >
-          <header className="video-listening-header">
-            <p className="app-kicker">B 站官方播放器</p>
-            <h1>听视频</h1>
-            <p className="mix-summary">
-              {videoSource?.label ?? "粘贴 B 站视频或直播链接后载入"}
-            </p>
-          </header>
+        <section className="video-listening-stage" aria-label="听视频控制">
+          <section
+            className="video-link-panel glass-panel"
+            aria-label="B 站视频或直播链接"
+          >
+            <header className="video-listening-header">
+              <p className="app-kicker">B 站官方播放器</p>
+              <h1>听视频</h1>
+              <p className="mix-summary">
+                {videoSource?.label ?? "粘贴 B 站视频或直播链接后载入"}
+              </p>
+            </header>
 
-          <section className="video-link-panel" aria-label="B 站视频或直播链接">
-            <label className="field-label" htmlFor={inputId}>
-              视频或直播链接
-            </label>
-            <div className="video-link-row">
-              <input
-                className="video-link-input"
-                id={inputId}
-                placeholder="https://www.bilibili.com/video/BV... 或 https://live.bilibili.com/..."
-                type="url"
-                value={videoInput}
-                onChange={(event) => {
-                  setVideoInput(event.currentTarget.value);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    handleLoadVideo();
-                  }
-                }}
-              />
+            <div className="video-link-form">
+              <div className="video-step-label">
+                <span>01</span>
+                <strong>载入来源</strong>
+              </div>
+
+              <label className="field-label" htmlFor={inputId}>
+                视频或直播链接
+              </label>
+              <div className="video-link-row">
+                <input
+                  className="video-link-input"
+                  id={inputId}
+                  placeholder="https://www.bilibili.com/video/BV... 或 https://live.bilibili.com/..."
+                  type="url"
+                  value={videoInput}
+                  onChange={(event) => {
+                    setVideoInput(event.currentTarget.value);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      handleLoadVideo();
+                    }
+                  }}
+                />
+                <button
+                  className="secondary-control-button video-paste-button"
+                  type="button"
+                  onClick={() => {
+                    void handlePasteVideoLink();
+                  }}
+                >
+                  粘贴
+                </button>
+              </div>
+              <p className="video-link-hint">
+                载入后会尝试自动播放，是否出声取决于浏览器和 B 站播放器。
+              </p>
               <button
-                className="secondary-control-button video-paste-button"
+                className="custom-audio-button video-load-button"
                 type="button"
-                onClick={() => {
-                  void handlePasteVideoLink();
-                }}
+                onClick={handleLoadVideo}
               >
-                粘贴
+                载入
               </button>
+              <p className="custom-audio-status" role="status">
+                {videoSource
+                  ? `已载入 ${videoSource.label}`
+                  : "支持 BV、av、ep 和直播间链接"}
+              </p>
             </div>
-            <p className="video-link-hint">
-              载入后会尝试自动播放，是否出声取决于浏览器和 B 站播放器。
-            </p>
-            <button
-              className="custom-audio-button video-load-button"
-              type="button"
-              onClick={handleLoadVideo}
-            >
-              载入
-            </button>
-            <p className="custom-audio-status" role="status">
-              {videoSource
-                ? `已载入 ${videoSource.label}`
-                : "支持 BV、av、ep 和直播间链接"}
-            </p>
           </section>
-        </aside>
 
-        <section
-          className="video-player-panel glass-panel"
-          aria-labelledby="video-player-heading"
-        >
-          <div className="section-heading sound-section-heading">
-            <div>
-              <p className="app-kicker">音频收听</p>
-              <h2 id="video-player-heading">收听面板</h2>
-            </div>
-            <span className="section-meta">B 站</span>
-          </div>
-
-          <div className="video-listening-card">
-            <div className="video-listening-art" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </div>
-            <div className="video-listening-copy">
-              <p className="app-kicker">
-                {videoSource?.playerLabel ?? "等待来源"}
-              </p>
-              <h3>{videoSource?.label ?? "尚未载入"}</h3>
-              <p>
-                {videoSource && isPlaybackMounted
-                  ? "已连接官方播放源"
-                  : videoSource
-                    ? "已暂停官方播放源"
-                  : "粘贴链接后开始收听"}
-              </p>
-            </div>
-          </div>
-
-          <section className="video-listening-controls" aria-label="收听控制">
-            <button
-              className="transport-button video-playback-button"
-              type="button"
-              aria-pressed={videoSource ? isPlaybackMounted : false}
-              disabled={!videoSource}
-              onClick={handleTogglePlayback}
-            >
-              <span className="transport-glyph" aria-hidden="true" />
-              <span>{isPlaybackMounted ? "暂停" : "播放"}</span>
-            </button>
-            <label className="video-volume-control">
-              <span className="field-label">
-                <span>收听音量</span>
-                <strong>{listeningVolume}%</strong>
+          <section
+            className="video-now glass-panel"
+            aria-labelledby="video-player-heading"
+          >
+            <div className="section-heading sound-section-heading">
+              <div>
+                <p className="app-kicker">音频收听</p>
+                <h2 id="video-player-heading">收听面板</h2>
+              </div>
+              <span className="section-meta">
+                {isPlaybackMounted ? "播放中" : "待命"}
               </span>
-              <input
-                aria-label="收听音量"
-                className="video-volume-range"
-                disabled={!canControlOfficialPlayer}
-                min="0"
-                max="100"
-                type="range"
-                value={listeningVolume}
-                onChange={(event) => {
-                  handleListeningVolumeChange(Number(event.currentTarget.value));
-                }}
-              />
-            </label>
-            <p className="video-control-hint">
-              {canControlOfficialPlayer
-                ? "音量会同步到 B 站直播播放器。"
-                : "普通视频外链未提供外部音量接口，请在官方播放源内调整音量。"}
-            </p>
-          </section>
+            </div>
 
+            <div className="video-listening-card">
+              <div className="video-listening-art" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </div>
+              <div className="video-listening-copy">
+                <p className="app-kicker">
+                  {videoSource?.playerLabel ?? "等待来源"}
+                </p>
+                <h3>{videoSource?.label ?? "尚未载入"}</h3>
+                <p>
+                  {videoSource && isPlaybackMounted
+                    ? "已连接官方播放源"
+                    : videoSource
+                      ? "已暂停官方播放源"
+                      : "粘贴链接后开始收听"}
+                </p>
+              </div>
+            </div>
+
+            <section className="video-listening-controls" aria-label="收听控制">
+              <button
+                className="transport-button video-playback-button"
+                type="button"
+                aria-pressed={videoSource ? isPlaybackMounted : false}
+                disabled={!videoSource}
+                onClick={handleTogglePlayback}
+              >
+                <span className="transport-glyph" aria-hidden="true" />
+                <span>{isPlaybackMounted ? "暂停" : "播放"}</span>
+              </button>
+              <label className="video-volume-control">
+                <span className="field-label">
+                  <span>收听音量</span>
+                  <strong>{listeningVolume}%</strong>
+                </span>
+                <input
+                  aria-label="收听音量"
+                  className="video-volume-range"
+                  disabled={!canControlOfficialPlayer}
+                  min="0"
+                  max="100"
+                  type="range"
+                  value={listeningVolume}
+                  onChange={(event) => {
+                    handleListeningVolumeChange(
+                      Number(event.currentTarget.value),
+                    );
+                  }}
+                />
+              </label>
+              <p className="video-control-hint">
+                {canControlOfficialPlayer
+                  ? "音量会同步到 B 站直播播放器。"
+                  : "普通视频外链未提供外部音量接口，请在官方播放源内调整音量。"}
+              </p>
+            </section>
+          </section>
+        </section>
+
+        <section className="video-source-panel glass-panel">
           <div className="video-source-header">
-            <span>官方播放源</span>
+            <div>
+              <p className="app-kicker">官方来源</p>
+              <h2>官方播放源</h2>
+            </div>
             <button
               className="secondary-control-button video-source-toggle"
               type="button"

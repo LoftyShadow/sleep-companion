@@ -140,12 +140,15 @@ export function SoundMixerView({
       ) : null}
 
       <div className="app-layout">
-        <aside className="left-column">
+        <section className="mixer-stage" aria-label="混音总览">
           <MixerHeader
             activeSoundMode={activeSoundMode}
             activeSummary={activeSummary}
             isAnySoundPlaying={isAnySoundPlaying}
             modeConfig={modeConfig}
+            playingSoundCount={playingSoundIds.size}
+            presetCount={presetCount}
+            visibleSoundCount={visibleSounds.length}
             onSoundModeChange={setActiveSoundMode}
           />
 
@@ -159,7 +162,9 @@ export function SoundMixerView({
               void handleUnifiedPlayback();
             }}
           />
+        </section>
 
+        <div className="mixer-content">
           <PresetGroups
             activePresetId={activePresetId}
             modeConfig={modeConfig}
@@ -169,44 +174,44 @@ export function SoundMixerView({
               void applyPreset(preset);
             }}
           />
-        </aside>
 
-        <section
-          className="right-column glass-panel"
-          aria-labelledby="sounds-heading"
-        >
-          <div className="section-heading sound-section-heading">
-            <div>
-              <p className="app-kicker">{modeConfig.soundKicker}</p>
-              <h2 id="sounds-heading">{modeConfig.soundHeading}</h2>
+          <section
+            className="right-column glass-panel"
+            aria-labelledby="sounds-heading"
+          >
+            <div className="section-heading sound-section-heading">
+              <div>
+                <p className="app-kicker">{modeConfig.soundKicker}</p>
+                <h2 id="sounds-heading">{modeConfig.soundHeading}</h2>
+              </div>
+              <span className="section-meta">{visibleSounds.length} 个声音</span>
             </div>
-            <span className="section-meta">{visibleSounds.length} 个声音</span>
-          </div>
 
-          <CustomAudioPanel
-            customSoundCount={customSounds.length}
-            customSoundMessage={customSoundMessage}
-            isImportingCustomSound={isImportingCustomSound}
-            onAddCustomSoundFiles={(files) => {
-              void addCustomSoundFiles(files);
-            }}
-          />
+            <CustomAudioPanel
+              customSoundCount={customSounds.length}
+              customSoundMessage={customSoundMessage}
+              isImportingCustomSound={isImportingCustomSound}
+              onAddCustomSoundFiles={(files) => {
+                void addCustomSoundFiles(files);
+              }}
+            />
 
-          <SoundGrid
-            playingSoundIds={playingSoundIds}
-            sounds={visibleSounds}
-            volumes={volumes}
-            onRemoveCustomSound={(soundId) => {
-              void handleRemoveCustomSound(soundId);
-            }}
-            onSetSoundVolume={(soundId, volume) => {
-              void setSoundVolume(soundId, volume);
-            }}
-            onToggleSound={(soundId) => {
-              void toggleSound(soundId);
-            }}
-          />
-        </section>
+            <SoundGrid
+              playingSoundIds={playingSoundIds}
+              sounds={visibleSounds}
+              volumes={volumes}
+              onRemoveCustomSound={(soundId) => {
+                void handleRemoveCustomSound(soundId);
+              }}
+              onSetSoundVolume={(soundId, volume) => {
+                void setSoundVolume(soundId, volume);
+              }}
+              onToggleSound={(soundId) => {
+                void toggleSound(soundId);
+              }}
+            />
+          </section>
+        </div>
       </div>
     </div>
   );

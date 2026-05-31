@@ -1,19 +1,24 @@
 :root {
-  --bg: #eaf1ec;
-  --surface: rgba(255, 255, 255, 0.58);
-  --surface-strong: rgba(255, 255, 255, 0.76);
-  --surface-soft: rgba(243, 249, 245, 0.72);
-  --ink: #14211c;
-  --muted: #53675d;
-  --line: rgba(36, 75, 59, 0.14);
-  --primary: #3f6f5a;
-  --primary-strong: #244b3b;
+  --bg: #e6eee9;
+  --surface: rgba(255, 255, 255, 0.62);
+  --surface-strong: rgba(255, 255, 255, 0.84);
+  --surface-soft: rgba(242, 248, 245, 0.74);
+  --surface-warm: rgba(250, 241, 229, 0.7);
+  --ink: #13211e;
+  --muted: #5b6b65;
+  --muted-strong: #41554d;
+  --line: rgba(38, 72, 61, 0.16);
+  --line-strong: rgba(38, 72, 61, 0.24);
+  --primary: #3c735f;
+  --primary-strong: #213f35;
   --primary-soft: #dceee4;
-  --teal: #2d7d82;
-  --copper: #bd7542;
+  --teal: #227c82;
+  --copper: #b96f42;
+  --plum: #75506f;
   --danger: #b14c43;
-  --shadow: 0 24px 68px rgba(20, 33, 28, 0.15);
-  --small-shadow: 0 12px 30px rgba(20, 33, 28, 0.11);
+  --shadow: 0 26px 64px rgba(20, 33, 28, 0.14);
+  --small-shadow: 0 12px 28px rgba(20, 33, 28, 0.1);
+  --control-shadow: 0 10px 24px rgba(20, 33, 28, 0.08);
   font-family:
     "SF Pro Rounded",
     "MiSans",
@@ -48,13 +53,13 @@ body {
   /*noinspection CssUnknownTarget*/
   background:
     linear-gradient(
-      90deg,
-      rgba(235, 244, 237, 0.94) 0%,
-      rgba(235, 244, 237, 0.76) 42%,
-      rgba(248, 238, 224, 0.66) 100%
+      115deg,
+      rgba(236, 244, 239, 0.96) 0%,
+      rgba(224, 239, 237, 0.82) 45%,
+      rgba(250, 239, 225, 0.72) 100%
     ) center top / cover fixed,
     image-set(url("/images/backgrounds/xmsleep_mist.png") 1x) center top / cover fixed,
-    linear-gradient(135deg, #d8e6dd, #f5eadb 56%, #d2e6e9) center top / cover fixed;
+    linear-gradient(135deg, #d6e5dc, #eef1e3 56%, #cfdee4) center top / cover fixed;
 }
 
 body::before {
@@ -62,11 +67,11 @@ body::before {
   inset: 0;
   z-index: -1;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0)),
     repeating-linear-gradient(
       135deg,
-      rgba(36, 75, 59, 0.035) 0 1px,
-      transparent 1px 10px
+      rgba(36, 75, 59, 0.028) 0 1px,
+      transparent 1px 14px
     );
   content: "";
   pointer-events: none;
@@ -98,9 +103,9 @@ textarea:focus-visible {
 h1 {
   margin: 0;
   color: var(--ink);
-  font-size: 3.35rem;
+  font-size: 3.2rem;
   font-weight: 950;
-  line-height: 0.96;
+  line-height: 1;
   letter-spacing: 0;
 }
 
@@ -121,6 +126,6 @@ h3 {
 
 @media (max-width: 680px) {
   h1 {
-    font-size: 2.55rem;
+    font-size: 2.42rem;
   }
 }

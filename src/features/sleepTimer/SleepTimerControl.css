@@ -4,25 +4,28 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  margin: 0 0 14px;
-  padding: 10px 12px;
-  border: 1px solid rgba(63, 111, 90, 0.13);
+  gap: 14px;
+  margin: 0 0 16px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.58);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.58);
-  box-shadow: 0 10px 28px rgba(20, 33, 28, 0.09);
-  backdrop-filter: blur(18px) saturate(1.12);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.76), rgba(232, 243, 237, 0.5)),
+    rgba(255, 255, 255, 0.6);
+  box-shadow: var(--control-shadow);
+  backdrop-filter: blur(20px) saturate(1.12);
 }
 
 .sleep-timer-summary {
   display: grid;
   min-width: 0;
-  gap: 3px;
+  gap: 4px;
+  padding-left: 3px;
 }
 
 .sleep-timer-summary strong {
   color: var(--primary-strong);
-  font-size: 0.95rem;
+  font-size: 1rem;
   font-weight: 950;
 }
 
@@ -35,10 +38,10 @@
 .sleep-timer-actions {
   display: grid;
   grid-template-columns:
-    minmax(220px, 1fr) minmax(112px, auto) minmax(76px, auto)
-    minmax(76px, auto);
+    minmax(224px, 1fr) minmax(108px, auto) minmax(78px, auto)
+    minmax(78px, auto);
   align-items: end;
-  gap: 8px;
+  gap: 9px;
 }
 
 .sleep-timer-field-label,
@@ -61,11 +64,14 @@
   width: 100%;
   min-height: 38px;
   padding: 7px 9px;
-  border: 1px solid rgba(63, 111, 90, 0.16);
+  border: 1px solid rgba(63, 111, 90, 0.18);
   border-radius: 8px;
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.72);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(242, 248, 245, 0.78)),
+    rgba(255, 255, 255, 0.72);
   font-weight: 850;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
 .sleep-timer-button {
@@ -76,17 +82,29 @@
   border-radius: 8px;
   font-size: 0.82rem;
   font-weight: 950;
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.sleep-timer-button:hover:not(:disabled) {
+  transform: translateY(-1px);
 }
 
 .sleep-timer-start-button {
   color: white;
-  background: linear-gradient(135deg, var(--primary-strong), var(--teal));
-  box-shadow: 0 9px 18px rgba(36, 75, 59, 0.16);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0)),
+    linear-gradient(135deg, var(--primary-strong), var(--teal));
+  box-shadow: 0 10px 20px rgba(36, 75, 59, 0.18);
 }
 
 .sleep-timer-cancel-button {
   color: #7f302b;
-  background: rgba(255, 242, 238, 0.72);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.66), rgba(255, 239, 234, 0.68)),
+    rgba(255, 242, 238, 0.72);
 }
 
 .sleep-timer-cancel-button:disabled {

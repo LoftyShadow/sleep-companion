@@ -2,7 +2,7 @@
   width: min(1280px, 100%);
   min-height: 100vh;
   margin: 0 auto;
-  padding: 20px;
+  padding: 22px;
 }
 
 .has-desktop-title-bar,
@@ -17,8 +17,9 @@
   height: calc(100vh - 44px);
   min-height: 0;
   margin-top: 44px;
-  padding-right: max(20px, calc((100vw - 1280px) / 2 + 20px));
-  padding-left: max(20px, calc((100vw - 1280px) / 2 + 20px));
+  padding-top: 18px;
+  padding-right: max(22px, calc((100vw - 1280px) / 2 + 22px));
+  padding-left: max(22px, calc((100vw - 1280px) / 2 + 22px));
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
@@ -29,8 +30,148 @@
   height: 0;
 }
 
+.workspace-command-center {
+  position: sticky;
+  top: 0;
+  z-index: 25;
+  display: grid;
+  grid-template-columns: minmax(176px, 220px) minmax(360px, 0.8fr) minmax(0, 1.2fr);
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.has-desktop-title-bar .workspace-command-center {
+  top: 0;
+}
+
+.workspace-brand {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 58px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.78), rgba(232, 243, 237, 0.48)),
+    rgba(255, 255, 255, 0.62);
+  box-shadow: var(--control-shadow);
+  backdrop-filter: blur(20px) saturate(1.12);
+}
+
+.workspace-brand__mark {
+  display: grid;
+  width: 34px;
+  aspect-ratio: 1;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.52);
+  border-radius: 8px;
+  color: white;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0)),
+    linear-gradient(135deg, var(--primary), var(--teal));
+  box-shadow: 0 12px 24px rgba(45, 125, 130, 0.2);
+  font-weight: 950;
+}
+
+.workspace-brand__copy {
+  min-width: 0;
+}
+
+.workspace-brand__copy .app-kicker {
+  margin-bottom: 2px;
+}
+
+.workspace-brand__copy strong {
+  display: block;
+  overflow: hidden;
+  color: var(--primary-strong);
+  font-size: 0.96rem;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-command-center .app-mode-nav,
+.workspace-command-center .sleep-timer-control {
+  width: 100%;
+  min-height: 58px;
+  margin: 0;
+}
+
+.workspace-command-center .app-mode-nav {
+  align-items: center;
+}
+
+.workspace-command-center .app-mode-button {
+  min-height: 46px;
+}
+
+.workspace-command-center .sleep-timer-control {
+  grid-template-columns: minmax(112px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.workspace-command-center .sleep-timer-summary {
+  gap: 1px;
+  padding-left: 0;
+}
+
+.workspace-command-center .sleep-timer-summary .app-kicker {
+  display: none;
+}
+
+.workspace-command-center .sleep-timer-summary strong {
+  font-size: 0.88rem;
+}
+
+.workspace-command-center .sleep-timer-summary span {
+  font-size: 0.76rem;
+}
+
+.workspace-command-center .sleep-timer-actions {
+  grid-template-columns:
+    minmax(128px, 1fr) minmax(72px, 0.38fr) minmax(68px, auto)
+    minmax(68px, auto);
+  align-items: end;
+  min-width: 0;
+  gap: 7px;
+}
+
+.workspace-command-center .sleep-timer-field-label,
+.workspace-command-center .sleep-timer-custom-label {
+  min-width: 0;
+  gap: 2px;
+  font-size: 0.68rem;
+}
+
+.workspace-command-center .inline-picker-button,
+.workspace-command-center .sleep-timer-custom-input,
+.workspace-command-center .sleep-timer-button {
+  min-height: 36px;
+}
+
+.workspace-command-center .inline-picker-button {
+  padding: 5px 9px;
+}
+
+.workspace-command-center .sleep-timer-custom-input {
+  padding: 5px 8px;
+}
+
+.workspace-command-center .sleep-timer-button {
+  padding: 6px 10px;
+}
+
 .app-mode-panel {
   min-width: 0;
+  animation: app-panel-enter 180ms ease-out;
 }
 
 .app-mode-panel[hidden] {
@@ -42,6 +183,12 @@
   min-height: calc(100vh - 96px);
   align-content: center;
   gap: 12px;
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
+  box-shadow: var(--small-shadow);
+  backdrop-filter: blur(18px);
 }
 
 .app-scroll-indicator {
@@ -82,14 +229,39 @@
   transform: translateY(var(--scroll-thumb-offset));
 }
 
+@keyframes app-panel-enter {
+  from {
+    opacity: 0.82;
+    transform: translateY(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (max-width: 980px) {
   .app-shell {
-    padding: 14px;
+    padding: 16px;
+  }
+
+  .workspace-command-center {
+    position: static;
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-command-center .sleep-timer-control {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-command-center .sleep-timer-actions {
+    grid-template-columns: 1fr 1fr;
   }
 
   .has-desktop-title-bar .app-shell {
-    padding-right: 14px;
-    padding-left: 14px;
+    padding-right: 16px;
+    padding-left: 16px;
   }
 }
 
