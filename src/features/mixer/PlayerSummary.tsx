@@ -19,13 +19,7 @@ export function PlayerSummary({
 }: PlayerSummaryProps) {
   return (
     <aside className="player-card glass-panel" aria-label="播放控制">
-      <div className="player-orbit" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-      </div>
-      <div>
-        <p className="player-label">当前播放</p>
+      <div className="player-copy">
         <p className="player-title">{activeSummary}</p>
       </div>
       <div className="player-actions">
@@ -46,4 +40,3 @@ export function PlayerSummary({
     </aside>
   );
 }
-

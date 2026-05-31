@@ -265,47 +265,21 @@ export function AudiobookView({
 
       <div className="audiobook-layout">
         <section className="audiobook-stage" aria-label="听书控制">
-          <header className="audiobook-hero glass-panel">
-            <div className="audiobook-header">
-              <p className="app-kicker">{engine.label}</p>
-              <h1>听书</h1>
-              <p className="mix-summary">{book.title}</p>
-            </div>
-
-            <div className="audiobook-flow" aria-label="听书流程">
-              <div className="audiobook-flow-step">
-                <span>01</span>
-                <strong>准备书稿</strong>
-                <p>导入文件或直接编辑文本</p>
-              </div>
-              <div className="audiobook-flow-step">
-                <span>02</span>
-                <strong>选择朗读</strong>
-                <p>确认音色与语速</p>
-              </div>
-              <div className="audiobook-flow-step">
-                <span>03</span>
-                <strong>跟随片段</strong>
-                <p>按章节和段落继续收听</p>
-              </div>
-            </div>
-
-            <div className="audiobook-hero-metrics" aria-label="听书概览">
-              <span>{audiobook.segments.length} 个片段</span>
-              <span>{audiobook.chapters.length || 1} 个章节</span>
-              <span>{audiobook.progressPercent}% 进度</span>
-            </div>
-          </header>
-
           <aside className="audiobook-now glass-panel" aria-label="当前朗读">
-            <div className="section-heading sound-section-heading">
-              <div>
-                <p className="app-kicker">主操作</p>
+            <h1 className="audiobook-mode-title">听书</h1>
+            <div className="audiobook-now-header">
+              <div className="audiobook-now-titlebar">
                 <h2>朗读面板</h2>
+                <span className="section-meta">
+                  {audiobook.status === "playing" ? "朗读中" : "待命"}
+                </span>
               </div>
-              <span className="section-meta">
-                {audiobook.status === "playing" ? "朗读中" : "待命"}
-              </span>
+
+              <div className="audiobook-metrics" aria-label="听书概览">
+                <span>{audiobook.segments.length} 个片段</span>
+                <span>{audiobook.chapters.length || 1} 个章节</span>
+                <span>{audiobook.progressPercent}% 进度</span>
+              </div>
             </div>
 
             <AudiobookStatusPanel
@@ -337,7 +311,6 @@ export function AudiobookView({
           <aside className="audiobook-setup glass-panel" aria-label="听书设置">
             <div className="section-heading sound-section-heading">
               <div>
-                <p className="app-kicker">书稿与声音</p>
                 <h2>朗读准备</h2>
               </div>
               <span className="section-meta">

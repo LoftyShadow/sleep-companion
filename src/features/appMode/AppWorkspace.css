@@ -55,10 +55,10 @@
   top: 0;
   z-index: 25;
   display: grid;
-  grid-template-columns: minmax(176px, 220px) minmax(360px, 1fr);
+  grid-template-columns: minmax(168px, 208px) minmax(360px, 1fr);
   align-items: center;
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .has-desktop-title-bar .workspace-command-center {
@@ -67,12 +67,12 @@
 
 .workspace-brand {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-columns: 30px minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   min-width: 0;
-  min-height: 58px;
-  padding: 8px 10px;
+  min-height: 50px;
+  padding: 7px 9px;
   border: 1px solid rgba(255, 255, 255, 0.58);
   border-radius: 8px;
   background:
@@ -84,7 +84,7 @@
 
 .workspace-brand__mark {
   display: grid;
-  width: 34px;
+  width: 30px;
   aspect-ratio: 1;
   place-items: center;
   border: 1px solid rgba(255, 255, 255, 0.52);
@@ -109,7 +109,7 @@
   display: block;
   overflow: hidden;
   color: var(--primary-strong);
-  font-size: 0.96rem;
+  font-size: 0.9rem;
   font-weight: 950;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -117,7 +117,7 @@
 
 .workspace-command-center .app-mode-nav {
   width: 100%;
-  min-height: 58px;
+  min-height: 50px;
   margin: 0;
 }
 
@@ -126,7 +126,7 @@
 }
 
 .workspace-command-center .app-mode-button {
-  min-height: 46px;
+  min-height: 38px;
 }
 
 .app-mode-panel {
@@ -152,6 +152,9 @@
 }
 
 .app-scroll-indicator {
+  --scroll-thumb-height: 0px;
+  --scroll-thumb-offset: 0px;
+
   display: none;
 }
 
@@ -175,7 +178,7 @@
 
 .app-scroll-indicator__thumb {
   width: 6px;
-  height: var(--scroll-thumb-height);
+  height: var(--scroll-thumb-height, 0px);
   margin: 0 auto;
   border-radius: 999px;
   background: linear-gradient(
@@ -186,7 +189,7 @@
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.34),
     0 10px 24px rgba(20, 33, 28, 0.16);
-  transform: translateY(var(--scroll-thumb-offset));
+  transform: translateY(var(--scroll-thumb-offset, 0px));
 }
 
 @keyframes app-panel-enter {

@@ -1,25 +1,25 @@
 .app-layout {
   display: grid;
-  gap: 18px;
+  gap: 14px;
 }
 
 .mixer-stage {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+  grid-template-columns: minmax(260px, 0.44fr) minmax(360px, 0.56fr);
   align-items: stretch;
-  gap: 18px;
+  gap: 12px;
 }
 
-.mixer-stage .app-header,
+.mixer-stage .mixer-mode-panel,
 .mixer-stage .player-card {
-  min-height: 292px;
+  min-height: 72px;
 }
 
 .mixer-content {
   display: grid;
   grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
   align-items: start;
-  gap: 18px;
+  gap: 14px;
 }
 
 .right-column {

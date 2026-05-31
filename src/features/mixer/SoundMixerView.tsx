@@ -180,12 +180,7 @@ export function SoundMixerView({
         <section className="mixer-stage" aria-label="混音总览">
           <MixerHeader
             activeSoundMode={activeSoundMode}
-            activeSummary={activeSummary}
-            isAnySoundPlaying={isAnySoundPlaying}
             modeConfig={modeConfig}
-            playingSoundCount={playingSoundIds.size}
-            presetCount={presetCount}
-            visibleSoundCount={visibleSounds.length}
             onSoundModeChange={setActiveSoundMode}
           />
 

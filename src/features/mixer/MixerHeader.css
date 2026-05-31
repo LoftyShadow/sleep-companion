@@ -1,54 +1,30 @@
-.app-header {
+.mixer-mode-panel {
   position: relative;
   display: grid;
-  min-height: 292px;
-  align-content: stretch;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 18px;
+  min-height: 72px;
+  align-items: center;
   overflow: hidden;
-  padding: 24px;
+  padding: 10px;
   background:
-    linear-gradient(120deg, rgba(255, 255, 255, 0.9), rgba(236, 247, 241, 0.62) 52%, rgba(250, 241, 229, 0.44)),
-    var(--surface);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(232, 243, 237, 0.54)),
+    rgba(255, 255, 255, 0.72);
 }
 
-.app-header::before {
+.mixer-mode-title {
   position: absolute;
-  inset: 20px auto 20px 0;
-  width: 3px;
-  border-radius: 0 999px 999px 0;
-  background: linear-gradient(180deg, var(--teal), var(--copper), var(--plum));
-  content: "";
-}
-
-.app-header::after {
-  position: absolute;
-  right: -52px;
-  bottom: -76px;
-  width: 260px;
-  height: 260px;
-  border: 1px solid rgba(63, 111, 90, 0.14);
-  border-radius: 999px;
-  background:
-    radial-gradient(circle at 42% 36%, rgba(255, 255, 255, 0.72), transparent 34%),
-    linear-gradient(135deg, rgba(219, 236, 225, 0.74), rgba(250, 241, 229, 0.18)),
-    rgba(63, 111, 90, 0.08);
-  content: "";
-}
-
-.brand-block {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  min-width: 0;
-  gap: 15px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .mode-switch {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
-  width: min(100%, 360px);
+  width: 100%;
   padding: 5px;
   border: 1px solid rgba(255, 255, 255, 0.58);
   border-radius: 8px;
@@ -59,14 +35,14 @@
 }
 
 .mode-switch-button {
-  min-height: 36px;
+  min-height: 42px;
   min-width: 0;
-  padding: 7px 10px;
+  padding: 8px 10px;
   border: 0;
   border-radius: 6px;
   color: var(--muted-strong);
   background: transparent;
-  font-size: 0.82rem;
+  font-size: 0.86rem;
   font-weight: 950;
   transition:
     background 160ms ease,
@@ -87,80 +63,13 @@
   background: rgba(255, 255, 255, 0.46);
 }
 
-.mixer-flow {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.mixer-flow-step {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-  padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.58);
-  border-radius: 8px;
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.62), rgba(241, 248, 244, 0.36)),
-    rgba(255, 255, 255, 0.38);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.52);
-}
-
-.mixer-flow-step span {
-  display: inline-grid;
-  width: 32px;
-  min-height: 24px;
-  place-items: center;
-  border-radius: 999px;
-  color: var(--teal);
-  background: rgba(45, 125, 130, 0.1);
-  font-size: 0.72rem;
-  font-weight: 950;
-}
-
-.mixer-flow-step strong {
-  color: var(--primary-strong);
-  font-size: 0.95rem;
-  font-weight: 950;
-}
-
-.mixer-flow-step p {
-  margin: 0;
-  color: var(--muted-strong);
-  font-size: 0.76rem;
-  font-weight: 780;
-  line-height: 1.45;
-}
-
-.mixer-status-strip {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-self: end;
-}
-
-.mixer-status-strip span {
-  min-height: 30px;
-  padding: 6px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.58);
-  border-radius: 999px;
-  color: var(--primary-strong);
-  background: rgba(255, 255, 255, 0.56);
-  font-size: 0.74rem;
-  font-weight: 950;
-}
-
 @media (max-width: 680px) {
-  .app-header {
-    min-height: 252px;
-    padding: 16px;
+  .mixer-mode-panel {
+    min-height: 62px;
+    padding: 8px;
   }
 
-  .mixer-flow {
-    grid-template-columns: 1fr;
+  .mode-switch-button {
+    min-height: 38px;
   }
 }
