@@ -3,11 +3,13 @@ import { InlinePicker } from "../shared/InlinePicker";
 import "./SleepTimerControl.css";
 
 export type SleepTimerStatus = "idle" | "running" | "completed";
+type SleepTimerControlVariant = "default" | "compact";
 
 interface SleepTimerControlProps {
   durationMinutes: number;
   remainingSeconds: number;
   status: SleepTimerStatus;
+  variant?: SleepTimerControlVariant;
   onCancel: () => void;
   onDurationChange: (durationMinutes: number) => void;
   onStart: () => void;
@@ -49,6 +51,7 @@ export function SleepTimerControl({
   durationMinutes,
   remainingSeconds,
   status,
+  variant = "default",
   onCancel,
   onDurationChange,
   onStart,
@@ -101,8 +104,13 @@ export function SleepTimerControl({
     }
   }
 
+  const rootClassName =
+    variant === "compact"
+      ? "sleep-timer-control sleep-timer-control--compact"
+      : "sleep-timer-control";
+
   return (
-    <section className="sleep-timer-control" aria-label="定时停止">
+    <section className={rootClassName} aria-label="定时停止">
       <div className="sleep-timer-summary">
         <p className="app-kicker">全局控制</p>
         <strong>定时停止</strong>

@@ -151,6 +151,7 @@ export function FloatingPlaybackControl({
               durationMinutes={timer.durationMinutes}
               remainingSeconds={timer.remainingSeconds}
               status={timer.status}
+              variant="compact"
               onCancel={timer.onCancel}
               onDurationChange={timer.onDurationChange}
               onStart={timer.onStart}

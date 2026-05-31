@@ -165,6 +165,27 @@ describe("AppWorkspace", () => {
     expect(handlePause).toHaveBeenCalledTimes(1);
   });
 
+  it("uses the floating global button to start idle modules except unloaded video", async () => {
+    const user = userEvent.setup();
+    const { play, player } = createPlayerPortTestDouble();
+    const { engine, speak } = createTtsEngineTestDouble();
+    render(<AppWorkspace player={player} ttsEngine={engine} />);
+
+    await user.click(screen.getByRole("button", { name: "播放全部" }));
+
+    await waitFor(() => {
+      expect(play).toHaveBeenCalledTimes(3);
+      expect(speak).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: "雨声落在窗外，房间里只剩下很轻的呼吸声。",
+        }),
+      );
+    });
+    expect(
+      screen.queryByTitle("B 站视频播放器 BV BV1xx411c7mD"),
+    ).not.toBeInTheDocument();
+  });
+
   it("collapses the floating panel when clicking outside it", async () => {
     const user = userEvent.setup();
     render(<AppWorkspace player={createPlayerPortTestDouble().player} />);
@@ -177,6 +198,52 @@ describe("AppWorkspace", () => {
 
     await user.click(screen.getByText("Sleep Companion"));
 
+    expect(
+      screen.queryByRole("region", { name: "模块播放控制" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("collapses the floating timer panel when clicking outside it", async () => {
+    const user = userEvent.setup();
+    render(<AppWorkspace player={createPlayerPortTestDouble().player} />);
+
+    await user.click(screen.getByRole("button", { name: "展开定时停止设置" }));
+
+    expect(
+      screen.getByRole("region", { name: "定时停止设置" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByText("Sleep Companion"));
+
+    expect(
+      screen.queryByRole("region", { name: "定时停止设置" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("switches between floating timer and module panels", async () => {
+    const user = userEvent.setup();
+    render(<AppWorkspace player={createPlayerPortTestDouble().player} />);
+
+    await user.click(screen.getByRole("button", { name: "展开定时停止设置" }));
+
+    expect(
+      screen.getByRole("region", { name: "定时停止设置" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "展开模块播放控制" }));
+
+    expect(
+      screen.getByRole("region", { name: "模块播放控制" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "定时停止设置" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "展开定时停止设置" }));
+
+    expect(
+      screen.getByRole("region", { name: "定时停止设置" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("region", { name: "模块播放控制" }),
     ).not.toBeInTheDocument();
