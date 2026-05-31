@@ -1,6 +1,7 @@
 .app-shell {
   width: min(1280px, 100%);
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0 auto;
   padding: 22px;
 }
@@ -9,7 +10,26 @@
 .has-desktop-title-bar body,
 .has-desktop-title-bar #root {
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
+}
+
+.has-mobile-safe-area,
+.has-mobile-safe-area body,
+.has-mobile-safe-area #root {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.has-mobile-safe-area .app-shell {
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding:
+    max(36px, calc(env(safe-area-inset-top) + 12px))
+    max(12px, calc(env(safe-area-inset-right) + 10px))
+    max(104px, calc(env(safe-area-inset-bottom) + 94px))
+    max(12px, calc(env(safe-area-inset-left) + 10px));
 }
 
 .has-desktop-title-bar .app-shell {
@@ -268,6 +288,14 @@
 @media (max-width: 680px) {
   .app-shell {
     padding: 12px 10px max(18px, env(safe-area-inset-bottom));
+  }
+
+  .has-mobile-safe-area .app-shell {
+    padding:
+      max(36px, calc(env(safe-area-inset-top) + 12px))
+      max(12px, calc(env(safe-area-inset-right) + 10px))
+      max(104px, calc(env(safe-area-inset-bottom) + 94px))
+      max(12px, calc(env(safe-area-inset-left) + 10px));
   }
 
   .has-desktop-title-bar .app-shell {

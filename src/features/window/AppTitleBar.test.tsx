@@ -39,6 +39,7 @@ describe("AppTitleBar", () => {
   afterEach(() => {
     setTauriRuntime(false);
     document.documentElement.classList.remove("has-desktop-title-bar");
+    document.documentElement.classList.remove("has-mobile-safe-area");
     osPlatform.value = "windows";
     vi.clearAllMocks();
   });
@@ -52,6 +53,7 @@ describe("AppTitleBar", () => {
       expect(screen.queryByLabelText("桌面窗口栏")).not.toBeInTheDocument();
     });
     expect(document.documentElement).not.toHaveClass("has-desktop-title-bar");
+    expect(document.documentElement).not.toHaveClass("has-mobile-safe-area");
   });
 
   it("renders desktop controls in Tauri desktop runtime", async () => {
@@ -66,6 +68,7 @@ describe("AppTitleBar", () => {
     expect(screen.getByRole("button", { name: "最大化窗口" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "关闭窗口" })).toBeInTheDocument();
     expect(document.documentElement).toHaveClass("has-desktop-title-bar");
+    expect(document.documentElement).not.toHaveClass("has-mobile-safe-area");
   });
 
   it("does not render desktop controls on mobile Tauri runtime", async () => {
@@ -77,6 +80,10 @@ describe("AppTitleBar", () => {
     await waitFor(() => {
       expect(screen.queryByLabelText("桌面窗口栏")).not.toBeInTheDocument();
     });
+    await waitFor(() => {
+      expect(document.documentElement).toHaveClass("has-mobile-safe-area");
+    });
+    expect(document.documentElement).not.toHaveClass("has-desktop-title-bar");
   });
 
   it("maps title bar buttons to window commands", async () => {

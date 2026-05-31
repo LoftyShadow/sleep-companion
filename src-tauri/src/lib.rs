@@ -1,3 +1,4 @@
+mod android_tts;
 mod native_audio;
 mod native_tts;
 
@@ -5,6 +6,7 @@ mod native_tts;
 pub fn run() {
     tauri::Builder::default()
         .plugin(native_audio::init())
+        .plugin(android_tts::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![

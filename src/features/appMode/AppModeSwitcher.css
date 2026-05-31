@@ -47,3 +47,28 @@
     width: 100%;
   }
 }
+
+.has-mobile-safe-area .app-mode-nav {
+  position: fixed;
+  right: max(12px, calc(env(safe-area-inset-right) + 10px));
+  bottom: max(10px, calc(env(safe-area-inset-bottom) + 8px));
+  left: max(12px, calc(env(safe-area-inset-left) + 10px));
+  z-index: 70;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: auto;
+  margin: 0;
+  padding: 6px;
+  border-color: rgba(255, 255, 255, 0.72);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.86), rgba(232, 243, 237, 0.64)),
+    rgba(255, 255, 255, 0.72);
+  box-shadow:
+    0 18px 44px rgba(20, 33, 28, 0.18),
+    0 0 0 1px rgba(38, 72, 61, 0.08);
+}
+
+.has-mobile-safe-area .app-mode-button {
+  min-height: 52px;
+  padding: 8px 10px;
+  font-size: 0.9rem;
+}

@@ -12,6 +12,8 @@
     "core:window:allow-start-dragging",
     "core:window:allow-toggle-maximize",
     "opener:default",
-    "os:default"
+    "os:default",
+    "native-audio:default",
+    "native-tts:default"
   ]
 }

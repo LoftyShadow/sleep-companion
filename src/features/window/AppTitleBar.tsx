@@ -3,6 +3,7 @@ import type { MouseEvent } from "react";
 import "./AppTitleBar.css";
 
 type DesktopPlatform = "linux" | "macos" | "windows";
+type MobilePlatform = "android" | "ios";
 
 interface WindowControls {
   close: () => Promise<void>;
@@ -13,51 +14,68 @@ interface WindowControls {
 }
 
 interface DesktopRuntime {
+  kind: "desktop";
   controls: WindowControls;
 }
 
+interface MobileRuntime {
+  kind: "mobile";
+}
+
+type WindowRuntime = DesktopRuntime | MobileRuntime;
+
 function isDesktopPlatform(platform: string): platform is DesktopPlatform {
   return platform === "linux" || platform === "macos" || platform === "windows";
+}
+
+function isMobilePlatform(platform: string): platform is MobilePlatform {
+  return platform === "android" || platform === "ios";
 }
 
 function runWindowCommand(command: () => Promise<void>) {
   void command().catch(() => undefined);
 }
 
-async function loadDesktopRuntime(): Promise<DesktopRuntime | null> {
+async function loadWindowRuntime(): Promise<WindowRuntime | null> {
   if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
     return null;
   }
 
-  const [{ platform }, { getCurrentWindow }] = await Promise.all([
-    import("@tauri-apps/plugin-os"),
-    import("@tauri-apps/api/window"),
-  ]);
+  const { platform } = await import("@tauri-apps/plugin-os");
   const currentPlatform = platform();
 
   if (!isDesktopPlatform(currentPlatform)) {
+    if (isMobilePlatform(currentPlatform)) {
+      return {
+        kind: "mobile",
+      };
+    }
+
     return null;
   }
 
+  const { getCurrentWindow } = await import("@tauri-apps/api/window");
+
   return {
+    kind: "desktop",
     controls: getCurrentWindow(),
   };
 }
 
 export function AppTitleBar() {
-  const [runtime, setRuntime] = useState<DesktopRuntime | null>(null);
+  const [runtime, setRuntime] = useState<WindowRuntime | null>(null);
   const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
 
-    loadDesktopRuntime()
+    loadWindowRuntime()
       .then(async (nextRuntime) => {
         if (!isMounted) {
           return;
         }
         setRuntime(nextRuntime);
-        if (nextRuntime) {
+        if (nextRuntime?.kind === "desktop") {
           setIsMaximized(await nextRuntime.controls.isMaximized());
         }
       })
@@ -75,11 +93,16 @@ export function AppTitleBar() {
   useEffect(() => {
     document.documentElement.classList.toggle(
       "has-desktop-title-bar",
-      runtime !== null,
+      runtime?.kind === "desktop",
+    );
+    document.documentElement.classList.toggle(
+      "has-mobile-safe-area",
+      runtime?.kind === "mobile",
     );
 
     return () => {
       document.documentElement.classList.remove("has-desktop-title-bar");
+      document.documentElement.classList.remove("has-mobile-safe-area");
     };
   }, [runtime]);
 
@@ -89,7 +112,7 @@ export function AppTitleBar() {
         return;
       }
 
-      if (runtime) {
+      if (runtime?.kind === "desktop") {
         runWindowCommand(() => runtime.controls.startDragging());
       }
     },
@@ -97,13 +120,13 @@ export function AppTitleBar() {
   );
 
   const handleMinimize = useCallback(() => {
-    if (runtime) {
+    if (runtime?.kind === "desktop") {
       runWindowCommand(() => runtime.controls.minimize());
     }
   }, [runtime]);
 
   const handleToggleMaximize = useCallback(() => {
-    if (!runtime) {
+    if (runtime?.kind !== "desktop") {
       return;
     }
 
@@ -114,12 +137,12 @@ export function AppTitleBar() {
   }, [runtime]);
 
   const handleClose = useCallback(() => {
-    if (runtime) {
+    if (runtime?.kind === "desktop") {
       runWindowCommand(() => runtime.controls.close());
     }
   }, [runtime]);
 
-  if (!runtime) {
+  if (runtime?.kind !== "desktop") {
     return null;
   }
 
