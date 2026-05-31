@@ -87,14 +87,18 @@
   width: 30px;
   aspect-ratio: 1;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.52);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.64);
   border-radius: 8px;
-  color: white;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0)),
-    linear-gradient(135deg, var(--primary), var(--teal));
-  box-shadow: 0 12px 24px rgba(45, 125, 130, 0.2);
-  font-weight: 950;
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: 0 12px 24px rgba(45, 125, 130, 0.16);
+}
+
+.workspace-brand__logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .workspace-brand__copy {

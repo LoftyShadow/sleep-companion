@@ -196,7 +196,7 @@ describe("AppWorkspace", () => {
       screen.getByRole("region", { name: "模块播放控制" }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByText("Sleep Companion"));
+    await user.click(screen.getByText("梦伴"));
 
     expect(
       screen.queryByRole("region", { name: "模块播放控制" }),
@@ -213,7 +213,7 @@ describe("AppWorkspace", () => {
       screen.getByRole("region", { name: "定时停止设置" }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByText("Sleep Companion"));
+    await user.click(screen.getByText("梦伴"));
 
     expect(
       screen.queryByRole("region", { name: "定时停止设置" }),

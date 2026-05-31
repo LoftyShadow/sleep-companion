@@ -155,8 +155,15 @@ export function AppTitleBar() {
       aria-label="桌面窗口栏"
     >
       <div className="app-title-bar__brand" aria-hidden="true">
-        <span className="app-title-bar__mark">S</span>
-        <span className="app-title-bar__name">Sleep Companion</span>
+        <span className="app-title-bar__mark">
+          <img
+            className="app-title-bar__logo"
+            src="/images/brand/mengban-logo.png"
+            alt=""
+            draggable={false}
+          />
+        </span>
+        <span className="app-title-bar__name">梦伴</span>
       </div>
 
       <div

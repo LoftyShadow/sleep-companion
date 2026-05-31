@@ -271,10 +271,15 @@ export function AppWorkspace({
         <section className="workspace-command-center" aria-label="工作台控制">
           <div className="workspace-brand">
             <span className="workspace-brand__mark" aria-hidden="true">
-              S
+              <img
+                className="workspace-brand__logo"
+                src="/images/brand/mengban-logo.png"
+                alt=""
+                draggable={false}
+              />
             </span>
             <div className="workspace-brand__copy">
-              <p className="app-kicker">Sleep Companion</p>
+              <p className="app-kicker">梦伴</p>
               <strong>
                 {activeAppMode === "mixer"
                   ? "声音工作台"
