@@ -5,12 +5,19 @@ import { createTtsEngine } from "../audiobook/createTtsEngine";
 import type { TtsEnginePort } from "../audiobook/TtsEnginePort";
 import { SoundMixerView } from "../mixer/SoundMixerView";
 import type { PlayerPort } from "../player/PlayerPort";
+import {
+  DEFAULT_PLAYBACK_CONTROL_STATES,
+  INITIAL_PLAYBACK_CONTROL_REQUEST_IDS,
+  PLAYBACK_MODULE_IDS,
+  type PlaybackControlState,
+  type PlaybackModuleId,
+} from "../playbackControl/playbackControlTypes";
 import { useRuntimePlayer } from "../player/useRuntimePlayer";
 import { useGlobalSleepTimer } from "../sleepTimer/useGlobalSleepTimer";
-import { SleepTimerControl } from "../sleepTimer/SleepTimerControl";
 import { VideoListeningView } from "../videoListening/VideoListeningView";
 import { AppModeSwitcher } from "./AppModeSwitcher";
 import type { AppMode } from "./appModeTypes";
+import { FloatingPlaybackControl } from "./FloatingPlaybackControl";
 import "./AppWorkspace.css";
 
 interface AppWorkspaceProps {
@@ -53,15 +60,34 @@ function getScrollIndicatorState(shell: HTMLElement): ScrollIndicatorState {
   };
 }
 
+function hasSamePlaybackControlState(
+  currentState: PlaybackControlState,
+  nextState: PlaybackControlState,
+): boolean {
+  return (
+    currentState.actionLabel === nextState.actionLabel &&
+    currentState.canToggle === nextState.canToggle &&
+    currentState.status === nextState.status &&
+    currentState.summary === nextState.summary
+  );
+}
+
 export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
   const shellRef = useRef<HTMLElement>(null);
   const scrollHideTimerRef = useRef<number | null>(null);
+  const playbackCommandIdRef = useRef(0);
   const [scrollIndicator, setScrollIndicator] = useState<ScrollIndicatorState>(
     hiddenScrollIndicator,
   );
   const [activeAppMode, setActiveAppMode] = useState<AppMode>("mixer");
   const [hasOpenedAudiobook, setHasOpenedAudiobook] = useState(false);
   const [hasOpenedVideo, setHasOpenedVideo] = useState(false);
+  const [playbackControlStates, setPlaybackControlStates] = useState(
+    DEFAULT_PLAYBACK_CONTROL_STATES,
+  );
+  const [playbackControlRequestIds, setPlaybackControlRequestIds] = useState(
+    INITIAL_PLAYBACK_CONTROL_REQUEST_IDS,
+  );
   const activePlayer = useRuntimePlayer(player);
   const sleepTimer = useGlobalSleepTimer();
   const audiobookEngine = useMemo(
@@ -69,6 +95,15 @@ export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
     [ttsEngine],
   );
   const handleAppModeChange = useCallback((mode: AppMode) => {
+    const shell = shellRef.current;
+    if (shell) {
+      shell.scrollTop = 0;
+    }
+    if (scrollHideTimerRef.current !== null) {
+      window.clearTimeout(scrollHideTimerRef.current);
+      scrollHideTimerRef.current = null;
+    }
+    setScrollIndicator(hiddenScrollIndicator);
     setActiveAppMode(mode);
     if (mode === "audiobook") {
       setHasOpenedAudiobook(true);
@@ -77,6 +112,103 @@ export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
       setHasOpenedVideo(true);
     }
   }, []);
+  const updatePlaybackControlState = useCallback(
+    (moduleId: PlaybackModuleId, nextState: PlaybackControlState) => {
+      setPlaybackControlStates((currentStates) => {
+        if (hasSamePlaybackControlState(currentStates[moduleId], nextState)) {
+          return currentStates;
+        }
+
+        return {
+          ...currentStates,
+          [moduleId]: nextState,
+        };
+      });
+    },
+    [],
+  );
+  const handleMixerPlaybackControlStateChange = useCallback(
+    (nextState: PlaybackControlState) => {
+      updatePlaybackControlState("mixer", nextState);
+    },
+    [updatePlaybackControlState],
+  );
+  const handleAudiobookPlaybackControlStateChange = useCallback(
+    (nextState: PlaybackControlState) => {
+      updatePlaybackControlState("audiobook", nextState);
+    },
+    [updatePlaybackControlState],
+  );
+  const handleVideoPlaybackControlStateChange = useCallback(
+    (nextState: PlaybackControlState) => {
+      updatePlaybackControlState("video", nextState);
+    },
+    [updatePlaybackControlState],
+  );
+  const issuePlaybackControlRequests = useCallback(
+    (moduleIds: PlaybackModuleId[]) => {
+      if (moduleIds.length === 0) {
+        return;
+      }
+
+      if (moduleIds.includes("audiobook")) {
+        setHasOpenedAudiobook(true);
+      }
+      if (moduleIds.includes("video")) {
+        setHasOpenedVideo(true);
+      }
+
+      setPlaybackControlRequestIds((currentRequestIds) => {
+        const nextRequestIds = { ...currentRequestIds };
+        for (const moduleId of moduleIds) {
+          playbackCommandIdRef.current += 1;
+          nextRequestIds[moduleId] = playbackCommandIdRef.current;
+        }
+
+        return nextRequestIds;
+      });
+    },
+    [],
+  );
+  const requestModulePlaybackToggle = useCallback(
+    (moduleId: PlaybackModuleId) => {
+      if (
+        moduleId === "video" &&
+        playbackControlStates.video.status === "unavailable"
+      ) {
+        handleAppModeChange("video");
+        return;
+      }
+
+      issuePlaybackControlRequests([moduleId]);
+    },
+    [
+      handleAppModeChange,
+      issuePlaybackControlRequests,
+      playbackControlStates.video.status,
+    ],
+  );
+  const requestGlobalPlaybackToggle = useCallback(() => {
+    const hasActivePlayback = PLAYBACK_MODULE_IDS.some(
+      (moduleId) => playbackControlStates[moduleId].status === "playing",
+    );
+    const targetModuleIds = PLAYBACK_MODULE_IDS.filter((moduleId) => {
+      const control = playbackControlStates[moduleId];
+      if (!control.canToggle) {
+        return false;
+      }
+      if (moduleId === "video" && control.status === "unavailable") {
+        return false;
+      }
+      if (hasActivePlayback) {
+        return control.status === "playing";
+      }
+
+      return control.status === "idle" || control.status === "paused";
+    });
+
+    issuePlaybackControlRequests(targetModuleIds);
+  }, [issuePlaybackControlRequests, playbackControlStates]);
 
   useEffect(() => {
     return () => {
@@ -135,15 +267,6 @@ export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
             activeMode={activeAppMode}
             onModeChange={handleAppModeChange}
           />
-
-          <SleepTimerControl
-            durationMinutes={sleepTimer.durationMinutes}
-            remainingSeconds={sleepTimer.remainingSeconds}
-            status={sleepTimer.status}
-            onCancel={sleepTimer.cancel}
-            onDurationChange={sleepTimer.setDurationMinutes}
-            onStart={sleepTimer.start}
-          />
         </section>
 
         <section
@@ -154,7 +277,11 @@ export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
           {activePlayer ? (
             <SoundMixerView
               globalStopRequestId={sleepTimer.globalStopRequestId}
+              playbackControlRequestId={playbackControlRequestIds.mixer}
               player={activePlayer}
+              onPlaybackControlStateChange={
+                handleMixerPlaybackControlStateChange
+              }
             />
           ) : (
             <div className="app-player-loading">
@@ -174,6 +301,10 @@ export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
             <AudiobookView
               engine={audiobookEngine}
               globalStopRequestId={sleepTimer.globalStopRequestId}
+              playbackControlRequestId={playbackControlRequestIds.audiobook}
+              onPlaybackControlStateChange={
+                handleAudiobookPlaybackControlStateChange
+              }
             />
           ) : null}
         </section>
@@ -186,6 +317,10 @@ export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
           {hasOpenedVideo ? (
             <VideoListeningView
               globalStopRequestId={sleepTimer.globalStopRequestId}
+              playbackControlRequestId={playbackControlRequestIds.video}
+              onPlaybackControlStateChange={
+                handleVideoPlaybackControlStateChange
+              }
             />
           ) : null}
         </section>
@@ -202,6 +337,20 @@ export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
       >
         <div className="app-scroll-indicator__thumb" />
       </div>
+
+      <FloatingPlaybackControl
+        controls={playbackControlStates}
+        timer={{
+          durationMinutes: sleepTimer.durationMinutes,
+          remainingSeconds: sleepTimer.remainingSeconds,
+          status: sleepTimer.status,
+          onCancel: sleepTimer.cancel,
+          onDurationChange: sleepTimer.setDurationMinutes,
+          onStart: sleepTimer.start,
+        }}
+        onGlobalToggle={requestGlobalPlaybackToggle}
+        onModuleToggle={requestModulePlaybackToggle}
+      />
     </>
   );
 }

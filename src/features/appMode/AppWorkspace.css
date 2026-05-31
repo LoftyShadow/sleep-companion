@@ -55,7 +55,7 @@
   top: 0;
   z-index: 25;
   display: grid;
-  grid-template-columns: minmax(176px, 220px) minmax(360px, 0.8fr) minmax(0, 1.2fr);
+  grid-template-columns: minmax(176px, 220px) minmax(360px, 1fr);
   align-items: center;
   gap: 10px;
   margin-bottom: 14px;
@@ -115,8 +115,7 @@
   white-space: nowrap;
 }
 
-.workspace-command-center .app-mode-nav,
-.workspace-command-center .sleep-timer-control {
+.workspace-command-center .app-mode-nav {
   width: 100%;
   min-height: 58px;
   margin: 0;
@@ -128,65 +127,6 @@
 
 .workspace-command-center .app-mode-button {
   min-height: 46px;
-}
-
-.workspace-command-center .sleep-timer-control {
-  grid-template-columns: minmax(112px, auto) minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  padding: 8px 10px;
-}
-
-.workspace-command-center .sleep-timer-summary {
-  gap: 1px;
-  padding-left: 0;
-}
-
-.workspace-command-center .sleep-timer-summary .app-kicker {
-  display: none;
-}
-
-.workspace-command-center .sleep-timer-summary strong {
-  font-size: 0.88rem;
-}
-
-.workspace-command-center .sleep-timer-summary span {
-  font-size: 0.76rem;
-}
-
-.workspace-command-center .sleep-timer-actions {
-  grid-template-columns:
-    minmax(128px, 1fr) minmax(72px, 0.38fr) minmax(68px, auto)
-    minmax(68px, auto);
-  align-items: end;
-  min-width: 0;
-  gap: 7px;
-}
-
-.workspace-command-center .sleep-timer-field-label,
-.workspace-command-center .sleep-timer-custom-label {
-  min-width: 0;
-  gap: 2px;
-  font-size: 0.68rem;
-}
-
-.workspace-command-center .inline-picker-button,
-.workspace-command-center .sleep-timer-custom-input,
-.workspace-command-center .sleep-timer-button {
-  min-height: 36px;
-}
-
-.workspace-command-center .inline-picker-button {
-  padding: 5px 9px;
-}
-
-.workspace-command-center .sleep-timer-custom-input {
-  padding: 5px 8px;
-}
-
-.workspace-command-center .sleep-timer-button {
-  padding: 6px 10px;
 }
 
 .app-mode-panel {
@@ -269,14 +209,6 @@
   .workspace-command-center {
     position: static;
     grid-template-columns: 1fr;
-  }
-
-  .workspace-command-center .sleep-timer-control {
-    grid-template-columns: 1fr;
-  }
-
-  .workspace-command-center .sleep-timer-actions {
-    grid-template-columns: 1fr 1fr;
   }
 
   .has-desktop-title-bar .app-shell {

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCustomSounds } from "../customSounds/useCustomSounds";
 import type { PlayerPort } from "../player/PlayerPort";
 import { useSoundMixer } from "../player/useSoundMixer";
+import type { PlaybackControlState } from "../playbackControl/playbackControlTypes";
 import {
   ASMR_SOUNDS,
   BUILT_IN_SOUNDS,
@@ -28,12 +29,16 @@ import "./SoundMixerView.css";
 
 interface SoundMixerViewProps {
   globalStopRequestId: number;
+  playbackControlRequestId?: number;
   player: PlayerPort;
+  onPlaybackControlStateChange?: (state: PlaybackControlState) => void;
 }
 
 export function SoundMixerView({
   globalStopRequestId,
+  playbackControlRequestId = 0,
   player,
+  onPlaybackControlStateChange,
 }: SoundMixerViewProps) {
   const [activeSoundMode, setActiveSoundMode] =
     useState<SoundLibraryMode>("sleep");
@@ -95,17 +100,9 @@ export function SoundMixerView({
     : modeConfig.transportLabel;
   const visibleErrorMessage = errorMessage ?? customSoundErrorMessage;
   const handledGlobalStopRequestIdRef = useRef(globalStopRequestId);
+  const handledPlaybackControlRequestIdRef = useRef(0);
 
-  useEffect(() => {
-    if (globalStopRequestId === handledGlobalStopRequestIdRef.current) {
-      return;
-    }
-
-    handledGlobalStopRequestIdRef.current = globalStopRequestId;
-    void stopAll();
-  }, [globalStopRequestId, stopAll]);
-
-  async function handleUnifiedPlayback() {
+  const handleUnifiedPlayback = useCallback(async () => {
     if (isAnySoundPlaying) {
       await stopAll();
       return;
@@ -117,7 +114,47 @@ export function SoundMixerView({
     }
 
     await toggleUnifiedPlayback();
-  }
+  }, [
+    activeSoundMode,
+    applyPreset,
+    isAnySoundPlaying,
+    stopAll,
+    toggleUnifiedPlayback,
+  ]);
+
+  useEffect(() => {
+    if (globalStopRequestId === handledGlobalStopRequestIdRef.current) {
+      return;
+    }
+
+    handledGlobalStopRequestIdRef.current = globalStopRequestId;
+    void stopAll();
+  }, [globalStopRequestId, stopAll]);
+
+  useEffect(() => {
+    onPlaybackControlStateChange?.({
+      actionLabel: isAnySoundPlaying ? "暂停" : "播放",
+      canToggle: true,
+      status: isAnySoundPlaying ? "playing" : "idle",
+      summary: activeSummary,
+    });
+  }, [
+    activeSummary,
+    isAnySoundPlaying,
+    onPlaybackControlStateChange,
+  ]);
+
+  useEffect(() => {
+    if (
+      playbackControlRequestId === 0 ||
+      playbackControlRequestId === handledPlaybackControlRequestIdRef.current
+    ) {
+      return;
+    }
+
+    handledPlaybackControlRequestIdRef.current = playbackControlRequestId;
+    void handleUnifiedPlayback();
+  }, [handleUnifiedPlayback, playbackControlRequestId]);
 
   async function handleRemoveCustomSound(soundId: SoundId) {
     if (!isCustomSoundId(soundId)) {

@@ -1,9 +1,13 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
   BilibiliSourceKind,
   createBilibiliPlaybackSource,
   type BilibiliPlaybackSource,
 } from "./bilibiliVideo";
+import type {
+  PlaybackControlState,
+  PlaybackControlStatus,
+} from "../playbackControl/playbackControlTypes";
 import "./VideoListeningView.css";
 
 const DEFAULT_VIDEO_INPUT = "";
@@ -11,10 +15,36 @@ const DEFAULT_LISTENING_VOLUME = 70;
 
 interface VideoListeningViewProps {
   globalStopRequestId: number;
+  playbackControlRequestId?: number;
+  onPlaybackControlStateChange?: (state: PlaybackControlState) => void;
+}
+
+function getVideoPlaybackControlStatus(
+  videoSource: BilibiliPlaybackSource | null,
+  isPlaybackMounted: boolean,
+): PlaybackControlStatus {
+  if (!videoSource) {
+    return "unavailable";
+  }
+
+  return isPlaybackMounted ? "playing" : "paused";
+}
+
+function getVideoPlaybackControlActionLabel(
+  videoSource: BilibiliPlaybackSource | null,
+  isPlaybackMounted: boolean,
+): string {
+  if (!videoSource) {
+    return "打开";
+  }
+
+  return isPlaybackMounted ? "暂停" : "播放";
 }
 
 export function VideoListeningView({
   globalStopRequestId,
+  playbackControlRequestId = 0,
+  onPlaybackControlStateChange,
 }: VideoListeningViewProps) {
   const inputId = useId();
   const [videoInput, setVideoInput] = useState(DEFAULT_VIDEO_INPUT);
@@ -29,10 +59,15 @@ export function VideoListeningView({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const handledGlobalStopRequestIdRef = useRef(globalStopRequestId);
+  const handledPlaybackControlRequestIdRef = useRef(0);
   const canControlOfficialPlayer =
     videoSource?.sourceKind === BilibiliSourceKind.Live;
+  const playbackControlStatus = getVideoPlaybackControlStatus(
+    videoSource,
+    isPlaybackMounted,
+  );
 
-  function postLivePlayerCommand(type: string, value: unknown) {
+  const postLivePlayerCommand = useCallback((type: string, value: unknown) => {
     if (!canControlOfficialPlayer || !iframeRef.current?.contentWindow) {
       return;
     }
@@ -41,7 +76,21 @@ export function VideoListeningView({
       `setPlayer-${JSON.stringify({ type, value })}`,
       "https://www.bilibili.com",
     );
-  }
+  }, [canControlOfficialPlayer]);
+
+  const handleTogglePlayback = useCallback(() => {
+    if (!videoSource) {
+      setErrorMessage("请先载入 B 站视频或直播链接");
+      return;
+    }
+
+    setIsPlaybackMounted((currentValue) => {
+      const nextValue = !currentValue;
+      postLivePlayerCommand("play", nextValue);
+      return nextValue;
+    });
+    setErrorMessage(null);
+  }, [postLivePlayerCommand, videoSource]);
 
   useEffect(() => {
     if (globalStopRequestId === handledGlobalStopRequestIdRef.current) {
@@ -53,6 +102,35 @@ export function VideoListeningView({
     setIsPlaybackMounted(false);
     setIsPlayerExpanded(false);
   }, [globalStopRequestId]);
+
+  useEffect(() => {
+    onPlaybackControlStateChange?.({
+      actionLabel: getVideoPlaybackControlActionLabel(
+        videoSource,
+        isPlaybackMounted,
+      ),
+      canToggle: true,
+      status: playbackControlStatus,
+      summary: videoSource?.label ?? "未载入来源",
+    });
+  }, [
+    isPlaybackMounted,
+    onPlaybackControlStateChange,
+    playbackControlStatus,
+    videoSource,
+  ]);
+
+  useEffect(() => {
+    if (
+      playbackControlRequestId === 0 ||
+      playbackControlRequestId === handledPlaybackControlRequestIdRef.current
+    ) {
+      return;
+    }
+
+    handledPlaybackControlRequestIdRef.current = playbackControlRequestId;
+    handleTogglePlayback();
+  }, [handleTogglePlayback, playbackControlRequestId]);
 
   function handleLoadVideo() {
     const trimmedInput = videoInput.trim();
@@ -76,20 +154,6 @@ export function VideoListeningView({
     setVideoSource(nextVideoSource);
     setIsPlaybackMounted(true);
     setIsPlayerExpanded(false);
-    setErrorMessage(null);
-  }
-
-  function handleTogglePlayback() {
-    if (!videoSource) {
-      setErrorMessage("请先载入 B 站视频或直播链接");
-      return;
-    }
-
-    setIsPlaybackMounted((currentValue) => {
-      const nextValue = !currentValue;
-      postLivePlayerCommand("play", nextValue);
-      return nextValue;
-    });
     setErrorMessage(null);
   }
 
