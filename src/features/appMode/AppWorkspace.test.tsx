@@ -14,6 +14,9 @@ import {
 } from "../../test/audioTestDoubles";
 import { AppWorkspace } from "./AppWorkspace";
 
+const TEST_AUDIOBOOK_TEXT = "用户自己的第一段。\n\n用户自己的第二段。";
+const FIRST_TEST_AUDIOBOOK_SEGMENT = "用户自己的第一段。";
+
 describe("AppWorkspace", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -31,6 +34,7 @@ describe("AppWorkspace", () => {
     expect(stopAll).not.toHaveBeenCalled();
     expect(await screen.findByText("系统女声 · zh-CN")).toBeInTheDocument();
 
+    await user.type(screen.getByLabelText("书稿文本"), TEST_AUDIOBOOK_TEXT);
     await user.click(screen.getByRole("button", { name: "播放" }));
 
     expect(play).toHaveBeenCalledWith(
@@ -39,7 +43,7 @@ describe("AppWorkspace", () => {
     );
     expect(speak).toHaveBeenCalledWith(
       expect.objectContaining({
-        text: "雨声落在窗外，房间里只剩下很轻的呼吸声。",
+        text: FIRST_TEST_AUDIOBOOK_SEGMENT,
         voiceId: "voice:default",
       }),
     );
@@ -99,12 +103,15 @@ describe("AppWorkspace", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "展开模块播放控制" }));
-    await user.click(screen.getByRole("button", { name: "播放听书模块" }));
+    await user.click(screen.getByRole("button", { name: "打开听书模块" }));
+    await user.type(screen.getByLabelText("书稿文本"), TEST_AUDIOBOOK_TEXT);
+    await user.click(screen.getByRole("button", { name: "展开模块播放控制" }));
+    await user.click(await screen.findByRole("button", { name: "播放听书模块" }));
 
     await waitFor(() => {
       expect(speak).toHaveBeenCalledWith(
         expect.objectContaining({
-          text: "雨声落在窗外，房间里只剩下很轻的呼吸声。",
+          text: FIRST_TEST_AUDIOBOOK_SEGMENT,
         }),
       );
     });
@@ -158,6 +165,7 @@ describe("AppWorkspace", () => {
 
     await user.click(screen.getByRole("button", { name: "大雨" }));
     await user.click(screen.getByRole("button", { name: "听书" }));
+    await user.type(screen.getByLabelText("书稿文本"), TEST_AUDIOBOOK_TEXT);
     await user.click(screen.getByRole("button", { name: "播放" }));
     await user.click(screen.getByRole("button", { name: "暂停全部" }));
 
@@ -175,12 +183,8 @@ describe("AppWorkspace", () => {
 
     await waitFor(() => {
       expect(play).toHaveBeenCalledTimes(3);
-      expect(speak).toHaveBeenCalledWith(
-        expect.objectContaining({
-          text: "雨声落在窗外，房间里只剩下很轻的呼吸声。",
-        }),
-      );
     });
+    expect(speak).not.toHaveBeenCalled();
     expect(
       screen.queryByTitle("B 站视频播放器 BV BV1xx411c7mD"),
     ).not.toBeInTheDocument();
@@ -291,6 +295,7 @@ describe("AppWorkspace", () => {
 
     await user.click(screen.getByRole("button", { name: "大雨" }));
     await user.click(screen.getByRole("button", { name: "听书" }));
+    await user.type(screen.getByLabelText("书稿文本"), TEST_AUDIOBOOK_TEXT);
     await user.click(screen.getByRole("button", { name: "播放" }));
     await user.click(screen.getByRole("button", { name: "听视频" }));
     await user.type(screen.getByLabelText("视频或直播链接"), "BV1xx411c7mD");
@@ -302,7 +307,7 @@ describe("AppWorkspace", () => {
     );
     expect(speak).toHaveBeenCalledWith(
       expect.objectContaining({
-        text: "雨声落在窗外，房间里只剩下很轻的呼吸声。",
+        text: FIRST_TEST_AUDIOBOOK_SEGMENT,
       }),
     );
     expect(

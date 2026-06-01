@@ -8,6 +8,7 @@ import {
   type PlaybackControlStatus,
   type PlaybackModuleId,
 } from "../playbackControl/playbackControlTypes";
+import { PlaybackGlyph } from "../shared/PlaybackGlyph";
 import "./FloatingPlaybackControl.css";
 
 type FloatingPanel = "modules" | "timer" | null;
@@ -33,6 +34,51 @@ const STATUS_LABELS: Record<PlaybackControlStatus, string> = {
   playing: "播放中",
   unavailable: "未就绪",
 };
+
+const MODULES_ICON = (
+  <svg
+    className="floating-playback-tool__icon"
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+  >
+    <path d="M6 7h12" />
+    <path d="M6 12h12" />
+    <path d="M6 17h12" />
+  </svg>
+);
+
+const TIMER_ICON = (
+  <svg
+    className="floating-playback-tool__icon"
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+  >
+    <circle cx="12" cy="12" r="7" />
+    <path d="M12 8v4l3 2" />
+  </svg>
+);
+
+const COLLAPSE_ICON = (
+  <svg
+    className="floating-playback-tool__icon"
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+  >
+    <path d="m7 9 5 5 5-5" />
+  </svg>
+);
+
+const RESTORE_ICON = (
+  <svg
+    className="floating-playback-restore__icon"
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+  >
+    <circle cx="12" cy="5.5" r="1.7" />
+    <circle cx="12" cy="12" r="1.7" />
+    <circle cx="12" cy="18.5" r="1.7" />
+  </svg>
+);
 
 function getModuleClassName(status: PlaybackControlStatus): string {
   return `floating-playback-module is-${status}`;
@@ -119,7 +165,10 @@ export function FloatingPlaybackControl({
             type="button"
             onClick={onGlobalToggle}
           >
-            <span className="floating-playback-global__glyph" aria-hidden="true" />
+            <PlaybackGlyph
+              isPlaying={hasActivePlayback}
+              className="floating-playback-global__glyph"
+            />
           </button>
 
           <button
@@ -130,7 +179,7 @@ export function FloatingPlaybackControl({
               setIsDockCollapsed(false);
             }}
           >
-            <span className="floating-playback-restore__glyph" aria-hidden="true" />
+            {RESTORE_ICON}
           </button>
         </div>
       ) : null}
@@ -174,9 +223,9 @@ export function FloatingPlaybackControl({
                           onModuleToggle(moduleId);
                         }}
                       >
-                        <span
+                        <PlaybackGlyph
+                          isPlaying={control.status === "playing"}
                           className="floating-playback-action__glyph"
-                          aria-hidden="true"
                         />
                         <span>{control.actionLabel}</span>
                       </button>
@@ -212,60 +261,64 @@ export function FloatingPlaybackControl({
             type="button"
             onClick={onGlobalToggle}
           >
-            <span className="floating-playback-global__glyph" aria-hidden="true" />
+            <PlaybackGlyph
+              isPlaying={hasActivePlayback}
+              className="floating-playback-global__glyph"
+            />
             <span>{globalActionLabel}</span>
             <strong>{playingCount}</strong>
           </button>
 
-          <button
-            aria-expanded={openPanel === "modules"}
-            aria-label="展开模块播放控制"
-            className={
-              openPanel === "modules"
-                ? "floating-playback-tool is-active"
-                : "floating-playback-tool"
-            }
-            type="button"
-            onClick={() => {
-              setOpenPanel((currentPanel) =>
-                currentPanel === "modules" ? null : "modules",
-              );
-            }}
+          <div
+            className="floating-playback-tool-group"
+            role="group"
+            aria-label="播放工具"
           >
-            <span className="floating-playback-tool__list" aria-hidden="true" />
-            <span>列表</span>
-          </button>
+            <button
+              aria-expanded={openPanel === "modules"}
+              aria-label="展开模块播放控制"
+              className={
+                openPanel === "modules"
+                  ? "floating-playback-tool is-active"
+                  : "floating-playback-tool"
+              }
+              type="button"
+              onClick={() => {
+                setOpenPanel((currentPanel) =>
+                  currentPanel === "modules" ? null : "modules",
+                );
+              }}
+            >
+              {MODULES_ICON}
+            </button>
 
-          <button
-            aria-expanded={openPanel === "timer"}
-            aria-label="展开定时停止设置"
-            className={
-              openPanel === "timer"
-                ? "floating-playback-tool is-active"
-                : "floating-playback-tool"
-            }
-            type="button"
-            onClick={() => {
-              setOpenPanel((currentPanel) =>
-                currentPanel === "timer" ? null : "timer",
-              );
-            }}
-          >
-            <span className="floating-playback-tool__timer" aria-hidden="true" />
-            <span>定时</span>
-          </button>
+            <button
+              aria-expanded={openPanel === "timer"}
+              aria-label="展开定时停止设置"
+              className={
+                openPanel === "timer"
+                  ? "floating-playback-tool is-active"
+                  : "floating-playback-tool"
+              }
+              type="button"
+              onClick={() => {
+                setOpenPanel((currentPanel) =>
+                  currentPanel === "timer" ? null : "timer",
+                );
+              }}
+            >
+              {TIMER_ICON}
+            </button>
 
-          <button
-            aria-label="收回悬浮播放控制"
-            className="floating-playback-collapse"
-            type="button"
-            onClick={handleCollapseDock}
-          >
-            <span
-              className="floating-playback-collapse__glyph"
-              aria-hidden="true"
-            />
-          </button>
+            <button
+              aria-label="收回悬浮播放控制"
+              className="floating-playback-tool"
+              type="button"
+              onClick={handleCollapseDock}
+            >
+              {COLLAPSE_ICON}
+            </button>
+          </div>
         </div>
       ) : null}
     </aside>

@@ -13,6 +13,7 @@ import type {
   PlaybackControlState,
   PlaybackControlStatus,
 } from "../playbackControl/playbackControlTypes";
+import { PlaybackGlyph } from "../shared/PlaybackGlyph";
 import "./VideoListeningView.css";
 
 const DEFAULT_VIDEO_INPUT = "";
@@ -379,7 +380,7 @@ export function VideoListeningView({
                 disabled={!videoSource}
                 onClick={handleTogglePlayback}
               >
-                <span className="transport-glyph" aria-hidden="true" />
+                <PlaybackGlyph isPlaying={videoSource ? isPlaybackMounted : false} />
                 <span>{isPlaybackMounted ? "暂停" : "播放"}</span>
               </button>
               <label className="video-volume-control">
