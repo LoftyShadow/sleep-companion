@@ -78,7 +78,7 @@ describe("plain text book file helpers", () => {
   });
 
   it("uses the file name as the default book title", () => {
-    expect(getPlainTextBookTitle("雨夜试读.markdown")).toBe("雨夜试读");
+    expect(getPlainTextBookTitle("我的书稿.markdown")).toBe("我的书稿");
     expect(getPlainTextBookTitle(".txt")).toBe("未命名书稿");
   });
 });

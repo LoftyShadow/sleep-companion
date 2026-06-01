@@ -21,16 +21,10 @@ import type {
 } from "../playbackControl/playbackControlTypes";
 import "./AudiobookView.css";
 
-const DEFAULT_AUDIOBOOK_TITLE = "雨夜试读";
-const DEFAULT_AUDIOBOOK_TEXT = `雨声落在窗外，房间里只剩下很轻的呼吸声。
-
-她把书翻到折角的那一页，灯光停在纸面上，像一小片安静的湖。
-
-如果今晚睡不着，就让声音慢慢读下去。读到句子变远，读到世界安静下来。`;
 const DEFAULT_AUDIOBOOK_BOOK: PlainTextBook = {
   kind: "plain-text",
-  text: DEFAULT_AUDIOBOOK_TEXT,
-  title: DEFAULT_AUDIOBOOK_TITLE,
+  text: "",
+  title: "",
 };
 
 interface AudiobookViewProps {
@@ -91,15 +85,17 @@ function getAudiobookPlaybackControlSummary({
   status: AudiobookPlaybackStatus;
   title: string;
 }): string {
+  const readableTitle = title.trim() || "文本书稿";
+
   if (!canRead) {
     return isEngineSupported ? "没有可朗读文本" : "当前环境不支持系统 TTS";
   }
 
   if (status === "playing" || status === "paused" || status === "loading") {
-    return `${title} · ${currentSegmentIndex + 1} / ${segmentCount}`;
+    return `${readableTitle} · ${currentSegmentIndex + 1} / ${segmentCount}`;
   }
 
-  return title;
+  return readableTitle;
 }
 
 export function AudiobookView({

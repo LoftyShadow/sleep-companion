@@ -195,6 +195,14 @@ export function AppWorkspace({
   const requestModulePlaybackToggle = useCallback(
     (moduleId: PlaybackModuleId) => {
       if (
+        moduleId === "audiobook" &&
+        playbackControlStates.audiobook.status === "unavailable"
+      ) {
+        handleAppModeChange("audiobook");
+        return;
+      }
+
+      if (
         moduleId === "video" &&
         playbackControlStates.video.status === "unavailable"
       ) {
@@ -207,6 +215,7 @@ export function AppWorkspace({
     [
       handleAppModeChange,
       issuePlaybackControlRequests,
+      playbackControlStates.audiobook.status,
       playbackControlStates.video.status,
     ],
   );

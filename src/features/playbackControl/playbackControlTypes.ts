@@ -40,10 +40,10 @@ export const DEFAULT_PLAYBACK_CONTROL_STATES: Record<
   PlaybackControlState
 > = {
   audiobook: {
-    actionLabel: "播放",
+    actionLabel: "打开",
     canToggle: true,
-    status: "idle",
-    summary: "默认书稿待播放",
+    status: "unavailable",
+    summary: "未导入书稿",
   },
   mixer: {
     actionLabel: "准备中",
