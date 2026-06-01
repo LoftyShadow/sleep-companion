@@ -1,5 +1,8 @@
 use argon2::{
-    password_hash::{PasswordHash, PasswordVerifier},
+    password_hash::{
+        rand_core::OsRng as PasswordHashOsRng, PasswordHash, PasswordHasher, PasswordVerifier,
+        SaltString,
+    },
     Argon2,
 };
 use axum::{
@@ -10,8 +13,11 @@ use axum::{
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
-use rand::{rngs::OsRng, RngCore};
-use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use rand::{rngs::OsRng as TokenOsRng, RngCore};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DbErr, EntityTrait,
+    QueryFilter, Set, SqlErr, TransactionTrait,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -36,6 +42,14 @@ const REFRESH_TOKEN_BYTES: usize = 32;
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RegisterRequest {
+    pub email: String,
+    pub password: String,
+    pub display_name: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -71,22 +85,36 @@ struct LoginRateLimitKey {
 }
 
 #[derive(Debug, thiserror::Error)]
-enum LoginError {
+enum AuthError {
     #[error("登录凭证无效")]
     InvalidCredentials,
+    #[error("注册请求无效")]
+    InvalidRegisterRequest,
+    #[error("邮箱已注册")]
+    EmailAlreadyRegistered,
     #[error("登录尝试过多")]
     RateLimited,
     #[error("数据库访问失败")]
-    Database(#[from] sea_orm::DbErr),
+    Database(#[from] DbErr),
+    #[error("密码哈希失败")]
+    PasswordHash,
     #[error("签发 token 失败")]
     TokenIssue(#[from] jsonwebtoken::errors::Error),
 }
 
-impl LoginError {
+impl AuthError {
     fn into_api_error(self, request_id: &str) -> ApiError {
         match self {
             Self::InvalidCredentials => {
                 ApiError::unauthorized("auth.invalid_credentials", "邮箱或密码错误", request_id)
+            }
+            Self::InvalidRegisterRequest => ApiError::bad_request(
+                "auth.invalid_register_request",
+                "邮箱或密码不符合要求",
+                request_id,
+            ),
+            Self::EmailAlreadyRegistered => {
+                ApiError::conflict("auth.email_already_registered", "该邮箱已注册", request_id)
             }
             Self::RateLimited => ApiError::too_many_requests(
                 "auth.rate_limited",
@@ -98,6 +126,9 @@ impl LoginError {
             }
             Self::TokenIssue(_) => {
                 ApiError::internal("auth.token_issue", "登录服务暂不可用", request_id)
+            }
+            Self::PasswordHash => {
+                ApiError::internal("auth.password_hash_failed", "注册服务暂不可用", request_id)
             }
         }
     }
@@ -146,6 +177,47 @@ pub async fn login(
     Ok(ok_with_request_id(request_id.as_str(), response))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/auth/register",
+    tag = "auth",
+    request_body = RegisterRequest,
+    responses(
+        (status = 200, description = "注册成功", body = ApiResponse<LoginResponse>),
+        (status = 400, description = "请求体格式错误或注册字段无效"),
+        (status = 409, description = "邮箱已注册"),
+        (status = 503, description = "服务暂时不可用")
+    )
+)]
+pub async fn register(
+    State(state): State<AppState>,
+    Extension(request_id): Extension<RequestId>,
+    headers: HeaderMap,
+    payload: Result<Json<RegisterRequest>, JsonRejection>,
+) -> Result<Json<ApiResponse<LoginResponse>>, ApiError> {
+    let Json(request) = payload.map_err(|_| {
+        ApiError::bad_request(
+            "auth.invalid_request",
+            "注册请求格式错误",
+            request_id.as_str(),
+        )
+    })?;
+    let response = match register_with_password(
+        state.db.as_ref(),
+        state.id_generator.as_ref(),
+        &state.auth,
+        &headers,
+        request,
+    )
+    .await
+    {
+        Ok(response) => response,
+        Err(error) => return Err(error.into_api_error(request_id.as_str())),
+    };
+
+    Ok(ok_with_request_id(request_id.as_str(), response))
+}
+
 async fn login_with_password(
     db: &DatabaseConnection,
     id_generator: &dyn IdGenerator,
@@ -153,10 +225,10 @@ async fn login_with_password(
     rate_limit_config: &LoginRateLimitConfig,
     headers: &HeaderMap,
     request: LoginRequest,
-) -> Result<LoginResponse, LoginError> {
+) -> Result<LoginResponse, AuthError> {
     let email = request.email.trim().to_lowercase();
     if email.is_empty() || request.password.len() < auth_config.password_min_length {
-        return Err(LoginError::InvalidCredentials);
+        return Err(AuthError::InvalidCredentials);
     }
 
     let now = Utc::now();
@@ -165,11 +237,7 @@ async fn login_with_password(
         build_login_rate_limit_keys(&email, &client_ip, rate_limit_config, auth_config);
     ensure_not_rate_limited(db, &rate_limit_keys, now).await?;
 
-    let user = app_users::Entity::find()
-        .filter(app_users::Column::Email.eq(email.clone()))
-        .filter(app_users::Column::DeletedAt.is_null())
-        .one(db)
-        .await?;
+    let user = find_active_user_by_email(db, &email).await?;
 
     let credentials = if let Some(user) = &user {
         password_credentials::Entity::find_by_id(user.id)
@@ -182,18 +250,118 @@ async fn login_with_password(
 
     let Some(user) = user else {
         record_failed_login(db, id_generator, &rate_limit_keys, rate_limit_config, now).await?;
-        return Err(LoginError::InvalidCredentials);
+        return Err(AuthError::InvalidCredentials);
     };
     let Some(credentials) = credentials else {
         record_failed_login(db, id_generator, &rate_limit_keys, rate_limit_config, now).await?;
-        return Err(LoginError::InvalidCredentials);
+        return Err(AuthError::InvalidCredentials);
     };
 
     if !verify_password(&request.password, &credentials.password_hash) {
         record_failed_login(db, id_generator, &rate_limit_keys, rate_limit_config, now).await?;
-        return Err(LoginError::InvalidCredentials);
+        return Err(AuthError::InvalidCredentials);
     }
 
+    create_auth_session(db, id_generator, auth_config, headers, user, now).await
+}
+
+async fn register_with_password(
+    db: &DatabaseConnection,
+    id_generator: &dyn IdGenerator,
+    auth_config: &AuthConfig,
+    headers: &HeaderMap,
+    request: RegisterRequest,
+) -> Result<LoginResponse, AuthError> {
+    let email = request.email.trim().to_lowercase();
+    let display_name = request
+        .display_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+
+    if email.is_empty() || request.password.len() < auth_config.password_min_length {
+        return Err(AuthError::InvalidRegisterRequest);
+    }
+
+    let existing_active_user = find_active_user_by_email(db, &email).await?;
+
+    if existing_active_user.is_some() {
+        return Err(AuthError::EmailAlreadyRegistered);
+    }
+
+    let now = Utc::now();
+    let password_hash = hash_password(&request.password).map_err(|_| AuthError::PasswordHash)?;
+    let user_id = id_generator.next_id();
+    let txn = db.begin().await?;
+
+    let user = app_users::ActiveModel {
+        id: Set(user_id),
+        email: Set(email),
+        email_verified_at: Set(None),
+        display_name: Set(display_name),
+        created_at: Set(now),
+        updated_at: Set(now),
+        deleted_at: Set(None),
+        created_by: Set(Some(user_id)),
+        updated_by: Set(Some(user_id)),
+        metadata: Set(json!({})),
+    }
+    .insert(&txn)
+    .await
+    .map_err(map_unique_email_conflict)?;
+
+    password_credentials::ActiveModel {
+        app_user_id: Set(user.id),
+        password_hash: Set(password_hash),
+        password_changed_at: Set(now),
+        created_at: Set(now),
+        updated_at: Set(now),
+        deleted_at: Set(None),
+        created_by: Set(Some(user.id)),
+        updated_by: Set(Some(user.id)),
+        metadata: Set(json!({})),
+    }
+    .insert(&txn)
+    .await?;
+
+    let response = create_auth_session(&txn, id_generator, auth_config, headers, user, now).await?;
+    txn.commit().await?;
+
+    Ok(response)
+}
+
+fn map_unique_email_conflict(error: DbErr) -> AuthError {
+    if matches!(error.sql_err(), Some(SqlErr::UniqueConstraintViolation(_))) {
+        AuthError::EmailAlreadyRegistered
+    } else {
+        AuthError::Database(error)
+    }
+}
+
+async fn find_active_user_by_email(
+    db: &DatabaseConnection,
+    email: &str,
+) -> Result<Option<app_users::Model>, AuthError> {
+    Ok(app_users::Entity::find()
+        .filter(app_users::Column::Email.eq(email))
+        .filter(app_users::Column::DeletedAt.is_null())
+        .one(db)
+        .await?)
+}
+
+async fn create_auth_session<C>(
+    db: &C,
+    id_generator: &dyn IdGenerator,
+    auth_config: &AuthConfig,
+    headers: &HeaderMap,
+    user: app_users::Model,
+    now: DateTime<Utc>,
+) -> Result<LoginResponse, AuthError>
+where
+    C: ConnectionTrait,
+{
+    let client_ip = extract_client_ip(headers);
     let access_token = sign_access_token(auth_config, &user, now)?;
     let refresh_token = create_refresh_token();
     let refresh_token_hash = hash_token(&refresh_token);
@@ -241,6 +409,14 @@ async fn login_with_password(
     })
 }
 
+fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error> {
+    let salt = SaltString::generate(&mut PasswordHashOsRng);
+
+    Ok(Argon2::default()
+        .hash_password(password.as_bytes(), &salt)?
+        .to_string())
+}
+
 fn verify_password(password: &str, password_hash: &str) -> bool {
     let Ok(parsed_hash) = PasswordHash::new(password_hash) else {
         return false;
@@ -276,7 +452,7 @@ fn sign_access_token(
 
 fn create_refresh_token() -> String {
     let mut bytes = [0_u8; REFRESH_TOKEN_BYTES];
-    OsRng.fill_bytes(&mut bytes);
+    TokenOsRng.fill_bytes(&mut bytes);
 
     URL_SAFE_NO_PAD.encode(bytes)
 }
@@ -289,7 +465,7 @@ async fn ensure_not_rate_limited(
     db: &DatabaseConnection,
     keys: &[LoginRateLimitKey],
     now: DateTime<Utc>,
-) -> Result<(), LoginError> {
+) -> Result<(), AuthError> {
     for key in keys {
         let blocked_key = login_rate_limits::Entity::find()
             .filter(login_rate_limits::Column::KeyKind.eq(key.kind))
@@ -300,7 +476,7 @@ async fn ensure_not_rate_limited(
             .await?;
 
         if blocked_key.is_some() {
-            return Err(LoginError::RateLimited);
+            return Err(AuthError::RateLimited);
         }
     }
 
@@ -313,7 +489,7 @@ async fn record_failed_login(
     keys: &[LoginRateLimitKey],
     config: &LoginRateLimitConfig,
     now: DateTime<Utc>,
-) -> Result<(), LoginError> {
+) -> Result<(), AuthError> {
     let window_started_at = current_window_started_at(now, config.window_seconds);
     let blocked_until = now + Duration::seconds(config.block_seconds as i64);
 

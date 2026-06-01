@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   loginWithPassword,
+  registerWithPassword,
   resolveBackendBaseUrl,
   type PasswordLoginResult,
 } from "./authApi";
@@ -103,6 +104,51 @@ describe("authApi", () => {
       requestId: "req_invalid",
       status: 401,
     });
+  });
+
+  it("posts registration fields and returns the authenticated result", async () => {
+    const fetcher = vi.fn(() =>
+      Promise.resolve(
+        createJsonResponse(
+          {
+            code: "ok",
+            data: LOGIN_RESULT,
+            message: "ok",
+            requestId: "req_register",
+          },
+          200,
+        ),
+      ),
+    );
+
+    await expect(
+      registerWithPassword(
+        {
+          displayName: "梦伴用户",
+          email: "user@example.com",
+          password: "secret123",
+        },
+        {
+          baseUrl: "http://backend.test/",
+          fetcher,
+        },
+      ),
+    ).resolves.toEqual(LOGIN_RESULT);
+
+    expect(fetcher).toHaveBeenCalledWith(
+      "http://backend.test/api/auth/register",
+      {
+        body: JSON.stringify({
+          displayName: "梦伴用户",
+          email: "user@example.com",
+          password: "secret123",
+        }),
+        headers: {
+          "content-type": "application/json",
+        },
+        method: "POST",
+      },
+    );
   });
 
   it("converts transport failures into a stable login error", async () => {

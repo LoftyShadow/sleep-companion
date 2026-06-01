@@ -1,7 +1,14 @@
 const DEFAULT_BACKEND_BASE_URL = "http://127.0.0.1:3817";
 const LOGIN_PATH = "/api/auth/login";
+const REGISTER_PATH = "/api/auth/register";
 
 export interface PasswordLoginCredentials {
+  email: string;
+  password: string;
+}
+
+export interface PasswordRegisterCredentials {
+  displayName?: string;
   email: string;
   password: string;
 }
@@ -21,6 +28,10 @@ export interface PasswordLoginResult {
 
 export type PasswordLogin = (
   credentials: PasswordLoginCredentials,
+) => Promise<PasswordLoginResult>;
+
+export type PasswordRegister = (
+  credentials: PasswordRegisterCredentials,
 ) => Promise<PasswordLoginResult>;
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -71,16 +82,40 @@ export async function loginWithPassword(
   credentials: PasswordLoginCredentials,
   options: { baseUrl?: string; fetcher?: Fetcher } = {},
 ): Promise<PasswordLoginResult> {
+  return postPasswordAuth(LOGIN_PATH, credentials, "登录", options);
+}
+
+export async function registerWithPassword(
+  credentials: PasswordRegisterCredentials,
+  options: { baseUrl?: string; fetcher?: Fetcher } = {},
+): Promise<PasswordLoginResult> {
+  return postPasswordAuth(REGISTER_PATH, credentials, "注册", options);
+}
+
+async function postPasswordAuth(
+  path: string,
+  credentials: PasswordLoginCredentials | PasswordRegisterCredentials,
+  actionName: "登录" | "注册",
+  options: { baseUrl?: string; fetcher?: Fetcher } = {},
+): Promise<PasswordLoginResult> {
   const fetcher = options.fetcher ?? fetch;
-  const loginUrl = `${resolveBackendBaseUrl(options.baseUrl)}${LOGIN_PATH}`;
+  const requestUrl = `${resolveBackendBaseUrl(options.baseUrl)}${path}`;
   let response: Response;
+  const body =
+    "displayName" in credentials
+      ? {
+          displayName: credentials.displayName,
+          email: credentials.email,
+          password: credentials.password,
+        }
+      : {
+          email: credentials.email,
+          password: credentials.password,
+        };
 
   try {
-    response = await fetcher(loginUrl, {
-      body: JSON.stringify({
-        email: credentials.email,
-        password: credentials.password,
-      }),
+    response = await fetcher(requestUrl, {
+      body: JSON.stringify(body),
       headers: {
         "content-type": "application/json",
       },
@@ -89,7 +124,7 @@ export async function loginWithPassword(
   } catch {
     throw new AuthApiError({
       code: "auth.network_error",
-      message: "暂时无法连接登录服务",
+      message: `暂时无法连接${actionName}服务`,
     });
   }
 
@@ -98,7 +133,7 @@ export async function loginWithPassword(
   if (!response.ok || envelope.code !== "ok") {
     throw new AuthApiError({
       code: envelope.code || `http.${response.status}`,
-      message: envelope.message || "登录失败",
+      message: envelope.message || `${actionName}失败`,
       requestId: envelope.requestId,
       status: response.status,
     });

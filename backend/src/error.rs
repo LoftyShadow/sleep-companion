@@ -22,6 +22,12 @@ pub enum ApiError {
         request_id: String,
     },
     #[error("{message}")]
+    Conflict {
+        code: &'static str,
+        message: &'static str,
+        request_id: String,
+    },
+    #[error("{message}")]
     TooManyRequests {
         code: &'static str,
         message: &'static str,
@@ -60,6 +66,18 @@ impl ApiError {
         request_id: impl Into<String>,
     ) -> Self {
         Self::Unauthorized {
+            code,
+            message,
+            request_id: request_id.into(),
+        }
+    }
+
+    pub fn conflict(
+        code: &'static str,
+        message: &'static str,
+        request_id: impl Into<String>,
+    ) -> Self {
+        Self::Conflict {
             code,
             message,
             request_id: request_id.into(),
@@ -123,6 +141,11 @@ impl IntoResponse for ApiError {
             } => {
                 error_response_with_request_id(StatusCode::UNAUTHORIZED, code, message, request_id)
             }
+            Self::Conflict {
+                code,
+                message,
+                request_id,
+            } => error_response_with_request_id(StatusCode::CONFLICT, code, message, request_id),
             Self::TooManyRequests {
                 code,
                 message,

@@ -42,6 +42,41 @@
   max-width: 420px;
 }
 
+.account-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  max-width: 240px;
+  padding: 4px;
+  border: 1px solid rgba(63, 111, 90, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.account-mode-button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted-strong);
+  background: transparent;
+  font-size: 0.84rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.account-mode-button-active {
+  color: white;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0)),
+    linear-gradient(135deg, var(--primary), var(--teal));
+  box-shadow: 0 8px 18px rgba(36, 116, 108, 0.18);
+}
+
+.account-mode-button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
 .account-input {
   width: 100%;
   min-height: 44px;

@@ -2,16 +2,20 @@ import { useId, useState, type FormEvent } from "react";
 import {
   AuthApiError,
   loginWithPassword,
+  registerWithPassword,
   type PasswordLogin,
   type PasswordLoginResult,
+  type PasswordRegister,
 } from "./authApi";
 import "./AccountView.css";
 
 interface AccountViewProps {
   login?: PasswordLogin;
+  register?: PasswordRegister;
 }
 
 type LoginStatus = "idle" | "submitting" | "authenticated";
+type AuthMode = "login" | "register";
 
 const PASSWORD_MIN_LENGTH = 6;
 
@@ -27,18 +31,31 @@ function getDisplayName(loginResult: PasswordLoginResult): string {
   return loginResult.user.displayName ?? loginResult.user.email;
 }
 
-export function AccountView({ login = loginWithPassword }: AccountViewProps) {
+export function AccountView({
+  login = loginWithPassword,
+  register = registerWithPassword,
+}: AccountViewProps) {
   const emailInputId = useId();
   const passwordInputId = useId();
+  const displayNameInputId = useId();
   const titleId = useId();
+  const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [loginStatus, setLoginStatus] = useState<LoginStatus>("idle");
   const [loginResult, setLoginResult] = useState<PasswordLoginResult | null>(
     null,
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const isSubmitting = loginStatus === "submitting";
+  const isRegisterMode = authMode === "register";
+  const submitLabel = isRegisterMode ? "注册并登录" : "登录";
+
+  function handleModeChange(nextMode: AuthMode) {
+    setAuthMode(nextMode);
+    setErrorMessage(null);
+  }
 
   async function handleLoginSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -58,10 +75,16 @@ export function AccountView({ login = loginWithPassword }: AccountViewProps) {
     setLoginStatus("submitting");
 
     try {
-      const nextLoginResult = await login({
-        email: trimmedEmail,
-        password,
-      });
+      const nextLoginResult = isRegisterMode
+        ? await register({
+            displayName: displayName.trim() || undefined,
+            email: trimmedEmail,
+            password,
+          })
+        : await login({
+            email: trimmedEmail,
+            password,
+          });
       setLoginResult(nextLoginResult);
       setPassword("");
       setLoginStatus("authenticated");
@@ -94,7 +117,7 @@ export function AccountView({ login = loginWithPassword }: AccountViewProps) {
           <div className="account-heading">
             <p className="app-kicker">我的</p>
             <h1 className="account-title" id={titleId}>
-              登录
+              {isRegisterMode ? "注册" : "登录"}
             </h1>
           </div>
 
@@ -120,6 +143,41 @@ export function AccountView({ login = loginWithPassword }: AccountViewProps) {
                 void handleLoginSubmit(event);
               }}
             >
+              <div className="account-mode-switch" aria-label="账号操作">
+                <button
+                  aria-label="切换到登录"
+                  aria-pressed={!isRegisterMode}
+                  className={
+                    isRegisterMode
+                      ? "account-mode-button"
+                      : "account-mode-button account-mode-button-active"
+                  }
+                  disabled={isSubmitting}
+                  type="button"
+                  onClick={() => {
+                    handleModeChange("login");
+                  }}
+                >
+                  登录
+                </button>
+                <button
+                  aria-label="切换到注册"
+                  aria-pressed={isRegisterMode}
+                  className={
+                    isRegisterMode
+                      ? "account-mode-button account-mode-button-active"
+                      : "account-mode-button"
+                  }
+                  disabled={isSubmitting}
+                  type="button"
+                  onClick={() => {
+                    handleModeChange("register");
+                  }}
+                >
+                  注册
+                </button>
+              </div>
+
               <label className="field-label" htmlFor={emailInputId}>
                 邮箱
               </label>
@@ -137,11 +195,31 @@ export function AccountView({ login = loginWithPassword }: AccountViewProps) {
                 }}
               />
 
+              {isRegisterMode ? (
+                <>
+                  <label className="field-label" htmlFor={displayNameInputId}>
+                    昵称
+                  </label>
+                  <input
+                    autoComplete="name"
+                    className="account-input"
+                    disabled={isSubmitting}
+                    id={displayNameInputId}
+                    maxLength={64}
+                    type="text"
+                    value={displayName}
+                    onChange={(event) => {
+                      setDisplayName(event.currentTarget.value);
+                    }}
+                  />
+                </>
+              ) : null}
+
               <label className="field-label" htmlFor={passwordInputId}>
                 密码
               </label>
               <input
-                autoComplete="current-password"
+                autoComplete={isRegisterMode ? "new-password" : "current-password"}
                 className="account-input"
                 disabled={isSubmitting}
                 id={passwordInputId}
@@ -158,7 +236,7 @@ export function AccountView({ login = loginWithPassword }: AccountViewProps) {
                 disabled={isSubmitting}
                 type="submit"
               >
-                {isSubmitting ? "登录中" : "登录"}
+                {isSubmitting ? `${submitLabel}中` : submitLabel}
               </button>
             </form>
           )}

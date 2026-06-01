@@ -6,6 +6,7 @@ import {
   AuthApiError,
   type PasswordLogin,
   type PasswordLoginResult,
+  type PasswordRegister,
 } from "./authApi";
 
 const LOGIN_RESULT: PasswordLoginResult = {
@@ -91,5 +92,26 @@ describe("AccountView", () => {
 
     expect(screen.getByLabelText("邮箱")).toHaveValue("user@example.com");
     expect(screen.getByLabelText("密码")).toHaveValue("");
+  });
+
+  it("registers a new account and renders the authenticated account", async () => {
+    const user = userEvent.setup();
+    const register: PasswordRegister = vi.fn(() =>
+      Promise.resolve(LOGIN_RESULT),
+    );
+    render(<AccountView register={register} />);
+
+    await user.click(screen.getByRole("button", { name: "切换到注册" }));
+    await user.type(screen.getByLabelText("邮箱"), " new@example.com ");
+    await user.type(screen.getByLabelText("昵称"), " 梦伴用户 ");
+    await user.type(screen.getByLabelText("密码"), "secret123");
+    await user.click(screen.getByRole("button", { name: "注册并登录" }));
+
+    expect(register).toHaveBeenCalledWith({
+      displayName: "梦伴用户",
+      email: "new@example.com",
+      password: "secret123",
+    });
+    expect(await screen.findAllByText("已登录")).toHaveLength(2);
   });
 });
