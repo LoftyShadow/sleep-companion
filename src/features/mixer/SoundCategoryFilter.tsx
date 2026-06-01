@@ -1,5 +1,6 @@
 import type { XmsleepSoundCategory } from "../sounds/xmsleepSoundCatalog";
 import "./SoundCategoryFilter.css";
+import "./SoundCategoryFilter.mobile.css";
 
 interface SoundCategoryFilterProps {
   activeCategoryId: string;

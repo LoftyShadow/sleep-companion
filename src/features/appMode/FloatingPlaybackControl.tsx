@@ -10,6 +10,7 @@ import {
 } from "../playbackControl/playbackControlTypes";
 import { PlaybackGlyph } from "../shared/PlaybackGlyph";
 import "./FloatingPlaybackControl.css";
+import "./FloatingPlaybackControl.mobile.css";
 
 type FloatingPanel = "modules" | "timer" | null;
 
@@ -96,6 +97,14 @@ function getPanelClassName(openPanel: FloatingPanel): string {
     : "floating-playback-panel is-modules";
 }
 
+function shouldStartCollapsedOnMobile(): boolean {
+  if (typeof window === "undefined" || !window.matchMedia) {
+    return false;
+  }
+
+  return window.matchMedia("(max-width: 680px)").matches;
+}
+
 export function FloatingPlaybackControl({
   controls,
   timer,
@@ -103,7 +112,9 @@ export function FloatingPlaybackControl({
   onModuleToggle,
 }: FloatingPlaybackControlProps) {
   const rootRef = useRef<HTMLElement>(null);
-  const [isDockCollapsed, setIsDockCollapsed] = useState(false);
+  const [isDockCollapsed, setIsDockCollapsed] = useState(
+    shouldStartCollapsedOnMobile,
+  );
   const [openPanel, setOpenPanel] = useState<FloatingPanel>(null);
   const playingCount = useMemo(
     () =>

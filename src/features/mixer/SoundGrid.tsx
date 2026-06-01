@@ -5,6 +5,7 @@ import {
 } from "../sounds/soundCatalog";
 import { getSoundVolume, type VolumeState } from "../player/soundMixerState";
 import "./SoundGrid.css";
+import "./SoundGrid.mobile.css";
 
 interface SoundGridProps {
   playingSoundIds: Set<SoundId>;

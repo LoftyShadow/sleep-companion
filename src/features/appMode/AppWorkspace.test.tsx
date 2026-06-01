@@ -335,31 +335,27 @@ describe("AppWorkspace", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("supports custom timer input and preset picker", async () => {
+  it("supports timer presets and custom range in the floating timer panel", async () => {
     const user = userEvent.setup();
     render(<AppWorkspace player={createPlayerPortTestDouble().player} />);
 
     await user.click(screen.getByRole("button", { name: "展开定时停止设置" }));
 
+    const timerPanel = screen.getByRole("region", { name: "定时停止设置" });
     expect(
-      screen.getByRole("button", { name: "选择定时时长，当前 30 分钟" }),
+      within(timerPanel).getByRole("button", { name: "15分钟" }),
     ).toBeInTheDocument();
 
     await user.click(
-      screen.getByRole("button", { name: "选择定时时长，当前 30 分钟" }),
+      within(timerPanel).getByRole("button", { name: "15分钟" }),
     );
+    expect(within(timerPanel).getByLabelText("自定义")).toHaveValue("15");
 
-    const timerPresetList = screen.getByRole("listbox", {
-      name: "定时时长列表",
+    fireEvent.change(within(timerPanel).getByLabelText("自定义"), {
+      target: { value: "7" },
     });
-    expect(timerPresetList).toBeInTheDocument();
-    await user.click(within(timerPresetList).getAllByRole("option")[2]);
-    expect(screen.getByLabelText("自定义")).toHaveValue(15);
-
-    await user.clear(screen.getByLabelText("自定义"));
-    await user.type(screen.getByLabelText("自定义"), "7");
     expect(
-      screen.getByRole("button", { name: "选择定时时长，当前 7 分钟" }),
+      within(timerPanel).getByText("自定义 7 分钟"),
     ).toBeInTheDocument();
   });
 

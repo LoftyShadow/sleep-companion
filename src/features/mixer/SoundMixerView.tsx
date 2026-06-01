@@ -35,6 +35,7 @@ import {
   type SoundLibraryMode,
 } from "./soundLibraryModes";
 import "./SoundMixerView.css";
+import "./SoundMixerView.mobile.css";
 
 interface SoundMixerViewProps {
   globalStopRequestId: number;

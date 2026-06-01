@@ -62,15 +62,3 @@
   color: var(--primary-strong);
   background: rgba(255, 255, 255, 0.46);
 }
-
-@media (max-width: 680px) {
-  .mixer-mode-panel {
-    min-height: 62px;
-    padding: 8px;
-  }
-
-  .mode-switch-button {
-    min-height: 38px;
-    padding-inline: 6px;
-  }
-}

@@ -1,4 +1,5 @@
 import "./CustomAudioPanel.css";
+import "./CustomAudioPanel.mobile.css";
 
 interface CustomAudioPanelProps {
   customSoundCount: number;

@@ -22,6 +22,7 @@ import { AppModeSwitcher } from "./AppModeSwitcher";
 import { APP_MODE_WORKSPACE_LABELS, type AppMode } from "./appModeTypes";
 import { FloatingPlaybackControl } from "./FloatingPlaybackControl";
 import "./AppWorkspace.css";
+import "./AppWorkspace.mobile.css";
 
 interface AppWorkspaceProps {
   authLogin?: PasswordLogin;

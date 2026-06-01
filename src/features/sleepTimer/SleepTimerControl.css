@@ -23,6 +23,12 @@
   padding-left: 3px;
 }
 
+.sleep-timer-summary-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
 .sleep-timer-summary strong {
   color: var(--primary-strong);
   font-size: 1rem;
@@ -127,7 +133,7 @@
 .sleep-timer-control--compact .sleep-timer-summary {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 3px 10px;
+  gap: 10px;
   padding-left: 0;
   padding-bottom: 12px;
   border-bottom: 1px solid rgba(63, 111, 90, 0.12);
@@ -135,7 +141,7 @@
 
 .sleep-timer-control--compact .sleep-timer-summary .app-kicker,
 .sleep-timer-control--compact .sleep-timer-summary strong {
-  grid-column: 1;
+  grid-column: auto;
 }
 
 .sleep-timer-control--compact .sleep-timer-summary .app-kicker {
@@ -148,8 +154,9 @@
 }
 
 .sleep-timer-control--compact .sleep-timer-summary span {
-  grid-row: 1 / span 2;
-  grid-column: 2;
+  grid-row: auto;
+  grid-column: auto;
+  justify-self: end;
   max-width: 138px;
   padding: 7px 10px;
   border: 1px solid rgba(45, 125, 130, 0.14);
@@ -169,7 +176,9 @@
   gap: 9px;
 }
 
-.sleep-timer-control--compact .sleep-timer-picker {
+.sleep-timer-control--compact .sleep-timer-picker,
+.sleep-timer-control--compact .sleep-timer-preset-buttons,
+.sleep-timer-control--compact .sleep-timer-range-label {
   grid-column: 1 / -1;
 }
 
@@ -178,8 +187,59 @@
 }
 
 .sleep-timer-control--compact .sleep-timer-field-label,
-.sleep-timer-control--compact .sleep-timer-custom-label {
+.sleep-timer-control--compact .sleep-timer-custom-label,
+.sleep-timer-control--compact .sleep-timer-range-label {
   font-size: 0.7rem;
+}
+
+.sleep-timer-preset-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.sleep-timer-preset-button {
+  display: grid;
+  min-height: 42px;
+  place-items: center;
+  gap: 1px;
+  padding: 6px;
+  border: 1px solid rgba(63, 111, 90, 0.15);
+  border-radius: 8px;
+  color: var(--primary-strong);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(229, 241, 234, 0.52)),
+    rgba(255, 255, 255, 0.68);
+  font-size: 0.92rem;
+  font-weight: 950;
+  box-shadow: 0 6px 14px rgba(20, 33, 28, 0.06);
+}
+
+.sleep-timer-preset-button span {
+  font-size: 0.62rem;
+  font-weight: 900;
+}
+
+.sleep-timer-preset-button[aria-pressed="true"] {
+  border-color: transparent;
+  color: white;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0)),
+    linear-gradient(135deg, var(--primary-strong), var(--teal));
+  box-shadow: 0 10px 20px rgba(36, 75, 59, 0.18);
+}
+
+.sleep-timer-range-label {
+  display: grid;
+  gap: 8px;
+  color: var(--primary-strong);
+  font-weight: 950;
+}
+
+.sleep-timer-range-input {
+  width: 100%;
+  min-height: 30px;
+  accent-color: var(--primary);
 }
 
 .sleep-timer-control--compact .inline-picker-button {
@@ -225,13 +285,11 @@
 
 @media (max-width: 680px) {
   .sleep-timer-control--compact .sleep-timer-summary {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .sleep-timer-control--compact .sleep-timer-summary span {
-    grid-row: auto;
-    grid-column: 1;
-    justify-self: start;
+    justify-self: end;
     max-width: 100%;
   }
 

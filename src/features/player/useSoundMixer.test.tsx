@@ -182,4 +182,46 @@ describe("useSoundMixer", () => {
     expect(play).toHaveBeenCalledWith(customSound, 0.5);
     expect(result.current.playingSoundIds.has("custom:rain")).toBe(true);
   });
+
+  it("shows a friendly message when the browser cannot play a sound source", async () => {
+    const playerMocks = createPlayer();
+    playerMocks.play.mockRejectedValue(
+      new DOMException(
+        "Failed to load because no supported source was found.",
+        "NotSupportedError",
+      ),
+    );
+    const { result } = renderHook(() =>
+      useSoundMixer({ sounds: BUILT_IN_SOUNDS, player: playerMocks.player }),
+    );
+
+    await act(async () => {
+      await result.current.toggleSound("heavy_rain");
+    });
+
+    expect(result.current.errorMessage).toBe(
+      "当前音频无法播放，请换一个声音试试",
+    );
+    expect(result.current.playingSoundIds.size).toBe(0);
+  });
+
+  it("does not expose raw source errors when preset playback fails", async () => {
+    const playerMocks = createPlayer();
+    playerMocks.play.mockRejectedValue(
+      new Error("Failed to load because no supported source was found."),
+    );
+    const { result } = renderHook(() =>
+      useSoundMixer({ sounds: BUILT_IN_SOUNDS, player: playerMocks.player }),
+    );
+
+    await act(async () => {
+      await result.current.applyPreset(BUILT_IN_PRESETS[0]);
+    });
+
+    expect(result.current.errorMessage).toBe(
+      "当前音频无法播放，请换一个声音试试",
+    );
+    expect(result.current.errorMessage).not.toContain("Failed to load");
+    expect(playerMocks.stopAll).toHaveBeenCalled();
+  });
 });

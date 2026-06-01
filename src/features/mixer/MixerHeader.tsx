@@ -4,6 +4,7 @@ import {
   type SoundLibraryModeConfig,
 } from "./soundLibraryModes";
 import "./MixerHeader.css";
+import "./MixerHeader.mobile.css";
 
 interface MixerHeaderProps {
   activeSoundMode: SoundLibraryMode;

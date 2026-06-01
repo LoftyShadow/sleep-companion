@@ -1,6 +1,7 @@
 import type { SoundPreset, SoundPresetGroup } from "../sounds/soundPresets";
 import type { SoundLibraryModeConfig } from "./soundLibraryModes";
 import "./PresetGroups.css";
+import "./PresetGroups.mobile.css";
 
 interface PresetGroupsProps {
   activePresetId: string | null;
@@ -74,4 +75,3 @@ export function PresetGroups({
     </section>
   );
 }
-
