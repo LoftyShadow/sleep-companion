@@ -17,6 +17,12 @@ interface InlinePickerProps {
   onSelect: (optionId: string) => void;
 }
 
+const CHEVRON_ICON = (
+  <svg className="inline-picker-chevron" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="m7 9 5 5 5-5" />
+  </svg>
+);
+
 export function InlinePicker({
   ariaLabel,
   listAriaLabel,
@@ -81,7 +87,7 @@ export function InlinePicker({
           <span className="inline-picker-title">{selectedTitle}</span>
           <span className="inline-picker-meta">{selectedMeta}</span>
         </span>
-        <span className="inline-picker-chevron" aria-hidden="true" />
+        {CHEVRON_ICON}
       </button>
 
       {isOpen ? (
@@ -126,4 +132,3 @@ export function InlinePicker({
     </div>
   );
 }
-

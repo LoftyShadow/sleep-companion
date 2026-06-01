@@ -1,4 +1,5 @@
 import type { AudiobookPlaybackStatus } from "./audiobookTypes";
+import { PlaybackGlyph } from "../shared/PlaybackGlyph";
 
 interface AudiobookTransportProps {
   canRead: boolean;
@@ -42,7 +43,7 @@ export function AudiobookTransport({
         type="button"
         onClick={onPrimaryAction}
       >
-        <span className="transport-glyph" aria-hidden="true" />
+        <PlaybackGlyph isPlaying={status === "playing"} />
         <span>{primaryActionLabel}</span>
       </button>
       <button
@@ -64,4 +65,3 @@ export function AudiobookTransport({
     </section>
   );
 }
-

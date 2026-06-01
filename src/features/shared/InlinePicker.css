@@ -66,17 +66,21 @@
 }
 
 .inline-picker-chevron {
-  width: 9px;
-  height: 9px;
+  display: block;
+  width: 18px;
+  height: 18px;
   justify-self: center;
-  border-right: 2px solid currentColor;
-  border-bottom: 2px solid currentColor;
+  fill: none;
   opacity: 0.72;
-  transform: translateY(-2px) rotate(45deg);
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.4;
+  transition: transform 160ms ease;
 }
 
 .inline-picker-button[aria-expanded="true"] .inline-picker-chevron {
-  transform: translateY(2px) rotate(225deg);
+  transform: rotate(180deg);
 }
 
 .inline-picker-option-list {

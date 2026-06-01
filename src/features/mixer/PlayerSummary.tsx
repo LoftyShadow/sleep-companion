@@ -1,4 +1,5 @@
 import "./PlayerSummary.css";
+import { PlaybackGlyph } from "../shared/PlaybackGlyph";
 
 interface PlayerSummaryProps {
   activeSummary: string;
@@ -33,7 +34,7 @@ export function PlayerSummary({
           type="button"
           onClick={onUnifiedPlayback}
         >
-          <span className="transport-glyph" aria-hidden="true" />
+          <PlaybackGlyph isPlaying={isAnySoundPlaying} />
           <span>{transportLabel}</span>
         </button>
       </div>

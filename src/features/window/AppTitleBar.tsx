@@ -36,6 +36,32 @@ function runWindowCommand(command: () => Promise<void>) {
   void command().catch(() => undefined);
 }
 
+const MINIMIZE_ICON = (
+  <svg className="app-title-bar__icon" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M7 16h10" />
+  </svg>
+);
+
+const MAXIMIZE_ICON = (
+  <svg className="app-title-bar__icon" viewBox="0 0 24 24" aria-hidden="true">
+    <rect x="7" y="7" width="10" height="10" rx="2" />
+  </svg>
+);
+
+const RESTORE_ICON = (
+  <svg className="app-title-bar__icon" viewBox="0 0 24 24" aria-hidden="true">
+    <rect x="9" y="8" width="8" height="8" rx="1.8" />
+    <path d="M7 12V7h5" />
+  </svg>
+);
+
+const CLOSE_ICON = (
+  <svg className="app-title-bar__icon" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="m8 8 8 8" />
+    <path d="m16 8-8 8" />
+  </svg>
+);
+
 async function loadWindowRuntime(): Promise<WindowRuntime | null> {
   if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) {
     return null;
@@ -178,7 +204,7 @@ export function AppTitleBar() {
           title="最小化"
           onClick={handleMinimize}
         >
-          <span className="app-title-bar__icon app-title-bar__icon--minimize" aria-hidden="true" />
+          {MINIMIZE_ICON}
         </button>
         <button
           className="app-title-bar__control"
@@ -188,14 +214,7 @@ export function AppTitleBar() {
           aria-pressed={isMaximized}
           onClick={handleToggleMaximize}
         >
-          <span
-            className={
-              isMaximized
-                ? "app-title-bar__icon app-title-bar__icon--restore"
-                : "app-title-bar__icon app-title-bar__icon--maximize"
-            }
-            aria-hidden="true"
-          />
+          {isMaximized ? RESTORE_ICON : MAXIMIZE_ICON}
         </button>
         <button
           className="app-title-bar__control app-title-bar__control--close"
@@ -204,7 +223,7 @@ export function AppTitleBar() {
           title="关闭"
           onClick={handleClose}
         >
-          <span className="app-title-bar__icon app-title-bar__icon--close" aria-hidden="true" />
+          {CLOSE_ICON}
         </button>
       </div>
     </header>

@@ -162,7 +162,7 @@
 
 .floating-playback-dock {
   display: grid;
-  grid-template-columns: minmax(132px, auto) 58px 58px 42px;
+  grid-template-columns: minmax(132px, auto) 110px;
   align-items: center;
   gap: 8px;
   max-width: calc(100vw - 28px);
@@ -194,7 +194,7 @@
 
 .floating-playback-global,
 .floating-playback-tool,
-.floating-playback-collapse,
+.floating-playback-tool-group,
 .floating-playback-restore {
   border: 0;
   font-weight: 950;
@@ -205,7 +205,6 @@
 
 .floating-playback-global:hover,
 .floating-playback-tool:hover,
-.floating-playback-collapse:hover,
 .floating-playback-restore:hover {
   transform: translateY(-1px);
 }
@@ -258,19 +257,35 @@
   font-size: 0.74rem;
 }
 
-.floating-playback-tool {
+.floating-playback-tool-group {
   display: grid;
-  width: 48px;
-  min-height: 48px;
-  place-items: center;
+  grid-template-columns: repeat(3, 32px);
+  align-items: center;
   gap: 2px;
+  min-height: 48px;
+  padding: 5px 6px;
   border-radius: 999px;
-  color: var(--primary-strong);
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(229, 241, 234, 0.72)),
     rgba(255, 255, 255, 0.78);
   box-shadow: 0 8px 18px rgba(20, 33, 28, 0.08);
-  font-size: 0.68rem;
+}
+
+.floating-playback-tool {
+  display: grid;
+  width: 32px;
+  min-height: 38px;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--primary-strong);
+  background: transparent;
+}
+
+.floating-playback-tool:focus-visible {
+  outline: 0;
+  box-shadow:
+    inset 0 0 0 2px rgba(45, 125, 130, 0.32),
+    0 0 0 3px rgba(45, 125, 130, 0.12);
 }
 
 .floating-playback-tool.is-active {
@@ -278,46 +293,6 @@
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0)),
     linear-gradient(135deg, var(--primary-strong), var(--teal));
-}
-
-.floating-playback-collapse {
-  display: grid;
-  width: 36px;
-  min-height: 36px;
-  place-items: center;
-  border-radius: 999px;
-  color: var(--primary-strong);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.86), rgba(229, 241, 234, 0.66)),
-    rgba(255, 255, 255, 0.76);
-  box-shadow: 0 8px 18px rgba(20, 33, 28, 0.08);
-}
-
-.floating-playback-collapse__glyph {
-  position: relative;
-  width: 18px;
-  height: 18px;
-}
-
-.floating-playback-collapse__glyph::before,
-.floating-playback-collapse__glyph::after {
-  position: absolute;
-  top: 8px;
-  width: 10px;
-  height: 2px;
-  border-radius: 999px;
-  background: currentColor;
-  content: "";
-}
-
-.floating-playback-collapse__glyph::before {
-  left: 1px;
-  transform: rotate(38deg);
-}
-
-.floating-playback-collapse__glyph::after {
-  right: 1px;
-  transform: rotate(-38deg);
 }
 
 .floating-playback-restore {
@@ -335,25 +310,8 @@
   background: rgba(255, 255, 255, 0.48);
 }
 
-.floating-playback-restore__glyph {
-  position: relative;
-  width: 3px;
-  height: 3px;
-  border-radius: 999px;
-  background: currentColor;
-  box-shadow:
-    0 -7px 0 currentColor,
-    0 7px 0 currentColor;
-}
-
-.floating-playback-restore__glyph::before,
-.floating-playback-restore__glyph::after {
-  content: none;
-}
-
 .floating-playback-action__glyph,
 .floating-playback-global__glyph {
-  position: relative;
   display: inline-grid;
   place-items: center;
   border-radius: 999px;
@@ -376,87 +334,32 @@
   background: rgba(255, 255, 255, 0.22);
 }
 
-.floating-playback-action__glyph::before,
-.floating-playback-global__glyph::before {
-  width: 0;
-  height: 0;
-  border-top: 5px solid transparent;
-  border-bottom: 5px solid transparent;
-  border-left: 8px solid currentColor;
-  content: "";
-  transform: translateX(1px);
+.floating-playback-action__glyph .playback-glyph__icon {
+  width: 14px;
+  height: 14px;
 }
 
-.floating-playback-global__glyph::before {
-  border-top-width: 7px;
-  border-bottom-width: 7px;
-  border-left-width: 11px;
+.floating-playback-global__glyph .playback-glyph__icon {
+  width: 20px;
+  height: 20px;
 }
 
-.floating-playback-action.is-playing .floating-playback-action__glyph::before,
-.floating-playback-global.is-playing .floating-playback-global__glyph::before {
-  width: 10px;
-  height: 10px;
-  border: 0;
-  border-radius: 2px;
-  background: currentColor;
-  transform: none;
+.floating-playback-restore__icon {
+  display: block;
+  width: 17px;
+  height: 17px;
+  fill: currentColor;
 }
 
-.floating-playback-tool__list,
-.floating-playback-tool__timer {
-  position: relative;
-  width: 22px;
-  height: 22px;
-}
-
-.floating-playback-tool__list::before,
-.floating-playback-tool__list::after {
-  position: absolute;
-  right: 2px;
-  left: 2px;
-  height: 2px;
-  border-radius: 999px;
-  background: currentColor;
-  content: "";
-}
-
-.floating-playback-tool__list::before {
-  top: 5px;
-  box-shadow:
-    0 6px 0 currentColor,
-    0 12px 0 currentColor;
-}
-
-.floating-playback-tool__list::after {
-  content: none;
-}
-
-.floating-playback-tool__timer {
-  border: 2px solid currentColor;
-  border-radius: 999px;
-}
-
-.floating-playback-tool__timer::before,
-.floating-playback-tool__timer::after {
-  position: absolute;
-  left: 9px;
-  width: 2px;
-  border-radius: 999px;
-  background: currentColor;
-  content: "";
-  transform-origin: bottom center;
-}
-
-.floating-playback-tool__timer::before {
-  top: 4px;
-  height: 7px;
-}
-
-.floating-playback-tool__timer::after {
-  top: 8px;
-  height: 6px;
-  transform: rotate(48deg);
+.floating-playback-tool__icon {
+  display: block;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.4;
 }
 
 @media (max-width: 680px) {
@@ -472,7 +375,7 @@
   }
 
   .floating-playback-dock {
-    grid-template-columns: minmax(116px, 1fr) 52px 52px 38px;
+    grid-template-columns: minmax(116px, 1fr) 108px;
     gap: 6px;
     padding: 6px;
   }
@@ -493,9 +396,15 @@
     font-size: 0.82rem;
   }
 
-  .floating-playback-tool {
-    width: 46px;
+  .floating-playback-tool-group {
+    grid-template-columns: repeat(3, 31px);
     min-height: 46px;
+    padding: 5px 6px;
+  }
+
+  .floating-playback-tool {
+    width: 31px;
+    min-height: 37px;
   }
 
   .floating-playback-mini-action {
@@ -508,11 +417,6 @@
   .floating-playback-restore {
     width: 30px;
     min-height: 42px;
-  }
-
-  .floating-playback-collapse {
-    width: 34px;
-    min-height: 34px;
   }
 
   .floating-playback-module {
