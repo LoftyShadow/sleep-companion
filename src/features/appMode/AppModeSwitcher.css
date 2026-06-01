@@ -1,6 +1,6 @@
 .app-mode-nav {
   display: inline-grid;
-  grid-template-columns: repeat(3, minmax(92px, 1fr));
+  grid-template-columns: repeat(4, minmax(76px, 1fr));
   gap: 6px;
   margin: 0 0 12px;
   padding: 5px;
@@ -54,7 +54,7 @@
   bottom: max(10px, calc(env(safe-area-inset-bottom) + 8px));
   left: max(12px, calc(env(safe-area-inset-left) + 10px));
   z-index: 70;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   width: auto;
   margin: 0;
   padding: 6px;
@@ -69,6 +69,6 @@
 
 .has-mobile-safe-area .app-mode-button {
   min-height: 52px;
-  padding: 8px 10px;
-  font-size: 0.9rem;
+  padding: 8px 6px;
+  font-size: 0.84rem;
 }

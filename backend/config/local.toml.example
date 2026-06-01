@@ -1,11 +1,14 @@
 # 复制为 local.toml 后填写本机私有配置。local.toml 不应提交。
 
+[app]
+env = "local"
+
 [database]
 host = "localhost"
 port = 5432
 database = "sleep_companion_dev"
 username = "postgres"
-password = "postgres"
+password = "123456"
 ssl_mode = "disable"
 
 # 如果使用云厂商或部署平台直接提供的连接串，也可以只覆盖 url。

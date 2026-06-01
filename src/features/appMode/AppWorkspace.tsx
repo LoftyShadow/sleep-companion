@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
+import { AccountView } from "../account/AccountView";
+import type { PasswordLogin } from "../account/authApi";
 import { AudiobookView } from "../audiobook/AudiobookView";
 import { createTtsEngine } from "../audiobook/createTtsEngine";
 import type { TtsEnginePort } from "../audiobook/TtsEnginePort";
@@ -17,11 +19,12 @@ import { useGlobalSleepTimer } from "../sleepTimer/useGlobalSleepTimer";
 import { VideoListeningView } from "../videoListening/VideoListeningView";
 import type { BilibiliMetadataLoader } from "../videoListening/bilibiliMetadata";
 import { AppModeSwitcher } from "./AppModeSwitcher";
-import type { AppMode } from "./appModeTypes";
+import { APP_MODE_WORKSPACE_LABELS, type AppMode } from "./appModeTypes";
 import { FloatingPlaybackControl } from "./FloatingPlaybackControl";
 import "./AppWorkspace.css";
 
 interface AppWorkspaceProps {
+  authLogin?: PasswordLogin;
   bilibiliMetadataLoader?: BilibiliMetadataLoader;
   player?: PlayerPort;
   ttsEngine?: TtsEnginePort;
@@ -88,6 +91,7 @@ function hasSamePlaybackControlState(
 }
 
 export function AppWorkspace({
+  authLogin,
   bilibiliMetadataLoader,
   player,
   ttsEngine,
@@ -289,13 +293,7 @@ export function AppWorkspace({
             </span>
             <div className="workspace-brand__copy">
               <p className="app-kicker">梦伴</p>
-              <strong>
-                {activeAppMode === "mixer"
-                  ? "声音工作台"
-                  : activeAppMode === "audiobook"
-                    ? "听书工作台"
-                    : "听视频工作台"}
-              </strong>
+              <strong>{APP_MODE_WORKSPACE_LABELS[activeAppMode]}</strong>
             </div>
           </div>
 
@@ -360,6 +358,14 @@ export function AppWorkspace({
               }
             />
           ) : null}
+        </section>
+
+        <section
+          className="app-mode-panel"
+          hidden={activeAppMode !== "account"}
+          aria-label="我的"
+        >
+          <AccountView login={authLogin} />
         </section>
       </main>
 

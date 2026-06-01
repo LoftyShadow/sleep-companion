@@ -1,9 +1,19 @@
-use std::{env, net::SocketAddr, path::PathBuf};
+use std::{
+    env,
+    net::SocketAddr,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result};
 use config::{Config, Environment, File};
 use serde::Deserialize;
 use url::Url;
+
+const DEFAULT_APP_ENV: &str = "local";
+const APP_ENV_VAR: &str = "APP_ENV";
+const DEFAULT_CONFIG_FILE: &str = "default.toml";
+const ENVIRONMENT_CONFIG_FILE: &str = "environment.toml";
+const LOCAL_CONFIG_FILE: &str = "local.toml";
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct AppConfig {
@@ -100,16 +110,42 @@ pub struct LoginRateLimitConfig {
     pub ip_email_attempts: u32,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+struct EnvironmentSelectorConfig {
+    app: Option<AppEnvironmentConfig>,
+    env: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+struct AppEnvironmentConfig {
+    env: Option<String>,
+}
+
+impl EnvironmentSelectorConfig {
+    fn active_env(&self) -> Option<&str> {
+        self.app
+            .as_ref()
+            .and_then(|app| app.env.as_deref())
+            .or(self.env.as_deref())
+    }
+}
+
 impl AppConfig {
     pub fn load() -> Result<Self> {
         dotenvy::dotenv().ok();
 
-        let app_env = env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
         let config_dir = resolve_config_dir()?;
-        let settings = Config::builder()
-            .add_source(File::from(config_dir.join("default.toml")))
-            .add_source(File::from(config_dir.join(format!("{app_env}.toml"))).required(false))
-            .add_source(File::from(config_dir.join("local.toml")).required(false))
+        let app_env = load_app_env(&config_dir)?;
+        let mut builder =
+            Config::builder().add_source(File::from(config_dir.join(DEFAULT_CONFIG_FILE)));
+
+        if app_env != DEFAULT_APP_ENV {
+            builder = builder
+                .add_source(File::from(config_dir.join(format!("{app_env}.toml"))).required(false));
+        }
+
+        let settings = builder
+            .add_source(File::from(config_dir.join(LOCAL_CONFIG_FILE)).required(false))
             .add_source(Environment::with_prefix("APP").separator("__"))
             .build()
             .context("加载后端配置失败")?;
@@ -155,6 +191,34 @@ impl DatabaseConfig {
 
         Ok(url.into())
     }
+}
+
+fn load_app_env(config_dir: &Path) -> Result<String> {
+    let selector = Config::builder()
+        .add_source(File::from(config_dir.join(ENVIRONMENT_CONFIG_FILE)).required(false))
+        .add_source(File::from(config_dir.join(LOCAL_CONFIG_FILE)).required(false))
+        .build()
+        .context("加载后端环境选择配置失败")?
+        .try_deserialize::<EnvironmentSelectorConfig>()
+        .context("解析后端环境选择配置失败")?;
+
+    Ok(select_app_env(
+        env::var(APP_ENV_VAR).ok().as_deref(),
+        &selector,
+    ))
+}
+
+fn select_app_env(explicit_env: Option<&str>, selector: &EnvironmentSelectorConfig) -> String {
+    normalize_app_env(explicit_env)
+        .or_else(|| normalize_app_env(selector.active_env()))
+        .unwrap_or_else(|| DEFAULT_APP_ENV.to_string())
+}
+
+fn normalize_app_env(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
 }
 
 fn resolve_config_dir() -> Result<PathBuf> {
@@ -270,5 +334,49 @@ mod tests {
             config.connection_url().unwrap(),
             "postgres://cloud.example/sleep_companion"
         );
+    }
+
+    #[test]
+    fn select_app_env_defaults_to_local() {
+        assert_eq!(
+            select_app_env(None, &EnvironmentSelectorConfig::default()),
+            "local"
+        );
+    }
+
+    #[test]
+    fn select_app_env_uses_toml_selector() {
+        let selector = EnvironmentSelectorConfig {
+            app: Some(AppEnvironmentConfig {
+                env: Some("test".to_string()),
+            }),
+            env: None,
+        };
+
+        assert_eq!(select_app_env(None, &selector), "test");
+    }
+
+    #[test]
+    fn select_app_env_prefers_explicit_env() {
+        let selector = EnvironmentSelectorConfig {
+            app: Some(AppEnvironmentConfig {
+                env: Some("local".to_string()),
+            }),
+            env: None,
+        };
+
+        assert_eq!(select_app_env(Some("production"), &selector), "production");
+    }
+
+    #[test]
+    fn select_app_env_ignores_blank_explicit_env() {
+        let selector = EnvironmentSelectorConfig {
+            app: Some(AppEnvironmentConfig {
+                env: Some("development".to_string()),
+            }),
+            env: None,
+        };
+
+        assert_eq!(select_app_env(Some("  "), &selector), "development");
     }
 }

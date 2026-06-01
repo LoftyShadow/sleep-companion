@@ -49,12 +49,39 @@ rtk pnpm run check
 
 后端代码位于 `backend/`，数据库迁移位于 `backend-migration/`。本地开发需要先准备 PostgreSQL，再执行 migration，最后启动后端服务。
 
-### 1. 准备本地配置
+### 1. 选择配置环境
+
+后端默认从 TOML 选择配置环境，当前默认环境是 `local`：
+
+```toml
+# backend/config/environment.toml
+[app]
+env = "local"
+```
+
+可选值按现有配置文件命名，例如：
+
+```text
+local -> backend/config/local.toml
+development -> backend/config/development.toml
+test -> backend/config/test.toml
+production -> backend/config/production.toml
+```
+
+`APP_ENV` 仍可作为临时覆盖，例如：
+
+```bash
+APP_ENV=production rtk cargo run -p sleep-companion-backend
+```
+
+配置加载规则是：先用 `APP_ENV`、`backend/config/local.toml` 或 `backend/config/environment.toml` 解析当前环境；未设置时默认 `local`。随后读取 `backend/config/default.toml`、所选环境 TOML、`backend/config/local.toml` 和 `APP_` 环境变量覆盖。
+
+### 2. 准备本地配置
 
 复制本地私有配置文件：
 
-```powershell
-Copy-Item backend\config\local.toml.example backend\config\local.toml
+```bash
+cp backend/config/local.toml.example backend/config/local.toml
 ```
 
 推荐在 `backend/config/local.toml` 中使用结构化数据库配置：
@@ -81,37 +108,41 @@ url = "postgres://postgres:postgres@localhost:5432/sleep_companion_dev"
 
 后端服务规则是：`database.url` 存在且非空时优先使用完整连接串；否则使用结构化字段拼接 PostgreSQL 连接串。
 
-### 2. 创建本地数据库
+### 3. 创建本地数据库
 
 如果本机 PostgreSQL 用户是 `postgres/postgres`，可以创建开发库：
 
-```powershell
-createdb -U postgres sleep_companion_dev
+```bash
+rtk proxy createdb -U postgres sleep_companion_dev
 ```
 
-### 3. 执行数据库迁移
+### 4. 执行数据库迁移
 
-`backend-migration` 使用 SeaORM migration CLI，按工具约定通过 `DATABASE_URL` 获取连接串：
+`backend-migration` 默认复用后端服务的 TOML 数据库配置，因此本地通常不需要再手写连接串：
 
-```powershell
-$env:DATABASE_URL="postgres://postgres:postgres@localhost:5432/sleep_companion_dev"
-cargo run -p backend-migration -- up
+```bash
+rtk cargo run -p backend-migration -- up
 ```
 
 常用 migration 命令：
 
-```powershell
-cargo run -p backend-migration -- status
-cargo run -p backend-migration -- up
+```bash
+rtk cargo run -p backend-migration -- status
+rtk cargo run -p backend-migration -- up
 ```
 
-### 4. 启动后端服务
+如果部署环境需要显式覆盖数据库连接，也可以继续使用 `DATABASE_URL`：
 
-后端服务读取 `backend/config/default.toml`、`backend/config/{APP_ENV}.toml`、`backend/config/local.toml` 和 `APP_` 环境变量覆盖：
+```bash
+DATABASE_URL="postgres://postgres:postgres@localhost:5432/sleep_companion_dev" rtk cargo run -p backend-migration -- up
+```
 
-```powershell
-$env:APP_ENV="development"
-cargo run -p sleep-companion-backend
+### 5. 启动后端服务
+
+本地默认使用 `local` 环境，通常无需再传 `APP_ENV`：
+
+```bash
+rtk cargo run -p sleep-companion-backend
 ```
 
 启动后访问：
@@ -119,6 +150,7 @@ cargo run -p sleep-companion-backend
 ```text
 http://127.0.0.1:3817/healthz
 http://127.0.0.1:3817/readyz
+http://127.0.0.1:3817/api/auth/login
 http://127.0.0.1:3817/swagger-ui
 ```
 
@@ -138,7 +170,7 @@ Command: run
 Package: backend-migration
 Arguments: -- up
 Environment variables:
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/sleep_companion_dev
+可留空；如需临时覆盖数据库连接，可以填写 DATABASE_URL=postgres://postgres:postgres@localhost:5432/sleep_companion_dev
 Working directory:
 C:\Users\10942\RustroverProjects\sleep-companion-backend-auth
 ```
@@ -148,9 +180,9 @@ Name: backend dev
 Command: run
 Package: sleep-companion-backend
 Environment variables:
-APP_ENV=development
+可留空；如需临时覆盖配置环境，可以填写 APP_ENV=production 或 APP_ENV=test
 Working directory:
 C:\Users\10942\RustroverProjects\sleep-companion-backend-auth
 ```
 
-注意：后端服务使用 `local.toml` 的结构化配置；migration 工具仍然使用 `DATABASE_URL`。
+注意：后端服务和 migration 默认都使用同一套 TOML 配置；`DATABASE_URL` 只作为 migration 的显式覆盖入口。

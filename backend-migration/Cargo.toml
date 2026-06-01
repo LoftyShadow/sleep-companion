@@ -13,4 +13,5 @@ path = "src/main.rs"
 
 [dependencies]
 async-std = { version = "1", features = ["attributes", "tokio1"] }
+sleep-companion-backend = { path = "../backend" }
 sea-orm-migration = { version = "1", features = ["runtime-tokio-rustls", "sqlx-postgres"] }

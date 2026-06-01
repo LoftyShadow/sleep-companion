@@ -1,9 +1,9 @@
-use std::net::TcpListener;
-
 use sleep_companion_backend::{
-    app::build_router, config::AppConfig, db::connect_database, scheduler::start_scheduler,
-    telemetry::init_tracing,
+    app::build_router, config::AppConfig, db::connect_database, id::SnowflakeIdGenerator,
+    scheduler::start_scheduler, telemetry::init_tracing,
 };
+use std::sync::Arc;
+use tokio::net::TcpListener;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -12,14 +12,21 @@ async fn main() -> anyhow::Result<()> {
 
     let database_url = config.database.connection_url()?;
     let db = connect_database(&database_url, config.database.max_connections).await?;
+    let id_generator = Arc::new(SnowflakeIdGenerator::new(config.id_generator.worker_id)?);
     let _scheduler = start_scheduler(&config.scheduler).await?;
 
-    let listener = TcpListener::bind(config.bind_addr())?;
+    let listener = TcpListener::bind(config.socket_addr()?).await?;
     tracing::info!("后端服务监听地址: {}", listener.local_addr()?);
 
     axum::serve(
-        tokio::net::TcpListener::from_std(listener)?,
-        build_router(db, config.openapi),
+        listener,
+        build_router(
+            db,
+            config.openapi,
+            config.auth,
+            config.rate_limit.login,
+            id_generator,
+        ),
     )
     .with_graceful_shutdown(shutdown_signal())
     .await?;
