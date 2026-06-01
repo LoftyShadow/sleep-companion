@@ -31,6 +31,7 @@ export function SoundGrid({
         const volumePercent = Math.round(volume * 100);
         const isCustomSound = isCustomSoundId(sound.id);
         const isAsmrSound = sound.id.startsWith("asmr_");
+        const accessibleName = sound.accessibleName ?? sound.name;
 
         return (
           <article
@@ -40,7 +41,7 @@ export function SoundGrid({
             key={sound.id}
           >
             <button
-              aria-label={sound.name}
+              aria-label={accessibleName}
               aria-pressed={isPlaying}
               className="sound-toggle"
               type="button"
@@ -75,7 +76,7 @@ export function SoundGrid({
                 音量 <strong>{volumePercent}%</strong>
               </span>
               <input
-                aria-label={`${sound.name}音量`}
+                aria-label={`${accessibleName}音量`}
                 max="100"
                 min="0"
                 type="range"
@@ -107,4 +108,3 @@ export function SoundGrid({
     </section>
   );
 }
-

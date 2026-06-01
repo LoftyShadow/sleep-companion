@@ -1,3 +1,8 @@
+import {
+  XMSLEEP_SOUNDS,
+  type XmsleepSoundId,
+} from "./xmsleepSoundCatalog";
+
 export type BuiltInSoundId =
   | "heavy_rain"
   | "campfire"
@@ -25,7 +30,8 @@ export type BuiltInSoundId =
   | "asmr_bubbles"
   | "asmr_gravel_steps"
   | "asmr_leaf_steps"
-  | "asmr_car_roof_rain";
+  | "asmr_car_roof_rain"
+  | XmsleepSoundId;
 
 export type CustomSoundId = `custom:${string}`;
 
@@ -52,10 +58,13 @@ export interface AudioSourceDefinition {
 export interface SoundDefinition {
   id: SoundId;
   name: string;
+  accessibleName?: string;
   sourceKind: SoundSourceKind;
   androidResourceName?: string;
   imageSrc: string;
   sources: AudioSourceDefinition[];
+  xmsleepCategoryId?: string;
+  xmsleepSourceId?: string;
 }
 
 export const WHITE_NOISE_SOUNDS: SoundDefinition[] = [
@@ -297,6 +306,7 @@ export const ASMR_SOUNDS: SoundDefinition[] = [
 export const BUILT_IN_SOUNDS: SoundDefinition[] = [
   ...WHITE_NOISE_SOUNDS,
   ...ASMR_SOUNDS,
+  ...XMSLEEP_SOUNDS,
 ];
 
 export function isCustomSoundId(soundId: SoundId): soundId is CustomSoundId {

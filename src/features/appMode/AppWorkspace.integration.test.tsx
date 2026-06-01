@@ -53,6 +53,11 @@ describe("AppWorkspace integration", () => {
     expect(screen.getByRole("button", { name: "大雨" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "图书馆" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "伞下雨声" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "咖啡厅，场所，XMSLEEP" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("选文件后自动导入")).toBeInTheDocument();
+    expect(screen.getByLabelText("添加自定义音频")).toBeInTheDocument();
   });
 
   it("uses the unified button to play and stop the default preset", async () => {
@@ -142,6 +147,65 @@ describe("AppWorkspace integration", () => {
       "asmr_ear_cleaning_soft",
       "asmr_ear_cleaning_deep",
       "asmr_paper_rub",
+    ]);
+    expect(stopAll).toHaveBeenCalledTimes(2);
+  });
+
+  it("switches to other sounds and filters imported sounds by category", async () => {
+    const user = userEvent.setup();
+    render(<AppWorkspace player={createPlayerPortTestDouble().player} />);
+
+    await user.click(screen.getByRole("button", { name: "其他声音" }));
+
+    expect(
+      screen.getByRole("region", { name: "其他声音" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "声音分类" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "河流，自然，XMSLEEP" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "海浪，自然，XMSLEEP" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "救护车警笛，城市，XMSLEEP" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "键盘，物品，XMSLEEP" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "掏耳朵1，物品，XMSLEEP" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "咖啡厅，场所，XMSLEEP" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /城市\s*7/u }));
+
+    expect(
+      screen.getByRole("button", { name: "救护车警笛，城市，XMSLEEP" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "河流，自然，XMSLEEP" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses the unified button to play the current other-sounds category", async () => {
+    const user = userEvent.setup();
+    const { play, player, stopAll } = createPlayerPortTestDouble();
+    render(<AppWorkspace player={player} />);
+
+    await user.click(screen.getByRole("button", { name: "其他声音" }));
+    await user.click(screen.getByRole("button", { name: /雨声\s*17/u }));
+    await user.click(screen.getByRole("button", { name: "播放分类" }));
+    await user.click(await screen.findByRole("button", { name: "停止播放" }));
+
+    expect(play.mock.calls.map(([sound]) => sound.id)).toEqual([
+      "xmsleep_light_rain",
+      "xmsleep_rain_on_tent",
+      "xmsleep_rain_on_leaves",
     ]);
     expect(stopAll).toHaveBeenCalledTimes(2);
   });
