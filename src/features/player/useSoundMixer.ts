@@ -47,6 +47,27 @@ function logMixerError(
   });
 }
 
+function getSoundPlaybackErrorMessage(error: unknown): string {
+  const errorLike = error as { message?: unknown; name?: unknown };
+  const errorName =
+    typeof errorLike.name === "string" ? errorLike.name : "";
+  const errorMessage =
+    typeof errorLike.message === "string" ? errorLike.message : String(error);
+
+  if (
+    errorName === "NotSupportedError" ||
+    errorMessage.includes("no supported source")
+  ) {
+    return "当前音频无法播放，请换一个声音试试";
+  }
+
+  if (errorName === "NotAllowedError") {
+    return "浏览器阻止了自动播放，请先点击播放按钮";
+  }
+
+  return "播放失败，请稍后重试";
+}
+
 export function useSoundMixer({
   sounds,
   player,
@@ -194,7 +215,7 @@ export function useSoundMixer({
         });
       } catch (error) {
         logMixerError("toggle-failed", error, { soundId });
-        setErrorMessage(error instanceof Error ? error.message : "播放失败");
+        setErrorMessage(getSoundPlaybackErrorMessage(error));
       }
     },
     [player, replacePlayingSoundIds, replaceResumeSoundIds, soundById],
@@ -275,7 +296,7 @@ export function useSoundMixer({
         await player.stopAll().catch(() => undefined);
         replacePlayingSoundIds(new Set());
         logMixerError("apply-preset-failed", error, { presetId: preset.id });
-        setErrorMessage(error instanceof Error ? error.message : "预设播放失败");
+        setErrorMessage(getSoundPlaybackErrorMessage(error));
       }
     },
     [
@@ -308,7 +329,7 @@ export function useSoundMixer({
       await player.stopAll().catch(() => undefined);
       replacePlayingSoundIds(new Set());
       logMixerError("toggle-unified-play-failed", error, {});
-      setErrorMessage(error instanceof Error ? error.message : "播放失败");
+      setErrorMessage(getSoundPlaybackErrorMessage(error));
     }
   }, [
     playSoundIds,

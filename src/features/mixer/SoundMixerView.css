@@ -30,20 +30,3 @@
   overflow: hidden;
   padding: 18px;
 }
-
-@media (max-width: 980px) {
-  .mixer-stage,
-  .mixer-content {
-    grid-template-columns: 1fr;
-  }
-
-  .right-column {
-    min-height: 0;
-  }
-}
-
-@media (max-width: 680px) {
-  .right-column {
-    padding: 12px;
-  }
-}

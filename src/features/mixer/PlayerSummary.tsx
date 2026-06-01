@@ -1,4 +1,5 @@
 import "./PlayerSummary.css";
+import "./PlayerSummary.mobile.css";
 import { PlaybackGlyph } from "../shared/PlaybackGlyph";
 
 interface PlayerSummaryProps {

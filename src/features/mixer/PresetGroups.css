@@ -98,17 +98,3 @@
   font-size: 0.78rem;
   font-weight: 750;
 }
-
-@media (max-width: 980px) {
-  .preset-list {
-    display: flex;
-    overflow-x: auto;
-    padding-bottom: 2px;
-    scroll-snap-type: x mandatory;
-  }
-
-  .preset-button {
-    flex: 0 0 220px;
-    scroll-snap-align: start;
-  }
-}

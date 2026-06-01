@@ -62,17 +62,3 @@
   font-weight: 950;
   text-align: center;
 }
-
-@media (max-width: 980px) {
-  .sound-category-list {
-    display: flex;
-    overflow-x: auto;
-    padding-bottom: 2px;
-    scroll-snap-type: x mandatory;
-  }
-
-  .sound-category-button {
-    flex: 0 0 142px;
-    scroll-snap-align: start;
-  }
-}

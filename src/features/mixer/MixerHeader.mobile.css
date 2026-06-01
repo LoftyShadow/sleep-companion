@@ -1,0 +1,17 @@
+@media (max-width: 680px) {
+  .mixer-mode-panel {
+    min-height: 0;
+    padding: 8px;
+  }
+
+  .mode-switch {
+    gap: 4px;
+    padding: 4px;
+  }
+
+  .mode-switch-button {
+    min-height: 36px;
+    padding: 7px 5px;
+    font-size: 0.8rem;
+  }
+}

@@ -20,6 +20,7 @@ import { AppModeSwitcher } from "./AppModeSwitcher";
 import type { AppMode } from "./appModeTypes";
 import { FloatingPlaybackControl } from "./FloatingPlaybackControl";
 import "./AppWorkspace.css";
+import "./AppWorkspace.mobile.css";
 
 interface AppWorkspaceProps {
   bilibiliMetadataLoader?: BilibiliMetadataLoader;

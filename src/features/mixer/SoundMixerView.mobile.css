@@ -1,0 +1,44 @@
+@media (max-width: 980px) {
+  .mixer-stage,
+  .mixer-content {
+    grid-template-columns: 1fr;
+  }
+
+  .right-column {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 680px) {
+  .app-layout {
+    gap: 10px;
+  }
+
+  .mixer-stage {
+    gap: 8px;
+  }
+
+  .mixer-stage .mixer-mode-panel,
+  .mixer-stage .player-card {
+    min-height: 0;
+  }
+
+  .mixer-content {
+    gap: 10px;
+  }
+
+  .right-column {
+    padding: 10px;
+  }
+}
+
+@media (max-width: 420px) {
+  .right-column {
+    padding: 10px;
+  }
+
+  .sound-section-heading {
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+  }
+}
