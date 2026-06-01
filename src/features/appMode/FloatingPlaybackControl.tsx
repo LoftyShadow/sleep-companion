@@ -57,6 +57,7 @@ export function FloatingPlaybackControl({
   onModuleToggle,
 }: FloatingPlaybackControlProps) {
   const rootRef = useRef<HTMLElement>(null);
+  const [isDockCollapsed, setIsDockCollapsed] = useState(false);
   const [openPanel, setOpenPanel] = useState<FloatingPanel>(null);
   const playingCount = useMemo(
     () =>
@@ -67,6 +68,11 @@ export function FloatingPlaybackControl({
   );
   const hasActivePlayback = playingCount > 0;
   const globalActionLabel = hasActivePlayback ? "暂停全部" : "播放全部";
+
+  function handleCollapseDock() {
+    setOpenPanel(null);
+    setIsDockCollapsed(true);
+  }
 
   useEffect(() => {
     if (!openPanel) {
@@ -92,11 +98,44 @@ export function FloatingPlaybackControl({
 
   return (
     <aside
-      className="floating-playback-control"
+      className={
+        isDockCollapsed
+          ? "floating-playback-control is-collapsed"
+          : "floating-playback-control"
+      }
       ref={rootRef}
       aria-label="悬浮播放控制"
     >
-      {openPanel ? (
+      {isDockCollapsed ? (
+        <div className="floating-playback-mini-dock">
+          <button
+            aria-label={globalActionLabel}
+            aria-pressed={hasActivePlayback}
+            className={
+              hasActivePlayback
+                ? "floating-playback-global floating-playback-mini-action is-playing"
+                : "floating-playback-global floating-playback-mini-action"
+            }
+            type="button"
+            onClick={onGlobalToggle}
+          >
+            <span className="floating-playback-global__glyph" aria-hidden="true" />
+          </button>
+
+          <button
+            aria-label="展开悬浮播放控制"
+            className="floating-playback-restore"
+            type="button"
+            onClick={() => {
+              setIsDockCollapsed(false);
+            }}
+          >
+            <span className="floating-playback-restore__glyph" aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
+
+      {!isDockCollapsed && openPanel ? (
         <section
           className={getPanelClassName(openPanel)}
           aria-label={openPanel === "timer" ? "定时停止设置" : "模块播放控制"}
@@ -160,61 +199,75 @@ export function FloatingPlaybackControl({
         </section>
       ) : null}
 
-      <div className="floating-playback-dock">
-        <button
-          aria-label={globalActionLabel}
-          aria-pressed={hasActivePlayback}
-          className={
-            hasActivePlayback
-              ? "floating-playback-global is-playing"
-              : "floating-playback-global"
-          }
-          type="button"
-          onClick={onGlobalToggle}
-        >
-          <span className="floating-playback-global__glyph" aria-hidden="true" />
-          <span>{globalActionLabel}</span>
-          <strong>{playingCount}</strong>
-        </button>
+      {!isDockCollapsed ? (
+        <div className="floating-playback-dock">
+          <button
+            aria-label={globalActionLabel}
+            aria-pressed={hasActivePlayback}
+            className={
+              hasActivePlayback
+                ? "floating-playback-global is-playing"
+                : "floating-playback-global"
+            }
+            type="button"
+            onClick={onGlobalToggle}
+          >
+            <span className="floating-playback-global__glyph" aria-hidden="true" />
+            <span>{globalActionLabel}</span>
+            <strong>{playingCount}</strong>
+          </button>
 
-        <button
-          aria-expanded={openPanel === "modules"}
-          aria-label="展开模块播放控制"
-          className={
-            openPanel === "modules"
-              ? "floating-playback-tool is-active"
-              : "floating-playback-tool"
-          }
-          type="button"
-          onClick={() => {
-            setOpenPanel((currentPanel) =>
-              currentPanel === "modules" ? null : "modules",
-            );
-          }}
-        >
-          <span className="floating-playback-tool__list" aria-hidden="true" />
-          <span>列表</span>
-        </button>
+          <button
+            aria-expanded={openPanel === "modules"}
+            aria-label="展开模块播放控制"
+            className={
+              openPanel === "modules"
+                ? "floating-playback-tool is-active"
+                : "floating-playback-tool"
+            }
+            type="button"
+            onClick={() => {
+              setOpenPanel((currentPanel) =>
+                currentPanel === "modules" ? null : "modules",
+              );
+            }}
+          >
+            <span className="floating-playback-tool__list" aria-hidden="true" />
+            <span>列表</span>
+          </button>
 
-        <button
-          aria-expanded={openPanel === "timer"}
-          aria-label="展开定时停止设置"
-          className={
-            openPanel === "timer"
-              ? "floating-playback-tool is-active"
-              : "floating-playback-tool"
-          }
-          type="button"
-          onClick={() => {
-            setOpenPanel((currentPanel) =>
-              currentPanel === "timer" ? null : "timer",
-            );
-          }}
-        >
-          <span className="floating-playback-tool__timer" aria-hidden="true" />
-          <span>定时</span>
-        </button>
-      </div>
+          <button
+            aria-expanded={openPanel === "timer"}
+            aria-label="展开定时停止设置"
+            className={
+              openPanel === "timer"
+                ? "floating-playback-tool is-active"
+                : "floating-playback-tool"
+            }
+            type="button"
+            onClick={() => {
+              setOpenPanel((currentPanel) =>
+                currentPanel === "timer" ? null : "timer",
+              );
+            }}
+          >
+            <span className="floating-playback-tool__timer" aria-hidden="true" />
+            <span>定时</span>
+          </button>
+
+          <button
+            aria-label="收回悬浮播放控制"
+            className="floating-playback-collapse"
+            type="button"
+            onClick={handleCollapseDock}
+          >
+            <span
+              className="floating-playback-collapse__glyph"
+              aria-hidden="true"
+            />
+          </button>
+        </div>
+      ) : null}
     </aside>
   );
 }

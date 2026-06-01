@@ -136,7 +136,7 @@ fn speak_with_system(input: NativeTtsSpeakInput) -> Result<(), String> {
     command
         .arg("-w")
         .arg("-N")
-        .arg("Sleep Companion")
+        .arg("梦伴")
         .arg("-l")
         .arg(normalize_language_for_spd(input.language.as_deref()))
         .arg("-r")

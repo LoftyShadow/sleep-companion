@@ -4,6 +4,11 @@ import {
   createBilibiliPlaybackSource,
   type BilibiliPlaybackSource,
 } from "./bilibiliVideo";
+import {
+  loadBilibiliMetadata,
+  type BilibiliMetadata,
+  type BilibiliMetadataLoader,
+} from "./bilibiliMetadata";
 import type {
   PlaybackControlState,
   PlaybackControlStatus,
@@ -15,6 +20,7 @@ const DEFAULT_LISTENING_VOLUME = 70;
 
 interface VideoListeningViewProps {
   globalStopRequestId: number;
+  metadataLoader?: BilibiliMetadataLoader;
   playbackControlRequestId?: number;
   onPlaybackControlStateChange?: (state: PlaybackControlState) => void;
 }
@@ -41,14 +47,48 @@ function getVideoPlaybackControlActionLabel(
   return isPlaybackMounted ? "暂停" : "播放";
 }
 
+function getVideoStatusText({
+  isMetadataLoading,
+  isPlaybackMounted,
+  metadataErrorMessage,
+  videoSource,
+}: {
+  isMetadataLoading: boolean;
+  isPlaybackMounted: boolean;
+  metadataErrorMessage: string | null;
+  videoSource: BilibiliPlaybackSource | null;
+}): string {
+  if (isMetadataLoading) {
+    return "正在获取封面和标题";
+  }
+
+  if (metadataErrorMessage) {
+    return metadataErrorMessage;
+  }
+
+  if (!videoSource) {
+    return "粘贴链接后开始收听";
+  }
+
+  return isPlaybackMounted ? "已连接官方播放源" : "已暂停官方播放源";
+}
+
 export function VideoListeningView({
   globalStopRequestId,
+  metadataLoader = loadBilibiliMetadata,
   playbackControlRequestId = 0,
   onPlaybackControlStateChange,
 }: VideoListeningViewProps) {
   const inputId = useId();
   const [videoInput, setVideoInput] = useState(DEFAULT_VIDEO_INPUT);
   const [videoSource, setVideoSource] = useState<BilibiliPlaybackSource | null>(
+    null,
+  );
+  const [videoMetadata, setVideoMetadata] = useState<BilibiliMetadata | null>(
+    null,
+  );
+  const [isMetadataLoading, setIsMetadataLoading] = useState(false);
+  const [metadataErrorMessage, setMetadataErrorMessage] = useState<string | null>(
     null,
   );
   const [isPlaybackMounted, setIsPlaybackMounted] = useState(false);
@@ -60,6 +100,7 @@ export function VideoListeningView({
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const handledGlobalStopRequestIdRef = useRef(globalStopRequestId);
   const handledPlaybackControlRequestIdRef = useRef(0);
+  const metadataRequestIdRef = useRef(0);
   const canControlOfficialPlayer =
     videoSource?.sourceKind === BilibiliSourceKind.Live;
   const playbackControlStatus = getVideoPlaybackControlStatus(
@@ -98,7 +139,11 @@ export function VideoListeningView({
     }
 
     handledGlobalStopRequestIdRef.current = globalStopRequestId;
+    metadataRequestIdRef.current += 1;
     setVideoSource(null);
+    setVideoMetadata(null);
+    setIsMetadataLoading(false);
+    setMetadataErrorMessage(null);
     setIsPlaybackMounted(false);
     setIsPlayerExpanded(false);
   }, [globalStopRequestId]);
@@ -111,10 +156,11 @@ export function VideoListeningView({
       ),
       canToggle: true,
       status: playbackControlStatus,
-      summary: videoSource?.label ?? "未载入来源",
+      summary: videoMetadata?.title ?? videoSource?.label ?? "未载入来源",
     });
   }, [
     isPlaybackMounted,
+    videoMetadata,
     onPlaybackControlStateChange,
     playbackControlStatus,
     videoSource,
@@ -132,10 +178,14 @@ export function VideoListeningView({
     handleTogglePlayback();
   }, [handleTogglePlayback, playbackControlRequestId]);
 
-  function handleLoadVideo() {
+  async function handleLoadVideo() {
     const trimmedInput = videoInput.trim();
     if (!trimmedInput) {
+      metadataRequestIdRef.current += 1;
       setVideoSource(null);
+      setVideoMetadata(null);
+      setIsMetadataLoading(false);
+      setMetadataErrorMessage(null);
       setIsPlaybackMounted(false);
       setIsPlayerExpanded(false);
       setErrorMessage("请输入 B 站视频或直播链接");
@@ -144,7 +194,11 @@ export function VideoListeningView({
 
     const nextVideoSource = createBilibiliPlaybackSource(trimmedInput);
     if (!nextVideoSource) {
+      metadataRequestIdRef.current += 1;
       setVideoSource(null);
+      setVideoMetadata(null);
+      setIsMetadataLoading(false);
+      setMetadataErrorMessage(null);
       setIsPlaybackMounted(false);
       setIsPlayerExpanded(false);
       setErrorMessage("暂时只支持 B 站 BV、av、ep 和直播间链接");
@@ -152,9 +206,34 @@ export function VideoListeningView({
     }
 
     setVideoSource(nextVideoSource);
+    setVideoMetadata(null);
+    setIsMetadataLoading(true);
+    setMetadataErrorMessage(null);
     setIsPlaybackMounted(true);
     setIsPlayerExpanded(false);
     setErrorMessage(null);
+
+    const requestId = metadataRequestIdRef.current + 1;
+    metadataRequestIdRef.current = requestId;
+
+    try {
+      const metadata = await metadataLoader(nextVideoSource.reference);
+      if (metadataRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setVideoMetadata(metadata);
+    } catch {
+      if (metadataRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setMetadataErrorMessage("元信息暂不可用");
+    } finally {
+      if (metadataRequestIdRef.current === requestId) {
+        setIsMetadataLoading(false);
+      }
+    }
   }
 
   function handlePlayerFrameLoad() {
@@ -181,6 +260,13 @@ export function VideoListeningView({
       setErrorMessage("读取剪贴板失败，请手动粘贴");
     }
   }
+
+  const videoStatusText = getVideoStatusText({
+    isMetadataLoading,
+    isPlaybackMounted,
+    metadataErrorMessage,
+    videoSource,
+  });
 
   return (
     <div className="video-listening-view">
@@ -214,7 +300,7 @@ export function VideoListeningView({
                   }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
-                      handleLoadVideo();
+                      void handleLoadVideo();
                     }
                   }}
                 />
@@ -230,7 +316,9 @@ export function VideoListeningView({
                 <button
                   className="custom-audio-button video-load-button"
                   type="button"
-                  onClick={handleLoadVideo}
+                  onClick={() => {
+                    void handleLoadVideo();
+                  }}
                 >
                   载入
                 </button>
@@ -260,18 +348,26 @@ export function VideoListeningView({
             </div>
 
             <div className="video-listening-card">
+              <div className="video-cover-shell">
+                {videoMetadata?.imageUrl ? (
+                  <img
+                    alt={`${videoMetadata.title} 封面`}
+                    className="video-cover-image"
+                    referrerPolicy="no-referrer"
+                    src={videoMetadata.imageUrl}
+                  />
+                ) : (
+                  <span className="video-cover-placeholder" aria-hidden="true">
+                    B
+                  </span>
+                )}
+              </div>
               <div className="video-listening-copy">
                 <p className="app-kicker">
                   {videoSource?.playerLabel ?? "等待来源"}
                 </p>
-                <h3>{videoSource?.label ?? "尚未载入"}</h3>
-                <p>
-                  {videoSource && isPlaybackMounted
-                    ? "已连接官方播放源"
-                    : videoSource
-                      ? "已暂停官方播放源"
-                      : "粘贴链接后开始收听"}
-                </p>
+                <h3>{videoMetadata?.title ?? videoSource?.label ?? "尚未载入"}</h3>
+                <p>{videoStatusText}</p>
               </div>
             </div>
 

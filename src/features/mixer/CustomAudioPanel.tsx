@@ -14,7 +14,7 @@ export function CustomAudioPanel({
   onAddCustomSoundFiles,
 }: CustomAudioPanelProps) {
   return (
-    <section className="custom-audio-panel" aria-label="添加自定义音频">
+    <section className="custom-audio-panel" aria-label="自定义音频导入">
       <div className="custom-audio-copy">
         <p className="app-kicker">本地音频</p>
         <h3>添加自定义音频</h3>
@@ -23,23 +23,25 @@ export function CustomAudioPanel({
           {customSoundMessage ?? `${customSoundCount} 个自定义音频`}
         </p>
       </div>
-      <label className="custom-audio-button">
-        <span>{isImportingCustomSound ? "添加中" : "添加音频"}</span>
-        <input
-          accept="audio/*,.aac,.flac,.m4a,.mp3,.ogg,.wav,.webm"
-          aria-label="添加自定义音频"
-          className="custom-audio-input"
-          disabled={isImportingCustomSound}
-          multiple
-          type="file"
-          onChange={(event) => {
-            const files = Array.from(event.currentTarget.files ?? []);
-            event.currentTarget.value = "";
-            onAddCustomSoundFiles(files);
-          }}
-        />
-      </label>
+      <div className="custom-audio-action">
+        <span className="custom-audio-upload-note">选文件后自动导入</span>
+        <label className="custom-audio-button">
+          <span>{isImportingCustomSound ? "添加中" : "添加音频"}</span>
+          <input
+            accept="audio/*,.aac,.flac,.m4a,.mp3,.ogg,.wav,.webm"
+            aria-label="添加自定义音频"
+            className="custom-audio-input"
+            disabled={isImportingCustomSound}
+            multiple
+            type="file"
+            onChange={(event) => {
+              const files = Array.from(event.currentTarget.files ?? []);
+              event.currentTarget.value = "";
+              onAddCustomSoundFiles(files);
+            }}
+          />
+        </label>
+      </div>
     </section>
   );
 }
-

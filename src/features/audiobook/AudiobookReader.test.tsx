@@ -83,6 +83,22 @@ function mockScrollIntoView() {
 }
 
 describe("AudiobookReader", () => {
+  it("does not scroll the current segment into view on first mount", () => {
+    const { restore, scrollIntoView } = mockScrollIntoView();
+
+    try {
+      renderReader({ currentSegmentIndex: 5 });
+
+      expect(screen.getByRole("button", { name: "06片段 6" })).toHaveAttribute(
+        "aria-current",
+        "true",
+      );
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
+  });
+
   it("keeps the current chapter segments scrollable instead of forcing a centered start", () => {
     const { segmentList } = renderReader({ currentSegmentIndex: 0 });
     const segmentButtons = within(segmentList).getAllByRole("button");

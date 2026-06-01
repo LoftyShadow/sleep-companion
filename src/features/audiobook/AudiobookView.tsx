@@ -270,9 +270,6 @@ export function AudiobookView({
             <div className="audiobook-now-header">
               <div className="audiobook-now-titlebar">
                 <h2>朗读面板</h2>
-                <span className="section-meta">
-                  {audiobook.status === "playing" ? "朗读中" : "待命"}
-                </span>
               </div>
 
               <div className="audiobook-metrics" aria-label="听书概览">

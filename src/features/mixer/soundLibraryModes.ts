@@ -1,4 +1,4 @@
-export type SoundLibraryMode = "sleep" | "asmr";
+export type SoundLibraryMode = "sleep" | "asmr" | "other";
 
 export interface SoundLibraryModeConfig {
   id: SoundLibraryMode;
@@ -38,9 +38,20 @@ export const SOUND_LIBRARY_MODES: SoundLibraryModeConfig[] = [
     soundHeading: "ASMR 声音",
     transportLabel: "播放 ASMR",
   },
+  {
+    id: "other",
+    label: "其他声音",
+    kicker: "XMSLEEP 补充声音库",
+    title: "其他声音",
+    emptySummary: "选择分类或点一个补充声音开始播放",
+    presetKicker: "分类浏览",
+    presetHeading: "声音分类",
+    soundKicker: "补充音源",
+    soundHeading: "其他声音",
+    transportLabel: "播放分类",
+  },
 ];
 
 export const SOUND_LIBRARY_MODE_CONFIG = Object.fromEntries(
   SOUND_LIBRARY_MODES.map((mode) => [mode.id, mode]),
 ) as Record<SoundLibraryMode, SoundLibraryModeConfig>;
-

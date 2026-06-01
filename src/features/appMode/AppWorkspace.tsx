@@ -15,12 +15,14 @@ import {
 import { useRuntimePlayer } from "../player/useRuntimePlayer";
 import { useGlobalSleepTimer } from "../sleepTimer/useGlobalSleepTimer";
 import { VideoListeningView } from "../videoListening/VideoListeningView";
+import type { BilibiliMetadataLoader } from "../videoListening/bilibiliMetadata";
 import { AppModeSwitcher } from "./AppModeSwitcher";
 import type { AppMode } from "./appModeTypes";
 import { FloatingPlaybackControl } from "./FloatingPlaybackControl";
 import "./AppWorkspace.css";
 
 interface AppWorkspaceProps {
+  bilibiliMetadataLoader?: BilibiliMetadataLoader;
   player?: PlayerPort;
   ttsEngine?: TtsEnginePort;
 }
@@ -60,6 +62,19 @@ function getScrollIndicatorState(shell: HTMLElement): ScrollIndicatorState {
   };
 }
 
+function resetWorkspaceScroll(shell: HTMLElement | null): void {
+  if (shell) {
+    shell.scrollTop = 0;
+  }
+
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
+
+  if (window.scrollY > 0) {
+    window.scrollTo?.({ left: 0, top: 0, behavior: "auto" });
+  }
+}
+
 function hasSamePlaybackControlState(
   currentState: PlaybackControlState,
   nextState: PlaybackControlState,
@@ -72,7 +87,11 @@ function hasSamePlaybackControlState(
   );
 }
 
-export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
+export function AppWorkspace({
+  bilibiliMetadataLoader,
+  player,
+  ttsEngine,
+}: AppWorkspaceProps) {
   const shellRef = useRef<HTMLElement>(null);
   const scrollHideTimerRef = useRef<number | null>(null);
   const playbackCommandIdRef = useRef(0);
@@ -95,10 +114,7 @@ export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
     [ttsEngine],
   );
   const handleAppModeChange = useCallback((mode: AppMode) => {
-    const shell = shellRef.current;
-    if (shell) {
-      shell.scrollTop = 0;
-    }
+    resetWorkspaceScroll(shellRef.current);
     if (scrollHideTimerRef.current !== null) {
       window.clearTimeout(scrollHideTimerRef.current);
       scrollHideTimerRef.current = null;
@@ -111,6 +127,12 @@ export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
     if (mode === "video") {
       setHasOpenedVideo(true);
     }
+    const scheduleScrollReset =
+      window.requestAnimationFrame ??
+      ((callback: FrameRequestCallback) => window.setTimeout(callback, 0));
+    scheduleScrollReset(() => {
+      resetWorkspaceScroll(shellRef.current);
+    });
   }, []);
   const updatePlaybackControlState = useCallback(
     (moduleId: PlaybackModuleId, nextState: PlaybackControlState) => {
@@ -249,10 +271,15 @@ export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
         <section className="workspace-command-center" aria-label="工作台控制">
           <div className="workspace-brand">
             <span className="workspace-brand__mark" aria-hidden="true">
-              S
+              <img
+                className="workspace-brand__logo"
+                src="/images/brand/mengban-logo.png"
+                alt=""
+                draggable={false}
+              />
             </span>
             <div className="workspace-brand__copy">
-              <p className="app-kicker">Sleep Companion</p>
+              <p className="app-kicker">梦伴</p>
               <strong>
                 {activeAppMode === "mixer"
                   ? "声音工作台"
@@ -317,6 +344,7 @@ export function AppWorkspace({ player, ttsEngine }: AppWorkspaceProps) {
           {hasOpenedVideo ? (
             <VideoListeningView
               globalStopRequestId={sleepTimer.globalStopRequestId}
+              metadataLoader={bilibiliMetadataLoader}
               playbackControlRequestId={playbackControlRequestIds.video}
               onPlaybackControlStateChange={
                 handleVideoPlaybackControlStateChange

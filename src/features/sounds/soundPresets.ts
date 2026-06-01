@@ -16,7 +16,8 @@ export type SoundPresetId =
   | "asmr_ear_care"
   | "asmr_desktop_taps"
   | "asmr_liquid_close"
-  | "asmr_texture_walk";
+  | "asmr_texture_walk"
+  | `other_sound_quick_mix_${string}`;
 
 export type SoundPresetGroupId = "sleep" | "focus" | "nature" | "asmr";
 

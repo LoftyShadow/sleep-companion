@@ -6,9 +6,36 @@ import {
   createTtsEngineTestDouble,
 } from "../../test/audioTestDoubles";
 import { createMinimalEpubFile } from "../../test/epubTestDoubles";
+import type { BilibiliMetadataLoader } from "../videoListening/bilibiliMetadata";
+import type { BilibiliReference } from "../videoListening/bilibiliVideo";
 import { AppWorkspace } from "./AppWorkspace";
 
 describe("AppWorkspace integration", () => {
+  function createBilibiliMetadataLoaderTestDouble(): BilibiliMetadataLoader {
+    return vi.fn((reference: BilibiliReference) =>
+      Promise.resolve({
+        imageUrl:
+          reference.kind === "live"
+            ? "https://i0.hdslb.com/live-cover.jpg"
+            : "https://i0.hdslb.com/video-cover.jpg",
+        title: reference.kind === "live" ? "直播测试标题" : "视频测试标题",
+      }),
+    );
+  }
+
+  function renderVideoWorkspace() {
+    const bilibiliMetadataLoader = createBilibiliMetadataLoaderTestDouble();
+    const user = userEvent.setup();
+    render(
+      <AppWorkspace
+        bilibiliMetadataLoader={bilibiliMetadataLoader}
+        player={createPlayerPortTestDouble().player}
+      />,
+    );
+
+    return { bilibiliMetadataLoader, user };
+  }
+
   it("renders the built-in sound grid", () => {
     render(<AppWorkspace player={createPlayerPortTestDouble().player} />);
 
@@ -26,6 +53,11 @@ describe("AppWorkspace integration", () => {
     expect(screen.getByRole("button", { name: "大雨" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "图书馆" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "伞下雨声" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "咖啡厅，场所，XMSLEEP" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("选文件后自动导入")).toBeInTheDocument();
+    expect(screen.getByLabelText("添加自定义音频")).toBeInTheDocument();
   });
 
   it("uses the unified button to play and stop the default preset", async () => {
@@ -115,6 +147,65 @@ describe("AppWorkspace integration", () => {
       "asmr_ear_cleaning_soft",
       "asmr_ear_cleaning_deep",
       "asmr_paper_rub",
+    ]);
+    expect(stopAll).toHaveBeenCalledTimes(2);
+  });
+
+  it("switches to other sounds and filters imported sounds by category", async () => {
+    const user = userEvent.setup();
+    render(<AppWorkspace player={createPlayerPortTestDouble().player} />);
+
+    await user.click(screen.getByRole("button", { name: "其他声音" }));
+
+    expect(
+      screen.getByRole("region", { name: "其他声音" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "声音分类" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "河流，自然，XMSLEEP" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "海浪，自然，XMSLEEP" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "救护车警笛，城市，XMSLEEP" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "键盘，物品，XMSLEEP" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "掏耳朵1，物品，XMSLEEP" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "咖啡厅，场所，XMSLEEP" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /城市\s*7/u }));
+
+    expect(
+      screen.getByRole("button", { name: "救护车警笛，城市，XMSLEEP" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "河流，自然，XMSLEEP" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses the unified button to play the current other-sounds category", async () => {
+    const user = userEvent.setup();
+    const { play, player, stopAll } = createPlayerPortTestDouble();
+    render(<AppWorkspace player={player} />);
+
+    await user.click(screen.getByRole("button", { name: "其他声音" }));
+    await user.click(screen.getByRole("button", { name: /雨声\s*17/u }));
+    await user.click(screen.getByRole("button", { name: "播放分类" }));
+    await user.click(await screen.findByRole("button", { name: "停止播放" }));
+
+    expect(play.mock.calls.map(([sound]) => sound.id)).toEqual([
+      "xmsleep_light_rain",
+      "xmsleep_rain_on_tent",
+      "xmsleep_rain_on_leaves",
     ]);
     expect(stopAll).toHaveBeenCalledTimes(2);
   });
@@ -222,8 +313,7 @@ describe("AppWorkspace integration", () => {
   });
 
   it("loads a Bilibili link in the official video player", async () => {
-    const user = userEvent.setup();
-    render(<AppWorkspace player={createPlayerPortTestDouble().player} />);
+    const { bilibiliMetadataLoader, user } = renderVideoWorkspace();
 
     await user.click(screen.getByRole("button", { name: "听视频" }));
     expect(screen.getByRole("heading", { name: "听视频" })).toBeInTheDocument();
@@ -235,6 +325,19 @@ describe("AppWorkspace integration", () => {
     await user.click(screen.getByRole("button", { name: "载入" }));
 
     expect(screen.getByText("已载入 BV BV1xx411c7mD")).toBeInTheDocument();
+    expect(await screen.findByText("视频测试标题")).toBeInTheDocument();
+    expect(screen.getByAltText("视频测试标题 封面")).toHaveAttribute(
+      "src",
+      "https://i0.hdslb.com/video-cover.jpg",
+    );
+    expect(screen.getByAltText("视频测试标题 封面")).toHaveAttribute(
+      "referrerpolicy",
+      "no-referrer",
+    );
+    expect(bilibiliMetadataLoader).toHaveBeenCalledWith({
+      kind: "bvid",
+      value: "BV1xx411c7mD",
+    });
     expect(screen.getByTitle("B 站视频播放器 BV BV1xx411c7mD")).toHaveAttribute(
       "src",
       "https://player.bilibili.com/player.html?autoplay=1&bvid=BV1xx411c7mD",
@@ -242,8 +345,7 @@ describe("AppWorkspace integration", () => {
   });
 
   it("loads a Bilibili live room in the official live player", async () => {
-    const user = userEvent.setup();
-    render(<AppWorkspace player={createPlayerPortTestDouble().player} />);
+    const { bilibiliMetadataLoader, user } = renderVideoWorkspace();
 
     await user.click(screen.getByRole("button", { name: "听视频" }));
     await user.type(
@@ -253,6 +355,15 @@ describe("AppWorkspace integration", () => {
     await user.click(screen.getByRole("button", { name: "载入" }));
 
     expect(screen.getByText("已载入 直播间 23058")).toBeInTheDocument();
+    expect(await screen.findByText("直播测试标题")).toBeInTheDocument();
+    expect(screen.getByAltText("直播测试标题 封面")).toHaveAttribute(
+      "src",
+      "https://i0.hdslb.com/live-cover.jpg",
+    );
+    expect(bilibiliMetadataLoader).toHaveBeenCalledWith({
+      kind: "live",
+      value: "23058",
+    });
     expect(screen.getByTitle("B 站直播播放器 直播间 23058")).toHaveAttribute(
       "src",
       "https://www.bilibili.com/blackboard/live/live-activity-player.html?cid=23058&mute=0",
@@ -260,8 +371,7 @@ describe("AppWorkspace integration", () => {
   });
 
   it("pauses and resumes the official listening source from the outer controls", async () => {
-    const user = userEvent.setup();
-    render(<AppWorkspace player={createPlayerPortTestDouble().player} />);
+    const { user } = renderVideoWorkspace();
 
     await user.click(screen.getByRole("button", { name: "听视频" }));
     await user.type(screen.getByLabelText("视频或直播链接"), "BV1xx411c7mD");
@@ -286,8 +396,7 @@ describe("AppWorkspace integration", () => {
   });
 
   it("controls Bilibili live playback volume through the official iframe API", async () => {
-    const user = userEvent.setup();
-    render(<AppWorkspace player={createPlayerPortTestDouble().player} />);
+    const { user } = renderVideoWorkspace();
 
     await user.click(screen.getByRole("button", { name: "听视频" }));
     await user.type(
@@ -329,8 +438,7 @@ describe("AppWorkspace integration", () => {
   });
 
   it("keeps the official player collapsed by default while still mounted", async () => {
-    const user = userEvent.setup();
-    render(<AppWorkspace player={createPlayerPortTestDouble().player} />);
+    const { user } = renderVideoWorkspace();
 
     await user.click(screen.getByRole("button", { name: "听视频" }));
     await user.type(screen.getByLabelText("视频或直播链接"), "BV1xx411c7mD");

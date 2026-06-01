@@ -30,9 +30,36 @@
   font-weight: 760;
 }
 
+.custom-audio-action {
+  display: flex;
+  align-items: center;
+  justify-content: end;
+  gap: 10px;
+}
+
+.custom-audio-upload-note {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
 @media (max-width: 680px) {
   .custom-audio-panel {
     grid-template-columns: 1fr;
     align-items: start;
+  }
+
+  .custom-audio-action {
+    width: 100%;
+    align-items: stretch;
+    justify-content: stretch;
+  }
+
+  .custom-audio-upload-note {
+    display: grid;
+    min-height: 44px;
+    align-items: center;
+    white-space: normal;
   }
 }

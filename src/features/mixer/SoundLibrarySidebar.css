@@ -1,0 +1,5 @@
+.sound-library-sidebar {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
