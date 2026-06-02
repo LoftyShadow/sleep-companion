@@ -1,6 +1,4 @@
 import { useCallback, useMemo, useState } from "react";
-import { AccountView } from "../account/AccountView";
-import type { PasswordLogin } from "../account/authApi";
 import { AudiobookView } from "../audiobook/AudiobookView";
 import { createTtsEngine } from "../audiobook/createTtsEngine";
 import type { TtsEnginePort } from "../audiobook/TtsEnginePort";
@@ -19,14 +17,12 @@ import "./AppWorkspace.css";
 import "./AppWorkspace.mobile.css";
 
 interface AppWorkspaceProps {
-  authLogin?: PasswordLogin;
   bilibiliMetadataLoader?: BilibiliMetadataLoader;
   player?: PlayerPort;
   ttsEngine?: TtsEnginePort;
 }
 
 export function AppWorkspace({
-  authLogin,
   bilibiliMetadataLoader,
   player,
   ttsEngine,
@@ -152,13 +148,6 @@ export function AppWorkspace({
           ) : null}
         </section>
 
-        <section
-          className="app-mode-panel"
-          hidden={activeAppMode !== "account"}
-          aria-label="我的"
-        >
-          <AccountView login={authLogin} />
-        </section>
       </main>
 
       <div

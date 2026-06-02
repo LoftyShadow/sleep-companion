@@ -235,24 +235,6 @@ describe("AppWorkspace integration", () => {
     );
   });
 
-  it("opens the account login view without stopping ambient sounds", async () => {
-    const user = userEvent.setup();
-    const { play, player, stopAll } = createPlayerPortTestDouble();
-    render(<AppWorkspace player={player} />);
-
-    await user.click(screen.getByRole("button", { name: "大雨" }));
-    await user.click(screen.getByRole("button", { name: "我的" }));
-
-    expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
-    expect(screen.getByLabelText("邮箱")).toBeInTheDocument();
-    expect(screen.getByLabelText("密码")).toBeInTheDocument();
-    expect(play).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "heavy_rain" }),
-      0.62,
-    );
-    expect(stopAll).not.toHaveBeenCalled();
-  });
-
   it("imports an EPUB book as pre-segmented audiobook content", async () => {
     const user = userEvent.setup();
     const { engine, speak } = createTtsEngineTestDouble();

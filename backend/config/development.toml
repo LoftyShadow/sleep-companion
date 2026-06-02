@@ -1,5 +1,0 @@
-[database]
-database = "sleep_companion_dev"
-
-[auth]
-jwt_secret = "development-only-change-me"
