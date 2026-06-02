@@ -67,7 +67,9 @@ describe("AppTitleBar", () => {
     expect(screen.getByRole("button", { name: "最小化窗口" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "最大化窗口" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "关闭窗口" })).toBeInTheDocument();
-    expect(document.documentElement).toHaveClass("has-desktop-title-bar");
+    await waitFor(() => {
+      expect(document.documentElement).toHaveClass("has-desktop-title-bar");
+    });
     expect(document.documentElement).not.toHaveClass("has-mobile-safe-area");
   });
 

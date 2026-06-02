@@ -8,6 +8,11 @@ const DATABASE_NAME = "sleep-companion-custom-sounds";
 const DATABASE_VERSION = 1;
 const STORE_NAME = "custom-sounds";
 const CUSTOM_SOUND_IMAGE_SRC = "/images/sounds/typewriter.webp";
+export const CUSTOM_SOUND_MAX_FILE_BYTES = 100 * 1024 * 1024;
+export const CUSTOM_SOUND_MAX_BATCH_BYTES = 300 * 1024 * 1024;
+const CUSTOM_SOUND_STORAGE_HEADROOM_BYTES = 16 * 1024 * 1024;
+const STORAGE_SPACE_ERROR_MESSAGE =
+  "本地存储空间不足，请移除一些自定义音频后再添加";
 
 const SUPPORTED_EXTENSIONS = new Set([
   ".aac",
@@ -64,7 +69,53 @@ function createTransactionError(
   request?: IDBRequest,
 ): Error {
   const error = request?.error ?? transaction.error;
+  if (isQuotaExceededError(error)) {
+    return new Error(STORAGE_SPACE_ERROR_MESSAGE);
+  }
+
   return error instanceof Error ? error : new Error(fallbackMessage);
+}
+
+function createPersistenceError(fallbackMessage: string, error: unknown): Error {
+  if (isQuotaExceededError(error)) {
+    return new Error(STORAGE_SPACE_ERROR_MESSAGE);
+  }
+
+  return error instanceof Error ? error : new Error(fallbackMessage);
+}
+
+function isQuotaExceededError(error: unknown): boolean {
+  const errorLike = error as { code?: unknown; name?: unknown };
+  return (
+    errorLike.name === "QuotaExceededError" ||
+    errorLike.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+    errorLike.code === 22 ||
+    errorLike.code === 1014
+  );
+}
+
+function formatFileSize(bytes: number): string {
+  return `${Math.round(bytes / 1024 / 1024)} MB`;
+}
+
+async function estimateAvailableStorageBytes(): Promise<number | null> {
+  if (typeof navigator === "undefined" || !navigator.storage?.estimate) {
+    return null;
+  }
+
+  try {
+    const estimate = await navigator.storage.estimate();
+    if (
+      typeof estimate.quota !== "number" ||
+      typeof estimate.usage !== "number"
+    ) {
+      return null;
+    }
+
+    return Math.max(estimate.quota - estimate.usage, 0);
+  } catch {
+    return null;
+  }
 }
 
 function createCustomSoundId(): CustomSoundId {
@@ -111,6 +162,34 @@ export function isSupportedCustomAudioFile(file: File): boolean {
   }
 
   return SUPPORTED_EXTENSIONS.has(getFileExtension(file.name));
+}
+
+export async function validateCustomSoundFilesForImport(
+  files: readonly File[],
+): Promise<void> {
+  const oversizedFile = files.find(
+    (file) => file.size > CUSTOM_SOUND_MAX_FILE_BYTES,
+  );
+  if (oversizedFile) {
+    throw new Error(
+      `单个音频不能超过 ${formatFileSize(CUSTOM_SOUND_MAX_FILE_BYTES)}：${oversizedFile.name}`,
+    );
+  }
+
+  const batchSize = files.reduce((totalBytes, file) => totalBytes + file.size, 0);
+  if (batchSize > CUSTOM_SOUND_MAX_BATCH_BYTES) {
+    throw new Error(
+      `批量添加音频不能超过 ${formatFileSize(CUSTOM_SOUND_MAX_BATCH_BYTES)}`,
+    );
+  }
+
+  const availableBytes = await estimateAvailableStorageBytes();
+  if (
+    availableBytes !== null &&
+    batchSize + CUSTOM_SOUND_STORAGE_HEADROOM_BYTES > availableBytes
+  ) {
+    throw new Error(STORAGE_SPACE_ERROR_MESSAGE);
+  }
 }
 
 export function getCustomSoundName(fileName: string): string {
@@ -219,7 +298,7 @@ export async function saveCustomSoundFile(
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(STORE_NAME, "readwrite");
     const store = transaction.objectStore(STORE_NAME);
-    const request = store.put(record);
+    let request: IDBRequest<IDBValidKey>;
     let isSettled = false;
 
     const rejectOnce = (error: Error) => {
@@ -230,6 +309,13 @@ export async function saveCustomSoundFile(
       database.close();
       reject(error);
     };
+
+    try {
+      request = store.put(record);
+    } catch (error) {
+      rejectOnce(createPersistenceError("保存自定义音频失败", error));
+      return;
+    }
 
     request.onsuccess = () => undefined;
 

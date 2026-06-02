@@ -16,7 +16,7 @@ use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use rand::{rngs::OsRng as TokenOsRng, RngCore};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DbErr, EntityTrait,
-    QueryFilter, Set, SqlErr, TransactionTrait,
+    QueryFilter, Set, SqlErr, Statement, TransactionTrait,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -494,43 +494,79 @@ async fn record_failed_login(
     let blocked_until = now + Duration::seconds(config.block_seconds as i64);
 
     for key in keys {
-        let current_record = login_rate_limits::Entity::find()
-            .filter(login_rate_limits::Column::KeyKind.eq(key.kind))
-            .filter(login_rate_limits::Column::KeyHash.eq(key.hash.clone()))
-            .filter(login_rate_limits::Column::WindowStartedAt.eq(window_started_at))
-            .filter(login_rate_limits::Column::DeletedAt.is_null())
-            .one(db)
-            .await?;
-
-        if let Some(record) = current_record {
-            let next_attempts = record.attempts.saturating_add(1);
-            let mut active_model: login_rate_limits::ActiveModel = record.into();
-            active_model.attempts = Set(next_attempts);
-            active_model.updated_at = Set(now);
-            if next_attempts >= key.max_attempts {
-                active_model.blocked_until = Set(Some(blocked_until));
-            }
-            active_model.update(db).await?;
-        } else {
-            let attempts = 1;
-            login_rate_limits::ActiveModel {
-                id: Set(id_generator.next_id()),
-                key_kind: Set(key.kind.to_string()),
-                key_hash: Set(key.hash.clone()),
-                window_started_at: Set(window_started_at),
-                attempts: Set(attempts),
-                blocked_until: Set((attempts >= key.max_attempts).then_some(blocked_until)),
-                created_at: Set(now),
-                updated_at: Set(now),
-                deleted_at: Set(None),
-                created_by: Set(None),
-                updated_by: Set(None),
-                metadata: Set(json!({})),
-            }
-            .insert(db)
-            .await?;
-        }
+        upsert_failed_login_record(
+            db,
+            id_generator.next_id(),
+            key,
+            window_started_at,
+            blocked_until,
+            now,
+        )
+        .await?;
     }
+
+    Ok(())
+}
+
+async fn upsert_failed_login_record(
+    db: &DatabaseConnection,
+    id: i64,
+    key: &LoginRateLimitKey,
+    window_started_at: DateTime<Utc>,
+    blocked_until: DateTime<Utc>,
+    now: DateTime<Utc>,
+) -> Result<(), AuthError> {
+    db.execute(Statement::from_sql_and_values(
+        db.get_database_backend(),
+        r#"
+insert into login_rate_limits (
+    id,
+    key_kind,
+    key_hash,
+    window_started_at,
+    attempts,
+    blocked_until,
+    created_at,
+    updated_at,
+    deleted_at,
+    created_by,
+    updated_by,
+    metadata
+) values (
+    $1,
+    $2,
+    $3,
+    $4,
+    1,
+    case when 1 >= $5 then $6 else null end,
+    $7,
+    $8,
+    null,
+    null,
+    null,
+    '{}'::jsonb
+)
+on conflict (key_kind, key_hash, window_started_at) where deleted_at is null
+do update set
+    attempts = login_rate_limits.attempts + 1,
+    blocked_until = case
+        when login_rate_limits.attempts + 1 >= $5 then $6
+        else login_rate_limits.blocked_until
+    end,
+    updated_at = $8
+"#,
+        [
+            id.into(),
+            key.kind.into(),
+            key.hash.clone().into(),
+            window_started_at.into(),
+            key.max_attempts.into(),
+            blocked_until.into(),
+            now.into(),
+            now.into(),
+        ],
+    ))
+    .await?;
 
     Ok(())
 }

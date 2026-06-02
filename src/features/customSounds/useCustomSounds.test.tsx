@@ -8,6 +8,7 @@ import {
   isSupportedCustomAudioFile,
   listStoredCustomSounds,
   saveCustomSoundFile,
+  validateCustomSoundFilesForImport,
 } from "./customSoundStore";
 import { useCustomSounds } from "./useCustomSounds";
 
@@ -25,6 +26,7 @@ vi.mock("./customSoundStore", () => ({
   isSupportedCustomAudioFile: vi.fn(),
   listStoredCustomSounds: vi.fn(),
   saveCustomSoundFile: vi.fn(),
+  validateCustomSoundFilesForImport: vi.fn(),
 }));
 
 function createRecord(id: `custom:${string}`, name: string): StoredCustomSound {
@@ -57,6 +59,7 @@ describe("useCustomSounds", () => {
     vi.mocked(saveCustomSoundFile).mockResolvedValue(
       createRecord("custom:default", "默认音频"),
     );
+    vi.mocked(validateCustomSoundFilesForImport).mockResolvedValue(undefined);
     vi.mocked(deleteStoredCustomSound).mockResolvedValue(undefined);
   });
 
@@ -111,6 +114,31 @@ describe("useCustomSounds", () => {
     expect(result.current.customSoundMessage).toBe("已添加 1 个自定义音频");
     expect(result.current.customSoundErrorMessage).toBe(
       "有 1 个音频添加失败：bad.mp3",
+    );
+  });
+
+  it("stops importing when custom sound validation fails", async () => {
+    vi.mocked(validateCustomSoundFilesForImport).mockRejectedValue(
+      new Error("本地存储空间不足，请移除一些自定义音频后再添加"),
+    );
+    const { result } = renderHook(() => useCustomSounds());
+
+    await waitFor(() => {
+      expect(result.current.isLoadingCustomSounds).toBe(false);
+    });
+
+    let importedCount = 0;
+    await act(async () => {
+      const importedSounds = await result.current.addCustomSoundFiles([
+        new File(["audio"], "huge.mp3", { type: "audio/mpeg" }),
+      ]);
+      importedCount = importedSounds.length;
+    });
+
+    expect(importedCount).toBe(0);
+    expect(saveCustomSoundFile).not.toHaveBeenCalled();
+    expect(result.current.customSoundErrorMessage).toBe(
+      "本地存储空间不足，请移除一些自定义音频后再添加",
     );
   });
 });

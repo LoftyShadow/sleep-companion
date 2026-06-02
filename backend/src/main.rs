@@ -23,6 +23,7 @@ async fn main() -> anyhow::Result<()> {
         build_router(
             db,
             config.openapi,
+            config.cors,
             config.auth,
             config.rate_limit.login,
             id_generator,

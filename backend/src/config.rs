@@ -23,6 +23,7 @@ pub struct AppConfig {
     pub auth: AuthConfig,
     pub logging: LoggingConfig,
     pub openapi: OpenApiConfig,
+    pub cors: CorsConfig,
     pub scheduler: SchedulerConfig,
     pub rate_limit: RateLimitConfig,
 }
@@ -77,6 +78,12 @@ pub enum LogFormat {
 pub struct OpenApiConfig {
     pub enabled: bool,
     pub swagger_ui_enabled: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct CorsConfig {
+    pub permissive: bool,
+    pub allowed_origins: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -268,6 +275,13 @@ mod tests {
             openapi: OpenApiConfig {
                 enabled: true,
                 swagger_ui_enabled: true,
+            },
+            cors: CorsConfig {
+                permissive: true,
+                allowed_origins: vec![
+                    "http://localhost:1420".to_string(),
+                    "http://127.0.0.1:1420".to_string(),
+                ],
             },
             scheduler: SchedulerConfig {
                 enabled: false,

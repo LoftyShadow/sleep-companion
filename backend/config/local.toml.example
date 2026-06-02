@@ -16,3 +16,8 @@ ssl_mode = "disable"
 
 [auth]
 jwt_secret = "replace-with-local-secret"
+
+# 生产或远程 Web 调用时设置真实允许来源；本地默认保持宽松。
+# [cors]
+# permissive = false
+# allowed_origins = ["https://example.com"]

@@ -12,5 +12,9 @@ write_to_file = false
 enabled = false
 swagger_ui_enabled = false
 
+[cors]
+permissive = false
+allowed_origins = []
+
 [scheduler]
 enabled = false

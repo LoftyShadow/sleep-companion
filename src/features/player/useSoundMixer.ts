@@ -76,6 +76,22 @@ function getSoundPlaybackErrorMessage(error: unknown): string {
   return "播放失败，请稍后重试";
 }
 
+function toPlaybackError(error: unknown): Error {
+  if (error instanceof Error) {
+    return error;
+  }
+
+  const errorLike = error as { message?: unknown; name?: unknown };
+  const message =
+    typeof errorLike.message === "string" ? errorLike.message : String(error);
+  const playbackError = new Error(message);
+  if (typeof errorLike.name === "string") {
+    playbackError.name = errorLike.name;
+  }
+
+  return playbackError;
+}
+
 export function useSoundMixer({
   sounds,
   player,
@@ -249,16 +265,30 @@ export function useSoundMixer({
 
   const playSoundIds = useCallback(
     async (soundIds: SoundId[], nextVolumes: VolumeState) => {
-      const playedSoundIds: SoundId[] = [];
-
-      for (const soundId of uniqueSoundIds(soundIds)) {
+      const playRequests = uniqueSoundIds(soundIds).flatMap((soundId) => {
         const sound = soundById.get(soundId);
         if (!sound) {
-          continue;
+          return [];
         }
 
-        await player.play(sound, getSoundVolume(nextVolumes, soundId));
-        playedSoundIds.push(soundId);
+        return [
+          player.play(sound, getSoundVolume(nextVolumes, soundId)).then(() => soundId),
+        ];
+      });
+      const results = await Promise.allSettled(playRequests);
+      const playedSoundIds: SoundId[] = [];
+      let playbackError: Error | null = null;
+
+      for (const result of results) {
+        if (result.status === "fulfilled") {
+          playedSoundIds.push(result.value);
+        } else {
+          playbackError ??= toPlaybackError(result.reason);
+        }
+      }
+
+      if (playbackError) {
+        throw playbackError;
       }
 
       return playedSoundIds;

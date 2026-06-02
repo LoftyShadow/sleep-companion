@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { AccountView } from "../account/AccountView";
 import type { PasswordLogin } from "../account/authApi";
 import { AudiobookView } from "../audiobook/AudiobookView";
@@ -7,13 +6,6 @@ import { createTtsEngine } from "../audiobook/createTtsEngine";
 import type { TtsEnginePort } from "../audiobook/TtsEnginePort";
 import { SoundMixerView } from "../mixer/SoundMixerView";
 import type { PlayerPort } from "../player/PlayerPort";
-import {
-  DEFAULT_PLAYBACK_CONTROL_STATES,
-  INITIAL_PLAYBACK_CONTROL_REQUEST_IDS,
-  PLAYBACK_MODULE_IDS,
-  type PlaybackControlState,
-  type PlaybackModuleId,
-} from "../playbackControl/playbackControlTypes";
 import { useRuntimePlayer } from "../player/useRuntimePlayer";
 import { useGlobalSleepTimer } from "../sleepTimer/useGlobalSleepTimer";
 import { VideoListeningView } from "../videoListening/VideoListeningView";
@@ -21,6 +13,8 @@ import type { BilibiliMetadataLoader } from "../videoListening/bilibiliMetadata"
 import { AppModeSwitcher } from "./AppModeSwitcher";
 import { APP_MODE_WORKSPACE_LABELS, type AppMode } from "./appModeTypes";
 import { FloatingPlaybackControl } from "./FloatingPlaybackControl";
+import { usePlaybackControlBus } from "./usePlaybackControlBus";
+import { useWorkspaceScrollIndicator } from "./useWorkspaceScrollIndicator";
 import "./AppWorkspace.css";
 import "./AppWorkspace.mobile.css";
 
@@ -31,253 +25,50 @@ interface AppWorkspaceProps {
   ttsEngine?: TtsEnginePort;
 }
 
-interface ScrollIndicatorState {
-  isVisible: boolean;
-  thumbHeight: number;
-  thumbOffset: number;
-}
-
-const hiddenScrollIndicator: ScrollIndicatorState = {
-  isVisible: false,
-  thumbHeight: 0,
-  thumbOffset: 0,
-};
-
-function getScrollIndicatorState(shell: HTMLElement): ScrollIndicatorState {
-  const scrollableHeight = shell.scrollHeight - shell.clientHeight;
-  if (scrollableHeight <= 0) {
-    return hiddenScrollIndicator;
-  }
-
-  const trackHeight = Math.max(shell.clientHeight - 16, 1);
-  const thumbHeight = Math.max(
-    48,
-    Math.round((shell.clientHeight / shell.scrollHeight) * trackHeight),
-  );
-  const maxThumbOffset = Math.max(trackHeight - thumbHeight, 0);
-  const thumbOffset = Math.round(
-    (shell.scrollTop / scrollableHeight) * maxThumbOffset,
-  );
-
-  return {
-    isVisible: true,
-    thumbHeight,
-    thumbOffset,
-  };
-}
-
-function resetWorkspaceScroll(shell: HTMLElement | null): void {
-  if (shell) {
-    shell.scrollTop = 0;
-  }
-
-  document.documentElement.scrollTop = 0;
-  document.body.scrollTop = 0;
-
-  if (window.scrollY > 0) {
-    window.scrollTo?.({ left: 0, top: 0, behavior: "auto" });
-  }
-}
-
-function hasSamePlaybackControlState(
-  currentState: PlaybackControlState,
-  nextState: PlaybackControlState,
-): boolean {
-  return (
-    currentState.actionLabel === nextState.actionLabel &&
-    currentState.canToggle === nextState.canToggle &&
-    currentState.status === nextState.status &&
-    currentState.summary === nextState.summary
-  );
-}
-
 export function AppWorkspace({
   authLogin,
   bilibiliMetadataLoader,
   player,
   ttsEngine,
 }: AppWorkspaceProps) {
-  const shellRef = useRef<HTMLElement>(null);
-  const scrollHideTimerRef = useRef<number | null>(null);
-  const playbackCommandIdRef = useRef(0);
-  const [scrollIndicator, setScrollIndicator] = useState<ScrollIndicatorState>(
-    hiddenScrollIndicator,
-  );
   const [activeAppMode, setActiveAppMode] = useState<AppMode>("mixer");
-  const [hasOpenedAudiobook, setHasOpenedAudiobook] = useState(false);
-  const [hasOpenedVideo, setHasOpenedVideo] = useState(false);
-  const [playbackControlStates, setPlaybackControlStates] = useState(
-    DEFAULT_PLAYBACK_CONTROL_STATES,
-  );
-  const [playbackControlRequestIds, setPlaybackControlRequestIds] = useState(
-    INITIAL_PLAYBACK_CONTROL_REQUEST_IDS,
-  );
+  const {
+    handleShellScroll,
+    resetScrollPosition,
+    scrollIndicator,
+    scrollIndicatorStyle,
+    shellRef,
+  } = useWorkspaceScrollIndicator();
   const activePlayer = useRuntimePlayer(player);
   const sleepTimer = useGlobalSleepTimer();
   const audiobookEngine = useMemo(
     () => ttsEngine ?? createTtsEngine(),
     [ttsEngine],
   );
-  const handleAppModeChange = useCallback((mode: AppMode) => {
-    resetWorkspaceScroll(shellRef.current);
-    if (scrollHideTimerRef.current !== null) {
-      window.clearTimeout(scrollHideTimerRef.current);
-      scrollHideTimerRef.current = null;
-    }
-    setScrollIndicator(hiddenScrollIndicator);
+
+  const openAppMode = useCallback((mode: AppMode) => {
+    resetScrollPosition();
     setActiveAppMode(mode);
-    if (mode === "audiobook") {
-      setHasOpenedAudiobook(true);
-    }
-    if (mode === "video") {
-      setHasOpenedVideo(true);
-    }
-    const scheduleScrollReset =
-      window.requestAnimationFrame ??
-      ((callback: FrameRequestCallback) => window.setTimeout(callback, 0));
-    scheduleScrollReset(() => {
-      resetWorkspaceScroll(shellRef.current);
-    });
-  }, []);
-  const updatePlaybackControlState = useCallback(
-    (moduleId: PlaybackModuleId, nextState: PlaybackControlState) => {
-      setPlaybackControlStates((currentStates) => {
-        if (hasSamePlaybackControlState(currentStates[moduleId], nextState)) {
-          return currentStates;
-        }
-
-        return {
-          ...currentStates,
-          [moduleId]: nextState,
-        };
-      });
+  }, [resetScrollPosition]);
+  const {
+    handleAudiobookPlaybackControlStateChange,
+    handleMixerPlaybackControlStateChange,
+    handleVideoPlaybackControlStateChange,
+    hasOpenedAudiobook,
+    hasOpenedVideo,
+    markModeOpened,
+    playbackControlRequestIds,
+    playbackControlStates,
+    requestGlobalPlaybackToggle,
+    requestModulePlaybackToggle,
+  } = usePlaybackControlBus(openAppMode);
+  const handleAppModeChange = useCallback(
+    (mode: AppMode) => {
+      markModeOpened(mode);
+      openAppMode(mode);
     },
-    [],
+    [markModeOpened, openAppMode],
   );
-  const handleMixerPlaybackControlStateChange = useCallback(
-    (nextState: PlaybackControlState) => {
-      updatePlaybackControlState("mixer", nextState);
-    },
-    [updatePlaybackControlState],
-  );
-  const handleAudiobookPlaybackControlStateChange = useCallback(
-    (nextState: PlaybackControlState) => {
-      updatePlaybackControlState("audiobook", nextState);
-    },
-    [updatePlaybackControlState],
-  );
-  const handleVideoPlaybackControlStateChange = useCallback(
-    (nextState: PlaybackControlState) => {
-      updatePlaybackControlState("video", nextState);
-    },
-    [updatePlaybackControlState],
-  );
-  const issuePlaybackControlRequests = useCallback(
-    (moduleIds: PlaybackModuleId[]) => {
-      if (moduleIds.length === 0) {
-        return;
-      }
-
-      if (moduleIds.includes("audiobook")) {
-        setHasOpenedAudiobook(true);
-      }
-      if (moduleIds.includes("video")) {
-        setHasOpenedVideo(true);
-      }
-
-      setPlaybackControlRequestIds((currentRequestIds) => {
-        const nextRequestIds = { ...currentRequestIds };
-        for (const moduleId of moduleIds) {
-          playbackCommandIdRef.current += 1;
-          nextRequestIds[moduleId] = playbackCommandIdRef.current;
-        }
-
-        return nextRequestIds;
-      });
-    },
-    [],
-  );
-  const requestModulePlaybackToggle = useCallback(
-    (moduleId: PlaybackModuleId) => {
-      if (
-        moduleId === "audiobook" &&
-        playbackControlStates.audiobook.status === "unavailable"
-      ) {
-        handleAppModeChange("audiobook");
-        return;
-      }
-
-      if (
-        moduleId === "video" &&
-        playbackControlStates.video.status === "unavailable"
-      ) {
-        handleAppModeChange("video");
-        return;
-      }
-
-      issuePlaybackControlRequests([moduleId]);
-    },
-    [
-      handleAppModeChange,
-      issuePlaybackControlRequests,
-      playbackControlStates.audiobook.status,
-      playbackControlStates.video.status,
-    ],
-  );
-  const requestGlobalPlaybackToggle = useCallback(() => {
-    const hasActivePlayback = PLAYBACK_MODULE_IDS.some(
-      (moduleId) => playbackControlStates[moduleId].status === "playing",
-    );
-    const targetModuleIds = PLAYBACK_MODULE_IDS.filter((moduleId) => {
-      const control = playbackControlStates[moduleId];
-      if (!control.canToggle) {
-        return false;
-      }
-      if (moduleId === "video" && control.status === "unavailable") {
-        return false;
-      }
-      if (hasActivePlayback) {
-        return control.status === "playing";
-      }
-
-      return control.status === "idle" || control.status === "paused";
-    });
-
-    issuePlaybackControlRequests(targetModuleIds);
-  }, [issuePlaybackControlRequests, playbackControlStates]);
-
-  useEffect(() => {
-    return () => {
-      if (scrollHideTimerRef.current !== null) {
-        window.clearTimeout(scrollHideTimerRef.current);
-      }
-    };
-  }, []);
-
-  const handleShellScroll = useCallback(() => {
-    const shell = shellRef.current;
-    if (!shell) {
-      return;
-    }
-
-    setScrollIndicator(getScrollIndicatorState(shell));
-    if (scrollHideTimerRef.current !== null) {
-      window.clearTimeout(scrollHideTimerRef.current);
-    }
-
-    scrollHideTimerRef.current = window.setTimeout(() => {
-      setScrollIndicator((current) => ({
-        ...current,
-        isVisible: false,
-      }));
-      scrollHideTimerRef.current = null;
-    }, 900);
-  }, []);
-
-  const scrollIndicatorStyle = {
-    "--scroll-thumb-height": `${scrollIndicator.thumbHeight}px`,
-    "--scroll-thumb-offset": `${scrollIndicator.thumbOffset}px`,
-  } as CSSProperties;
 
   return (
     <>

@@ -6,6 +6,7 @@ import {
   isSupportedCustomAudioFile,
   listStoredCustomSounds,
   saveCustomSoundFile,
+  validateCustomSoundFilesForImport,
   type StoredCustomSound,
 } from "./customSoundStore";
 
@@ -103,6 +104,16 @@ export function useCustomSounds() {
       );
       if (unsupportedFile) {
         setCustomSoundErrorMessage(`不支持的音频文件：${unsupportedFile.name}`);
+        setCustomSoundMessage(null);
+        return [] as SoundDefinition[];
+      }
+
+      try {
+        await validateCustomSoundFilesForImport(audioFiles);
+      } catch (error) {
+        setCustomSoundErrorMessage(
+          getErrorMessage(error, "添加自定义音频失败"),
+        );
         setCustomSoundMessage(null);
         return [] as SoundDefinition[];
       }

@@ -29,6 +29,13 @@ file_path = "backend/logs/backend-dev.log"
 enabled = true
 swagger_ui_enabled = true
 
+[cors]
+permissive = true
+allowed_origins = [
+  "http://localhost:1420",
+  "http://127.0.0.1:1420",
+]
+
 [scheduler]
 enabled = true
 

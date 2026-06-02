@@ -2,20 +2,24 @@ use std::sync::Arc;
 
 use axum::{
     extract::{Extension, State},
+    http::{HeaderValue, Method},
     middleware,
     routing::{get, post},
     Json, Router,
 };
 use sea_orm::DatabaseConnection;
 use serde::Serialize;
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::{
+    cors::{AllowOrigin, Any, CorsLayer},
+    trace::TraceLayer,
+};
 use utoipa::OpenApi;
 use utoipa::ToSchema;
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::{
     auth,
-    config::{AuthConfig, LoginRateLimitConfig, OpenApiConfig},
+    config::{AuthConfig, CorsConfig, LoginRateLimitConfig, OpenApiConfig},
     db::ping_database,
     error::ApiError,
     id::IdGenerator,
@@ -40,6 +44,7 @@ pub struct HealthResponse {
 pub fn build_router(
     db: DatabaseConnection,
     openapi: OpenApiConfig,
+    cors: CorsConfig,
     auth: AuthConfig,
     login_rate_limit: LoginRateLimitConfig,
     id_generator: Arc<dyn IdGenerator>,
@@ -56,7 +61,7 @@ pub fn build_router(
             id_generator,
         })
         .layer(middleware::from_fn(request_id_middleware))
-        .layer(CorsLayer::permissive())
+        .layer(build_cors_layer(&cors))
         .layer(TraceLayer::new_for_http());
 
     if openapi.enabled && openapi.swagger_ui_enabled {
@@ -65,6 +70,23 @@ pub fn build_router(
     }
 
     router
+}
+
+fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
+    if config.permissive {
+        return CorsLayer::permissive();
+    }
+
+    let allowed_origins = config
+        .allowed_origins
+        .iter()
+        .filter_map(|origin| origin.trim().parse::<HeaderValue>().ok())
+        .collect::<Vec<_>>();
+
+    CorsLayer::new()
+        .allow_origin(AllowOrigin::list(allowed_origins))
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers(Any)
 }
 
 #[utoipa::path(
@@ -118,7 +140,7 @@ mod tests {
     };
     use axum::{body::Body, http::Request};
     use chrono::Utc;
-    use sea_orm::{DatabaseBackend, MockDatabase};
+    use sea_orm::{DatabaseBackend, DatabaseConnection, MockDatabase, MockExecResult};
     use serde_json::{json, Value};
     use tower::ServiceExt;
 
@@ -163,6 +185,23 @@ mod tests {
         }
     }
 
+    fn test_openapi_config() -> OpenApiConfig {
+        OpenApiConfig {
+            enabled: false,
+            swagger_ui_enabled: false,
+        }
+    }
+
+    fn test_cors_config() -> CorsConfig {
+        CorsConfig {
+            permissive: true,
+            allowed_origins: vec![
+                "http://localhost:1420".to_string(),
+                "http://127.0.0.1:1420".to_string(),
+            ],
+        }
+    }
+
     fn test_login_rate_limit_config() -> LoginRateLimitConfig {
         LoginRateLimitConfig {
             window_seconds: 900,
@@ -179,6 +218,24 @@ mod tests {
 
     fn sequential_id_generator(next_id: i64) -> Arc<dyn IdGenerator> {
         Arc::new(SequentialIdGenerator::new(next_id))
+    }
+
+    fn build_test_router(db: DatabaseConnection) -> Router {
+        build_test_router_with_id_generator(db, test_id_generator())
+    }
+
+    fn build_test_router_with_id_generator(
+        db: DatabaseConnection,
+        id_generator: Arc<dyn IdGenerator>,
+    ) -> Router {
+        build_router(
+            db,
+            test_openapi_config(),
+            test_cors_config(),
+            test_auth_config(),
+            test_login_rate_limit_config(),
+            id_generator,
+        )
     }
 
     fn test_user(
@@ -213,27 +270,35 @@ mod tests {
             .append_query_results([vec![credentials]])
     }
 
+    fn failed_login_exec_results() -> [MockExecResult; 3] {
+        [
+            MockExecResult {
+                last_insert_id: 0,
+                rows_affected: 1,
+            },
+            MockExecResult {
+                last_insert_id: 0,
+                rows_affected: 1,
+            },
+            MockExecResult {
+                last_insert_id: 0,
+                rows_affected: 1,
+            },
+        ]
+    }
+
     #[tokio::test]
     async fn healthz_returns_ok_and_request_id_header() {
         let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
-        let response = build_router(
-            db,
-            OpenApiConfig {
-                enabled: false,
-                swagger_ui_enabled: false,
-            },
-            test_auth_config(),
-            test_login_rate_limit_config(),
-            test_id_generator(),
-        )
-        .oneshot(
-            Request::builder()
-                .uri("/healthz")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+        let response = build_test_router(db)
+            .oneshot(
+                Request::builder()
+                    .uri("/healthz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
 
         assert_eq!(response.status(), axum::http::StatusCode::OK);
         assert!(response.headers().contains_key("x-request-id"));
@@ -242,27 +307,18 @@ mod tests {
     #[tokio::test]
     async fn login_rejects_invalid_request_with_envelope_request_id() {
         let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
-        let response = build_router(
-            db,
-            OpenApiConfig {
-                enabled: false,
-                swagger_ui_enabled: false,
-            },
-            test_auth_config(),
-            test_login_rate_limit_config(),
-            test_id_generator(),
-        )
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/auth/login")
-                .header("content-type", "application/json")
-                .header("x-request-id", "req_test_invalid_login")
-                .body(Body::from(r#"{"email":"","password":"123"}"#))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+        let response = build_test_router(db)
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/auth/login")
+                    .header("content-type", "application/json")
+                    .header("x-request-id", "req_test_invalid_login")
+                    .body(Body::from(r#"{"email":"","password":"123"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
 
         assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
         assert_eq!(
@@ -303,51 +359,23 @@ mod tests {
             updated_by: None,
             metadata: json!({}),
         };
-        let rate_limit_insert_result = login_rate_limits::Model {
-            id: 739_182_738_912_312_322,
-            key_kind: "ip".to_string(),
-            key_hash: vec![1, 2, 3, 4],
-            window_started_at: now,
-            attempts: 1,
-            blocked_until: None,
-            created_at: now,
-            updated_at: now,
-            deleted_at: None,
-            created_by: None,
-            updated_by: None,
-            metadata: json!({}),
-        };
         let db = mock_login_user(user, credentials)
-            .append_query_results([Vec::<login_rate_limits::Model>::new()])
-            .append_query_results([vec![rate_limit_insert_result.clone()]])
-            .append_query_results([Vec::<login_rate_limits::Model>::new()])
-            .append_query_results([vec![rate_limit_insert_result.clone()]])
-            .append_query_results([Vec::<login_rate_limits::Model>::new()])
-            .append_query_results([vec![rate_limit_insert_result]])
+            .append_exec_results(failed_login_exec_results())
             .into_connection();
 
-        let response = build_router(
-            db,
-            OpenApiConfig {
-                enabled: false,
-                swagger_ui_enabled: false,
-            },
-            test_auth_config(),
-            test_login_rate_limit_config(),
-            test_id_generator(),
-        )
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/auth/login")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    r#"{"email":"user@example.com","password":"wrong-password"}"#,
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+        let response = build_test_router(db)
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"email":"user@example.com","password":"wrong-password"}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
 
         assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
@@ -381,29 +409,20 @@ mod tests {
             .append_query_results([vec![rate_limited_record]])
             .into_connection();
 
-        let response = build_router(
-            db,
-            OpenApiConfig {
-                enabled: false,
-                swagger_ui_enabled: false,
-            },
-            test_auth_config(),
-            test_login_rate_limit_config(),
-            test_id_generator(),
-        )
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/auth/login")
-                .header("content-type", "application/json")
-                .header("x-forwarded-for", "203.0.113.10")
-                .body(Body::from(
-                    r#"{"email":"user@example.com","password":"secret123"}"#,
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+        let response = build_test_router(db)
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/auth/login")
+                    .header("content-type", "application/json")
+                    .header("x-forwarded-for", "203.0.113.10")
+                    .body(Body::from(
+                        r#"{"email":"user@example.com","password":"secret123"}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
 
         assert_eq!(response.status(), axum::http::StatusCode::TOO_MANY_REQUESTS);
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
@@ -459,28 +478,19 @@ mod tests {
             .append_query_results([vec![refresh_session]])
             .into_connection();
 
-        let response = build_router(
-            db,
-            OpenApiConfig {
-                enabled: false,
-                swagger_ui_enabled: false,
-            },
-            test_auth_config(),
-            test_login_rate_limit_config(),
-            test_id_generator(),
-        )
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/auth/login")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    r#"{"email":"USER@example.com","password":"secret123"}"#,
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+        let response = build_test_router(db)
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/auth/login")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"email":"USER@example.com","password":"secret123"}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
 
         assert_eq!(response.status(), axum::http::StatusCode::OK);
 
@@ -543,16 +553,8 @@ mod tests {
             .append_query_results([vec![refresh_session]])
             .into_connection();
 
-        let response = build_router(
-            db,
-            OpenApiConfig {
-                enabled: false,
-                swagger_ui_enabled: false,
-            },
-            test_auth_config(),
-            test_login_rate_limit_config(),
-            sequential_id_generator(739_182_738_912_312_330),
-        )
+        let response =
+            build_test_router_with_id_generator(db, sequential_id_generator(739_182_738_912_312_330))
         .oneshot(
             Request::builder()
                 .method("POST")
@@ -589,28 +591,19 @@ mod tests {
             .append_query_results([vec![user]])
             .into_connection();
 
-        let response = build_router(
-            db,
-            OpenApiConfig {
-                enabled: false,
-                swagger_ui_enabled: false,
-            },
-            test_auth_config(),
-            test_login_rate_limit_config(),
-            test_id_generator(),
-        )
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/auth/register")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    r#"{"email":"user@example.com","password":"secret123"}"#,
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+        let response = build_test_router(db)
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/auth/register")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"email":"user@example.com","password":"secret123"}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
 
         assert_eq!(response.status(), axum::http::StatusCode::CONFLICT);
 
@@ -625,26 +618,17 @@ mod tests {
     #[tokio::test]
     async fn register_rejects_invalid_request() {
         let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
-        let response = build_router(
-            db,
-            OpenApiConfig {
-                enabled: false,
-                swagger_ui_enabled: false,
-            },
-            test_auth_config(),
-            test_login_rate_limit_config(),
-            test_id_generator(),
-        )
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/auth/register")
-                .header("content-type", "application/json")
-                .body(Body::from(r#"{"email":"","password":"123"}"#))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
+        let response = build_test_router(db)
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/auth/register")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"email":"","password":"123"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
 
         assert_eq!(response.status(), axum::http::StatusCode::BAD_REQUEST);
 
@@ -659,11 +643,53 @@ mod tests {
     #[tokio::test]
     async fn register_preflight_returns_cors_headers() {
         let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
+        let response = build_test_router(db)
+            .oneshot(
+                Request::builder()
+                    .method("OPTIONS")
+                    .uri("/api/auth/register")
+                    .header("origin", "http://localhost:1420")
+                    .header("access-control-request-method", "POST")
+                    .header("access-control-request-headers", "content-type")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get("access-control-allow-origin")
+                .unwrap(),
+            "*"
+        );
+        assert_eq!(
+            response
+                .headers()
+                .get("access-control-allow-methods")
+                .unwrap(),
+            "*"
+        );
+        assert_eq!(
+            response
+                .headers()
+                .get("access-control-allow-headers")
+                .unwrap(),
+            "*"
+        );
+    }
+
+    #[tokio::test]
+    async fn register_preflight_allows_configured_origin_when_cors_is_restricted() {
+        let db = MockDatabase::new(DatabaseBackend::Postgres).into_connection();
         let response = build_router(
             db,
-            OpenApiConfig {
-                enabled: false,
-                swagger_ui_enabled: false,
+            test_openapi_config(),
+            CorsConfig {
+                permissive: false,
+                allowed_origins: vec!["http://localhost:1420".to_string()],
             },
             test_auth_config(),
             test_login_rate_limit_config(),
@@ -688,21 +714,7 @@ mod tests {
                 .headers()
                 .get("access-control-allow-origin")
                 .unwrap(),
-            "*"
-        );
-        assert_eq!(
-            response
-                .headers()
-                .get("access-control-allow-methods")
-                .unwrap(),
-            "*"
-        );
-        assert_eq!(
-            response
-                .headers()
-                .get("access-control-allow-headers")
-                .unwrap(),
-            "*"
+            "http://localhost:1420"
         );
     }
 }

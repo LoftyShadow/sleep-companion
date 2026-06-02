@@ -223,6 +223,36 @@ describe("useSoundMixer", () => {
     );
   });
 
+  it("starts every preset sound before waiting for slow play promises", async () => {
+    const playRequests: Array<ReturnType<typeof createDeferred<void>>> = [];
+    const playerMocks = createPlayer();
+    const preset = BUILT_IN_PRESETS[0];
+    playerMocks.play.mockImplementation(() => {
+      const deferred = createDeferred<void>();
+      playRequests.push(deferred);
+      return deferred.promise;
+    });
+    const { result } = renderHook(() =>
+      useSoundMixer({ sounds: BUILT_IN_SOUNDS, player: playerMocks.player }),
+    );
+
+    await act(async () => {
+      const applyPreset = result.current.applyPreset(preset);
+      await Promise.resolve();
+
+      expect(playerMocks.play).toHaveBeenCalledTimes(preset.items.length);
+
+      for (const playRequest of playRequests) {
+        playRequest.resolve();
+      }
+      await applyPreset;
+    });
+
+    expect([...result.current.playingSoundIds]).toEqual(
+      preset.items.map((item) => item.soundId),
+    );
+  });
+
   it("uses the unified playback toggle to start and stop the current mix", async () => {
     const { play, player, stopAll } = createPlayer();
     const { result } = renderHook(() =>
