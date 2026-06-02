@@ -97,9 +97,9 @@ pnpm tauri android build --aab --ci
 推荐命令：
 
 ```bash
-rtk pnpm run check
-rtk git tag v0.1.0
-rtk git push origin v0.1.0
+pnpm run check
+git tag v0.1.0
+git push origin v0.1.0
 ```
 
 如果使用 GitHub 页面手动触发 workflow，`release_tag` 必须填写已经存在的 tag。
@@ -110,7 +110,7 @@ Windows 用户如果不想安装，可以下载 `windows-portable.zip`，解压�
 ## 验收标准
 
 - workflow YAML 语法可解析。
-- 本地 `rtk pnpm run check` 继续通过。
-- 本地 `rtk git diff --check` 通过。
+- 本地 `pnpm run check` 继续通过。
+- 本地 `git diff --check` 通过。
 - Android Release 产物不再上传 `*-unsigned.apk`，只上传通过 `apksigner verify` 的 `*-signed.apk`。
 - 不引入应用运行时代码改动。

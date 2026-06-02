@@ -19,25 +19,19 @@
 
 ## Shell 命令
 
-RTK 在本项目中指 Rust Token Killer，本地 shell-command proxy，不是 Redux Toolkit。
-
-- 运行 shell 命令时优先使用 `rtk` 包装。
-- 小输出命令也使用 `rtk`，例如 `rtk git status --short --branch`。
-- 测试、构建、lint、diff、log、tree、pnpm、cargo、pytest、vitest、playwright、docker、kubectl 等命令必须优先用 `rtk`。
-- 如果 RTK 不支持某个命令形状，允许回退到原生命令，并在说明中简要记录原因。
-- 需要完整原始输出时，用 `rtk proxy <command ...>` 或 `rtk run -c '<command>'`。
+运行 shell 命令时使用仓库和工具链的原生命令。需要压缩或过滤输出时，可以选择合适的本地工具，但不能隐藏影响判断的失败信息。
 
 常用命令：
 
 ```bash
-rtk pnpm run check
-rtk pnpm run lint
-rtk pnpm run test
-rtk pnpm run test:all
-rtk pnpm run build
-rtk pnpm run check:rust
-rtk git status --short --branch
-rtk git diff
+pnpm run check
+pnpm run lint
+pnpm run test
+pnpm run test:all
+pnpm run build
+pnpm run check:rust
+git status --short --branch
+git diff
 ```
 
 ## 项目技术栈
@@ -54,7 +48,7 @@ rtk git diff
 涉及代码、测试、依赖、构建、Tauri 配置、Rust、Android 或运行时行为的改动，必须运行：
 
 ```bash
-rtk pnpm run check
+pnpm run check
 ```
 
 这是本仓库主要本地质量门禁，覆盖：
@@ -72,7 +66,7 @@ rtk pnpm run check
 纯文档改动至少运行：
 
 ```bash
-rtk git diff --check
+git diff --check
 ```
 
 交付前还要扫描新增计划文档，确认没有未处理的占位标记。
@@ -82,11 +76,11 @@ rtk git diff --check
 新功能、跨平台改动、架构改动或多步骤任务必须按结构化流程推进：
 
 1. 实现前先澄清需求和边界。
-2. 在 `docs/superpowers/specs/` 下写入或更新设计文档。
-3. 在 `docs/superpowers/plans/` 下写入或更新执行计划。
+2. 在 `docs/superpowers/plan/` 下写入或更新设计文档。
+3. 在 `docs/superpowers/plan/` 下写入或更新执行计划。
 4. 尽量按 TDD 小步实现。
 5. 实现必须对齐文档；如果实现中发现文档不合理，先更新文档再继续编码。
-6. 完成后运行 `rtk pnpm run check`。
+6. 完成后运行 `pnpm run check`。
 
 不要静默实现文档没有要求的额外能力。确实需要新增能力时，先说明原因并更新计划。
 
@@ -126,7 +120,7 @@ rtk git diff --check
 ## Git 和 GitHub
 
 - 未经用户明确要求，不要创建 commit。
-- commit 前必须查看 `rtk git status --short --branch` 和相关 diff。
+- commit 前必须查看 `git status --short --branch` 和相关 diff。
 - 只 stage 本次任务相关文件。
 - 提交信息使用本仓库既有中文 conventional 格式。
 - 未经用户明确要求 push 或同步 GitHub，不要推送。
