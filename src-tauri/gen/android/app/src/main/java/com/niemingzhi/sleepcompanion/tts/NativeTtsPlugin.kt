@@ -6,6 +6,7 @@ import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
+import androidx.appcompat.app.AppCompatActivity
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
@@ -38,6 +39,15 @@ class NativeTtsPlugin(private val activity: Activity) : Plugin(activity) {
     private var initStarted = false
     private var initError: String? = null
     private var currentSpeech: PendingSpeech? = null
+    private var isReleased = false
+
+    override fun onStop() {
+        cancelCurrentSpeech()
+    }
+
+    override fun onDestroy(activity: AppCompatActivity) {
+        releaseTts()
+    }
 
     @Command
     fun listVoices(invoke: Invoke) {
@@ -125,12 +135,14 @@ class NativeTtsPlugin(private val activity: Activity) : Plugin(activity) {
 
         val existingEngine: TextToSpeech?
         val existingError: String?
+        val released: Boolean
         var shouldStart = false
 
         synchronized(lock) {
             existingEngine = tts
             existingError = initError
-            if (existingEngine == null && existingError == null) {
+            released = isReleased
+            if (!released && existingEngine == null && existingError == null) {
                 waitingForInit.add(callback)
                 if (!initStarted) {
                     initStarted = true
@@ -139,6 +151,10 @@ class NativeTtsPlugin(private val activity: Activity) : Plugin(activity) {
             }
         }
 
+        if (released) {
+            onError("Android 系统 TTS 已释放")
+            return
+        }
         if (existingEngine != null) {
             onReady(existingEngine)
             return
@@ -157,6 +173,7 @@ class NativeTtsPlugin(private val activity: Activity) : Plugin(activity) {
         createdEngine = TextToSpeech(activity.applicationContext) { status ->
             val callbacks: List<(TextToSpeech?, String?) -> Unit>
             val readyEngine = createdEngine.takeIf { status == TextToSpeech.SUCCESS }
+            var engineToRelease: TextToSpeech? = null
             val message = if (readyEngine == null) {
                 "Android 系统 TTS 初始化失败"
             } else {
@@ -164,7 +181,9 @@ class NativeTtsPlugin(private val activity: Activity) : Plugin(activity) {
             }
 
             synchronized(lock) {
-                if (readyEngine != null) {
+                if (isReleased) {
+                    engineToRelease = readyEngine
+                } else if (readyEngine != null) {
                     tts = readyEngine
                 } else {
                     initError = message
@@ -174,6 +193,7 @@ class NativeTtsPlugin(private val activity: Activity) : Plugin(activity) {
                 waitingForInit.clear()
             }
 
+            engineToRelease?.shutdown()
             callbacks.forEach { callback -> callback(readyEngine, message) }
         }
     }
@@ -254,6 +274,32 @@ class NativeTtsPlugin(private val activity: Activity) : Plugin(activity) {
 
         tts?.stop()
         pending?.invoke?.resolve()
+    }
+
+    private fun releaseTts() {
+        val callbacks: List<(TextToSpeech?, String?) -> Unit>
+        val pending: PendingSpeech?
+        val engine: TextToSpeech?
+
+        synchronized(lock) {
+            isReleased = true
+            pending = currentSpeech
+            currentSpeech = null
+            engine = tts
+            tts = null
+            initStarted = false
+            initError = "Android 系统 TTS 已释放"
+            callbacks = waitingForInit.toList()
+            waitingForInit.clear()
+        }
+
+        try {
+            engine?.stop()
+        } finally {
+            engine?.shutdown()
+        }
+        pending?.invoke?.resolve()
+        callbacks.forEach { callback -> callback(null, "Android 系统 TTS 已释放") }
     }
 
     private fun finishSpeech(utteranceId: String?, errorMessage: String?) {

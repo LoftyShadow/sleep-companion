@@ -8,6 +8,7 @@ import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSArray
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
+import androidx.appcompat.app.AppCompatActivity
 
 @InvokeArg
 class NativeAudioPlayArgs {
@@ -30,6 +31,14 @@ class NativeAudioVolumeArgs {
 @TauriPlugin
 class NativeAudioPlugin(private val activity: Activity) : Plugin(activity) {
     private val player = NativeAudioPlayer(activity)
+
+    override fun onStop() {
+        stopAllSafely()
+    }
+
+    override fun onDestroy(activity: AppCompatActivity) {
+        stopAllSafely()
+    }
 
     @Command
     fun play(invoke: Invoke) {
@@ -91,6 +100,13 @@ class NativeAudioPlugin(private val activity: Activity) : Plugin(activity) {
             invoke.resolve(snapshot)
         } catch (error: Exception) {
             invoke.reject(error.message ?: "读取播放状态失败")
+        }
+    }
+
+    private fun stopAllSafely() {
+        try {
+            player.stopAll()
+        } catch (_: Exception) {
         }
     }
 }

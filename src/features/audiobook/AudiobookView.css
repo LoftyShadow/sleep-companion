@@ -394,7 +394,6 @@
   overflow: auto;
   padding-right: 4px;
   padding-bottom: 74px;
-  scroll-behavior: smooth;
   scroll-padding-block: 12px 74px;
   scrollbar-color: rgba(63, 111, 90, 0.34) transparent;
   scrollbar-width: thin;

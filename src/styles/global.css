@@ -88,6 +88,10 @@ button {
   cursor: pointer;
 }
 
+html.has-desktop-title-bar button {
+  cursor: default;
+}
+
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,

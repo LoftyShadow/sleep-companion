@@ -90,7 +90,7 @@ describe("AppWorkspace integration", () => {
 
   it("keeps a white-noise sound volume when starting an ASMR sound", async () => {
     const user = userEvent.setup();
-    const { play, player, setVolume } = createPlayerPortTestDouble();
+    const { play, player } = createPlayerPortTestDouble();
     render(<AppWorkspace player={player} />);
 
     fireEvent.change(screen.getByLabelText("大雨音量"), {
@@ -101,8 +101,6 @@ describe("AppWorkspace integration", () => {
     await user.click(screen.getByRole("button", { name: "轻柔掏耳" }));
     await user.click(screen.getByRole("button", { name: "白噪音" }));
 
-    expect(setVolume).toHaveBeenCalledTimes(1);
-    expect(setVolume).toHaveBeenCalledWith("heavy_rain", 0.73);
     expect(play.mock.calls.map(([sound, volume]) => [sound.id, volume])).toEqual([
       ["heavy_rain", 0.73],
       ["asmr_ear_cleaning_soft", 0.5],

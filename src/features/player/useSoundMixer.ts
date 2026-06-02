@@ -21,6 +21,14 @@ interface UseSoundMixerOptions {
   defaultPreset?: SoundPreset;
 }
 
+const VOLUME_COMMIT_DELAY_MS = 64;
+
+interface PendingVolumeCommit {
+  resolvers: Array<() => void>;
+  timeoutId: ReturnType<typeof setTimeout>;
+  volume: number;
+}
+
 function logMixerEvent(
   eventName: string,
   details: Record<string, unknown>,
@@ -96,6 +104,9 @@ export function useSoundMixer({
     defaultPreset?.id ?? null,
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const pendingVolumeCommitsRef = useRef<Map<SoundId, PendingVolumeCommit>>(
+    new Map(),
+  );
 
   const replacePlayingSoundIds = useCallback((nextSoundIds: Set<SoundId>) => {
     playingSoundIdsRef.current = nextSoundIds;
@@ -111,6 +122,97 @@ export function useSoundMixer({
     resumeSoundIdsRef.current = nextSoundIds;
     setResumeSoundIds(nextSoundIds);
   }, []);
+
+  const cancelPendingVolumeCommits = useCallback((soundId?: SoundId) => {
+    const pendingCommits = pendingVolumeCommitsRef.current;
+    const soundIds =
+      soundId === undefined ? [...pendingCommits.keys()] : [soundId];
+
+    for (const nextSoundId of soundIds) {
+      const pending = pendingCommits.get(nextSoundId);
+      if (!pending) {
+        continue;
+      }
+
+      clearTimeout(pending.timeoutId);
+      pendingCommits.delete(nextSoundId);
+      for (const resolve of pending.resolvers) {
+        resolve();
+      }
+    }
+  }, []);
+
+  const commitPendingVolume = useCallback(
+    async (soundId: SoundId) => {
+      const pending = pendingVolumeCommitsRef.current.get(soundId);
+      if (!pending) {
+        return;
+      }
+
+      pendingVolumeCommitsRef.current.delete(soundId);
+      const nextVolume = pending.volume;
+
+      try {
+        setErrorMessage(null);
+        logMixerEvent("set-volume-request", {
+          soundId,
+          volume: nextVolume,
+          isPlaying: playingSoundIdsRef.current.has(soundId),
+        });
+        await player.setVolume(soundId, nextVolume);
+        logMixerEvent("set-volume-success", {
+          soundId,
+          volume: nextVolume,
+          isPlaying: playingSoundIdsRef.current.has(soundId),
+        });
+      } catch (error) {
+        logMixerError("set-volume-failed", error, {
+          soundId,
+          volume: nextVolume,
+        });
+        setErrorMessage(error instanceof Error ? error.message : "音量调整失败");
+      } finally {
+        for (const resolve of pending.resolvers) {
+          resolve();
+        }
+      }
+    },
+    [player],
+  );
+
+  const scheduleVolumeCommit = useCallback(
+    (soundId: SoundId, volume: number) =>
+      new Promise<void>((resolve) => {
+        const pendingCommits = pendingVolumeCommitsRef.current;
+        const existing = pendingCommits.get(soundId);
+
+        if (existing) {
+          clearTimeout(existing.timeoutId);
+          existing.volume = volume;
+          existing.resolvers.push(resolve);
+          existing.timeoutId = setTimeout(() => {
+            void commitPendingVolume(soundId);
+          }, VOLUME_COMMIT_DELAY_MS);
+          return;
+        }
+
+        pendingCommits.set(soundId, {
+          resolvers: [resolve],
+          timeoutId: setTimeout(() => {
+            void commitPendingVolume(soundId);
+          }, VOLUME_COMMIT_DELAY_MS),
+          volume,
+        });
+      }),
+    [commitPendingVolume],
+  );
+
+  useEffect(
+    () => () => {
+      cancelPendingVolumeCommits();
+    },
+    [cancelPendingVolumeCommits, player],
+  );
 
   useEffect(() => {
     const reconciledState = reconcileSoundMixerState({
@@ -178,6 +280,7 @@ export function useSoundMixer({
             soundId,
             playingSoundIds: [...playingSoundIdsRef.current],
           });
+          cancelPendingVolumeCommits(soundId);
           await player.pause(soundId);
           const nextPlayingSoundIds = new Set(playingSoundIdsRef.current);
           nextPlayingSoundIds.delete(soundId);
@@ -201,6 +304,7 @@ export function useSoundMixer({
           volume: nextVolume,
           playingSoundIds: [...playingSoundIdsRef.current],
         });
+        cancelPendingVolumeCommits(soundId);
         await player.play(sound, nextVolume);
         const nextPlayingSoundIds = new Set(playingSoundIdsRef.current).add(
           soundId,
@@ -225,35 +329,17 @@ export function useSoundMixer({
     async (soundId: SoundId, volume: number) => {
       const nextVolume = normalizeVolume(volume);
       replaceVolumes({ ...volumesRef.current, [soundId]: nextVolume });
-      try {
-        setErrorMessage(null);
-        logMixerEvent("set-volume-request", {
-          soundId,
-          volume: nextVolume,
-          isPlaying: playingSoundIdsRef.current.has(soundId),
-        });
-        await player.setVolume(soundId, nextVolume);
-        setActivePresetId(null);
-        logMixerEvent("set-volume-success", {
-          soundId,
-          volume: nextVolume,
-          isPlaying: playingSoundIdsRef.current.has(soundId),
-        });
-      } catch (error) {
-        logMixerError("set-volume-failed", error, {
-          soundId,
-          volume: nextVolume,
-        });
-        setErrorMessage(error instanceof Error ? error.message : "音量调整失败");
-      }
+      setActivePresetId(null);
+      await scheduleVolumeCommit(soundId, nextVolume);
     },
-    [player, replaceVolumes],
+    [replaceVolumes, scheduleVolumeCommit],
   );
 
   const stopAll = useCallback(async () => {
     try {
       setErrorMessage(null);
       const previousPlayingSoundIds = [...playingSoundIdsRef.current];
+      cancelPendingVolumeCommits();
       logMixerEvent("stop-all-request", {
         playingSoundIds: previousPlayingSoundIds,
       });
@@ -269,7 +355,12 @@ export function useSoundMixer({
       logMixerError("stop-all-failed", error, {});
       setErrorMessage(error instanceof Error ? error.message : "停止播放失败");
     }
-  }, [player, replacePlayingSoundIds, replaceResumeSoundIds]);
+  }, [
+    cancelPendingVolumeCommits,
+    player,
+    replacePlayingSoundIds,
+    replaceResumeSoundIds,
+  ]);
 
   const applyPreset = useCallback(
     async (preset: SoundPreset) => {
@@ -278,6 +369,7 @@ export function useSoundMixer({
 
       try {
         setErrorMessage(null);
+        cancelPendingVolumeCommits();
         logMixerEvent("apply-preset-request", {
           presetId: preset.id,
           soundIds: nextSoundIds,

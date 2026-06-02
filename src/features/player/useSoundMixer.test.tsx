@@ -1,6 +1,6 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { act } from "react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPlayerPortTestDouble as createPlayer } from "../../test/audioTestDoubles";
 import { BUILT_IN_SOUNDS } from "../sounds/soundCatalog";
 import {
@@ -22,6 +22,10 @@ function createDeferred<T>() {
 }
 
 describe("useSoundMixer", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("plays and pauses a sound through the player", async () => {
     const { pause, play, player } = createPlayer();
     const { result } = renderHook(() =>
@@ -77,6 +81,91 @@ describe("useSoundMixer", () => {
     expect(setVolume).toHaveBeenCalledWith("campfire", 0.82);
     expect(play).toHaveBeenCalledWith(BUILT_IN_SOUNDS[1], 0.82);
     expect(result.current.volumes.campfire).toBe(0.82);
+  });
+
+  it("coalesces rapid volume changes before committing to the player", async () => {
+    vi.useFakeTimers();
+    const { player, setVolume } = createPlayer();
+    const { result } = renderHook(() =>
+      useSoundMixer({ sounds: BUILT_IN_SOUNDS, player }),
+    );
+
+    act(() => {
+      void result.current.setSoundVolume("campfire", 0.21);
+      void result.current.setSoundVolume("campfire", 0.64);
+      void result.current.setSoundVolume("campfire", 0.9);
+    });
+
+    expect(result.current.volumes.campfire).toBe(0.9);
+    expect(setVolume).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(80);
+    });
+
+    expect(setVolume).toHaveBeenCalledTimes(1);
+    expect(setVolume).toHaveBeenCalledWith("campfire", 0.9);
+  });
+
+  it("cancels pending volume commits when stopping all sounds", async () => {
+    vi.useFakeTimers();
+    const { player, setVolume, stopAll } = createPlayer();
+    const { result } = renderHook(() =>
+      useSoundMixer({ sounds: BUILT_IN_SOUNDS, player }),
+    );
+
+    act(() => {
+      void result.current.setSoundVolume("campfire", 0.42);
+      void result.current.setSoundVolume("campfire", 0.73);
+    });
+
+    await act(async () => {
+      await result.current.stopAll();
+      await vi.advanceTimersByTimeAsync(80);
+    });
+
+    expect(stopAll).toHaveBeenCalledTimes(1);
+    expect(setVolume).not.toHaveBeenCalled();
+    expect(result.current.volumes.campfire).toBe(0.73);
+  });
+
+  it("keeps a newer preset active when a slow volume commit resolves later", async () => {
+    vi.useFakeTimers();
+    const volumeCommit = createDeferred<void>();
+    const { player, setVolume } = createPlayer();
+    const preset = BUILT_IN_PRESETS[2];
+    setVolume.mockImplementationOnce(() => volumeCommit.promise);
+    const { result } = renderHook(() =>
+      useSoundMixer({
+        sounds: BUILT_IN_SOUNDS,
+        player,
+        defaultPreset: DEFAULT_SOUND_PRESET,
+      }),
+    );
+
+    act(() => {
+      void result.current.setSoundVolume("campfire", 0.66);
+    });
+
+    expect(result.current.activePresetId).toBe(null);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(80);
+    });
+
+    expect(setVolume).toHaveBeenCalledWith("campfire", 0.66);
+
+    await act(async () => {
+      await result.current.applyPreset(preset);
+    });
+
+    expect(result.current.activePresetId).toBe(preset.id);
+
+    act(() => {
+      volumeCommit.resolve();
+    });
+
+    expect(result.current.activePresetId).toBe(preset.id);
   });
 
   it("keeps every sound that starts while play promises resolve out of order", async () => {
