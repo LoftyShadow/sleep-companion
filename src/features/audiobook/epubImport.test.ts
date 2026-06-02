@@ -23,6 +23,11 @@ describe("epubImport", () => {
     expect(book.title).toBe("测试 EPUB");
     expect(book.kind).toBe("segmented");
     expect(book.format).toBe("epub");
+    expect(book.coverImage).toEqual(
+      expect.objectContaining({
+        type: "image/png",
+      }),
+    );
     expect(book.segments.map((segment) => segment.text)).toEqual([
       "第一章",
       "第一段。",

@@ -1,19 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { AudiobookImportPanel } from "./AudiobookImportPanel";
+import { AudiobookLibraryPanel } from "./AudiobookLibraryPanel";
 import { AudiobookReader } from "./AudiobookReader";
 import { AudiobookSettingsPanel } from "./AudiobookSettingsPanel";
 import { AudiobookStatusPanel } from "./AudiobookStatusPanel";
 import { AudiobookTransport } from "./AudiobookTransport";
 import type {
   AudiobookPlaybackStatus,
-  ImportedAudiobookBook,
-  PlainTextBook,
 } from "./audiobookTypes";
-import {
-  isSupportedAudiobookBookFile,
-  readAudiobookBookFile,
-} from "./bookImport";
+import type { FileSystemPort } from "../storage/FileSystemPort";
 import type { TtsEnginePort } from "./TtsEnginePort";
+import { useAudiobookLibrary } from "./useAudiobookLibrary";
 import { useAudiobookPlayer } from "./useAudiobookPlayer";
 import type {
   PlaybackControlState,
@@ -21,14 +18,9 @@ import type {
 } from "../playbackControl/playbackControlTypes";
 import "./AudiobookView.css";
 
-const DEFAULT_AUDIOBOOK_BOOK: PlainTextBook = {
-  kind: "plain-text",
-  text: "",
-  title: "",
-};
-
 interface AudiobookViewProps {
   engine: TtsEnginePort;
+  fileSystem?: FileSystemPort;
   globalStopRequestId: number;
   playbackControlRequestId?: number;
   onPlaybackControlStateChange?: (state: PlaybackControlState) => void;
@@ -100,20 +92,20 @@ function getAudiobookPlaybackControlSummary({
 
 export function AudiobookView({
   engine,
+  fileSystem,
   globalStopRequestId,
   playbackControlRequestId = 0,
   onPlaybackControlStateChange,
 }: AudiobookViewProps) {
-  const [book, setBook] = useState<ImportedAudiobookBook>(
-    DEFAULT_AUDIOBOOK_BOOK,
-  );
-  const [importMessage, setImportMessage] = useState<string | null>(null);
-  const [importErrorMessage, setImportErrorMessage] = useState<string | null>(
-    null,
-  );
-  const [isImporting, setIsImporting] = useState(false);
+  const library = useAudiobookLibrary(fileSystem);
+  const book = library.visibleBook;
   const audiobook = useAudiobookPlayer({
     engine,
+    initialSegmentIndex: library.activeInitialSegmentIndex,
+    onProgressChange: ({ segment, segmentIndex }) => {
+      void library.updateActiveProgress(segmentIndex, segment);
+    },
+    resetKey: library.activeBookId ?? "draft",
     ...(book.kind === "plain-text"
       ? { text: book.text }
       : { segments: book.segments }),
@@ -129,12 +121,15 @@ export function AudiobookView({
     audiobookStatus,
     engine.supportsPause,
   );
-  const visibleErrorMessage = importErrorMessage ?? audiobook.errorMessage;
-  const bookText = book.kind === "plain-text" ? book.text : null;
+  const visibleErrorMessage = library.errorMessage ?? audiobook.errorMessage;
+  const bookText =
+    !library.activeBook && book.kind === "plain-text" ? book.text : null;
   const readerSourceLabel =
     book.kind === "plain-text"
-      ? `${audiobook.segments.length} 个朗读片段`
+      ? `文本 · ${audiobook.segments.length} 个朗读片段`
       : `EPUB · ${audiobook.chapters.length} 章 · ${audiobook.segments.length} 个朗读片段`;
+  const readerSourceKicker =
+    book.kind === "plain-text" ? "文本书稿" : "EPUB 书稿";
   const handledGlobalStopRequestIdRef = useRef(globalStopRequestId);
   const handledPlaybackControlRequestIdRef = useRef(0);
   const handlePrimaryAction = useCallback(() => {
@@ -208,47 +203,20 @@ export function AudiobookView({
     handlePrimaryAction();
   }, [handlePrimaryAction, playbackControlRequestId]);
 
-  async function handleBookFiles(files: readonly File[]) {
-    const file = files[0];
-    if (!file) {
-      return;
-    }
-
-    if (!isSupportedAudiobookBookFile(file)) {
-      setImportMessage(null);
-      setImportErrorMessage("听书支持 txt、markdown 和 EPUB 文件");
-      return;
-    }
-
-    setIsImporting(true);
-    setImportMessage(null);
-    setImportErrorMessage(null);
-
-    try {
-      const importedBook = await readAudiobookBookFile(file);
-      setBook(importedBook);
-      setImportMessage(
-        importedBook.kind === "segmented"
-          ? `已导入 ${importedBook.title} · ${importedBook.segments.length} 段`
-          : `已导入 ${importedBook.title}`,
-      );
-    } catch (error) {
-      setImportErrorMessage(
-        error instanceof Error ? error.message : "导入书稿失败",
-      );
-    } finally {
-      setIsImporting(false);
-    }
-  }
-
   function handleBookTitleChange(title: string) {
-    setBook((currentBook) => ({ ...currentBook, title }));
+    void library.updateBookTitle(title);
   }
 
   function handleBookTextChange(text: string) {
-    setBook((currentBook) =>
-      currentBook.kind === "plain-text" ? { ...currentBook, text } : currentBook,
-    );
+    library.updateDraftText(text);
+  }
+
+  function handleDeleteBook(bookId: NonNullable<typeof library.activeBookId>) {
+    if (bookId === library.activeBookId) {
+      stopAudiobook();
+    }
+
+    void library.deleteBook(bookId);
   }
 
   return (
@@ -260,6 +228,23 @@ export function AudiobookView({
       ) : null}
 
       <div className="audiobook-layout">
+        <AudiobookLibraryPanel
+          activeBookId={library.activeBookId}
+          coverObjectUrls={library.coverObjectUrls}
+          importMessage={library.message}
+          isImporting={library.isImporting}
+          isLoading={library.isLoading}
+          items={library.items}
+          onBookFiles={(files) => {
+            void library.importBookFiles(files);
+          }}
+          onDeleteBook={handleDeleteBook}
+          onOpenBook={(bookId) => {
+            stopAudiobook();
+            void library.openBook(bookId);
+          }}
+        />
+
         <section className="audiobook-stage" aria-label="听书控制">
           <aside className="audiobook-now glass-panel" aria-label="当前朗读">
             <h1 className="audiobook-mode-title">听书</h1>
@@ -313,11 +298,11 @@ export function AudiobookView({
 
             <AudiobookImportPanel
               bookTitle={book.title}
-              importMessage={importMessage}
-              isImporting={isImporting}
+              importMessage={null}
+              isImporting={library.isImporting}
               segmentCount={audiobook.segments.length}
               onBookFiles={(files) => {
-                void handleBookFiles(files);
+                void library.importBookFiles(files);
               }}
               onBookTitleChange={handleBookTitleChange}
             />
@@ -341,6 +326,7 @@ export function AudiobookView({
             currentSegmentIndex={audiobook.currentSegmentIndex}
             progressPercent={audiobook.progressPercent}
             segments={audiobook.segments}
+            sourceKicker={readerSourceKicker}
             sourceLabel={readerSourceLabel}
             onBookTextChange={
               book.kind === "plain-text" ? handleBookTextChange : undefined

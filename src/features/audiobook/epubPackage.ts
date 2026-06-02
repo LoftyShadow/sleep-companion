@@ -17,11 +17,17 @@ export interface ManifestItem {
   id: string;
   href: string;
   mediaType: string;
+  properties: string[];
 }
 
 export interface SpineItem {
   idref: string;
   linear: string | null;
+}
+
+export interface EpubCoverItem {
+  href: string;
+  mediaType: string;
 }
 
 export function readContainerOpfPath(containerDocument: Document): string {
@@ -54,6 +60,15 @@ export function readBookTitle(
   return title && title.length > 0 ? title : fallbackTitle;
 }
 
+export function readBookAuthor(opfDocument: Document): string | undefined {
+  const metadata = getFirstElementByLocalName(opfDocument, "metadata");
+  const creator = metadata
+    ? getFirstElementByLocalName(metadata, "creator")?.textContent?.trim()
+    : null;
+
+  return creator && creator.length > 0 ? creator : undefined;
+}
+
 export function readManifest(opfDocument: Document): Map<string, ManifestItem> {
   const manifest = getFirstElementByLocalName(opfDocument, "manifest");
   const items = manifest ? getElementsByLocalName(manifest, "item") : [];
@@ -72,6 +87,10 @@ export function readManifest(opfDocument: Document): Map<string, ManifestItem> {
       href,
       id,
       mediaType: mediaType.toLowerCase(),
+      properties: (item.getAttribute("properties") ?? "")
+        .split(/\s+/u)
+        .map((property) => property.trim())
+        .filter((property) => property.length > 0),
     });
   }
 
@@ -80,6 +99,37 @@ export function readManifest(opfDocument: Document): Map<string, ManifestItem> {
   }
 
   return manifestItems;
+}
+
+function readEpub2CoverId(opfDocument: Document): string | null {
+  const metadata = getFirstElementByLocalName(opfDocument, "metadata");
+  const metaElements = metadata ? getElementsByLocalName(metadata, "meta") : [];
+  const coverMeta = metaElements.find(
+    (element) => element.getAttribute("name")?.trim().toLowerCase() === "cover",
+  );
+
+  return coverMeta?.getAttribute("content")?.trim() ?? null;
+}
+
+export function readCoverItem(
+  opfDocument: Document,
+  manifestItems: Map<string, ManifestItem>,
+): EpubCoverItem | null {
+  const coverImageItem = Array.from(manifestItems.values()).find((item) =>
+    item.properties.includes("cover-image"),
+  );
+  const coverId = readEpub2CoverId(opfDocument);
+  const legacyCoverItem = coverId ? manifestItems.get(coverId) : null;
+  const item = coverImageItem ?? legacyCoverItem ?? null;
+
+  if (!item || !item.mediaType.startsWith("image/")) {
+    return null;
+  }
+
+  return {
+    href: item.href,
+    mediaType: item.mediaType,
+  };
 }
 
 export function readSpine(opfDocument: Document): SpineItem[] {

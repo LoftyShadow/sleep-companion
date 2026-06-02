@@ -36,6 +36,7 @@ function renderReader({
       currentSegmentIndex={currentSegmentIndex}
       progressPercent={50}
       segments={segments}
+      sourceKicker="EPUB 书稿"
       sourceLabel="EPUB · 1 章 · 11 个朗读片段"
       onChapterChange={vi.fn()}
       onNextChapter={vi.fn()}
@@ -135,6 +136,7 @@ describe("AudiobookReader", () => {
           currentSegmentIndex={6}
           progressPercent={64}
           segments={segments}
+          sourceKicker="EPUB 书稿"
           sourceLabel="EPUB · 1 章 · 11 个朗读片段"
           onChapterChange={vi.fn()}
           onNextChapter={vi.fn()}

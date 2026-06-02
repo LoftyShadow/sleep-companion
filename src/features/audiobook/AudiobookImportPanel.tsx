@@ -99,6 +99,7 @@ export function AudiobookImportPanel({
           aria-label="导入听书书稿"
           className="custom-audio-input"
           disabled={isImporting}
+          multiple
           type="file"
           onChange={(event) => {
             const files = Array.from(event.currentTarget.files ?? []);

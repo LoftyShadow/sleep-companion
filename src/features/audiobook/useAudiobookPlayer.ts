@@ -18,6 +18,13 @@ import { normalizeSpeechRate } from "./TtsEnginePort";
 
 interface UseAudiobookPlayerOptions {
   engine: TtsEnginePort;
+  initialSegmentIndex?: number;
+  onProgressChange?: (progress: {
+    segment: AudiobookSegment;
+    segmentIndex: number;
+    segmentCount: number;
+  }) => void;
+  resetKey?: string | number;
   segments?: AudiobookSegment[];
   text?: string;
 }
@@ -39,6 +46,9 @@ function getTtsErrorMessage(error: unknown, fallbackMessage: string): string {
 
 export function useAudiobookPlayer({
   engine,
+  initialSegmentIndex = 0,
+  onProgressChange,
+  resetKey,
   segments: inputSegments,
   text,
 }: UseAudiobookPlayerOptions) {
@@ -56,10 +66,15 @@ export function useAudiobookPlayer({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const playbackHandleRef = useRef<TtsPlaybackHandle | null>(null);
   const requestIdRef = useRef(0);
+  const onProgressChangeRef = useRef(onProgressChange);
   const playSegmentRef = useRef<
     | ((segmentIndex: number, options?: PlaySegmentOptions) => Promise<void>)
     | null
   >(null);
+
+  useEffect(() => {
+    onProgressChangeRef.current = onProgressChange;
+  }, [onProgressChange]);
 
   useEffect(() => {
     let isMounted = true;
@@ -118,9 +133,13 @@ export function useAudiobookPlayer({
 
   useEffect(() => {
     stopPlayback();
-    setCurrentSegmentIndex(0);
+    setCurrentSegmentIndex(
+      segments.length > 0
+        ? Math.min(Math.max(initialSegmentIndex, 0), segments.length - 1)
+        : 0,
+    );
     setErrorMessage(null);
-  }, [segments, stopPlayback]);
+  }, [initialSegmentIndex, resetKey, segments, stopPlayback]);
 
   useEffect(
     () => () => {
@@ -156,6 +175,11 @@ export function useAudiobookPlayer({
       }
       playbackHandleRef.current = null;
       setCurrentSegmentIndex(segmentIndex);
+      onProgressChangeRef.current?.({
+        segment,
+        segmentCount: segments.length,
+        segmentIndex,
+      });
       setErrorMessage(null);
       setStatus(isContinuation ? "playing" : "loading");
 

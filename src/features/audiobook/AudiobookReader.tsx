@@ -12,6 +12,7 @@ interface AudiobookReaderProps {
   currentSegmentIndex: number;
   progressPercent: number;
   segments: AudiobookSegment[];
+  sourceKicker: string;
   sourceLabel: string;
   onBookTextChange?: (text: string) => void;
   onChapterChange: (chapterIndex: number) => void;
@@ -28,6 +29,7 @@ export function AudiobookReader({
   currentSegmentIndex,
   progressPercent,
   segments,
+  sourceKicker,
   sourceLabel,
   onBookTextChange,
   onChapterChange,
@@ -98,7 +100,7 @@ export function AudiobookReader({
     >
       <div className="section-heading sound-section-heading">
         <div>
-          <p className="app-kicker">{isTextEditable ? "文本书稿" : "EPUB 书稿"}</p>
+          <p className="app-kicker">{sourceKicker}</p>
           <h2 id="audiobook-reader-heading">朗读内容</h2>
         </div>
         <span className="section-meta">{progressPercent}%</span>

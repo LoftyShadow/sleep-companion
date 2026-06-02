@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { AudiobookView } from "../audiobook/AudiobookView";
 import { createTtsEngine } from "../audiobook/createTtsEngine";
+import type { FileSystemPort } from "../storage/FileSystemPort";
 import type { TtsEnginePort } from "../audiobook/TtsEnginePort";
 import { SoundMixerView } from "../mixer/SoundMixerView";
 import type { PlayerPort } from "../player/PlayerPort";
@@ -18,12 +19,14 @@ import "./AppWorkspace.mobile.css";
 
 interface AppWorkspaceProps {
   bilibiliMetadataLoader?: BilibiliMetadataLoader;
+  fileSystem?: FileSystemPort;
   player?: PlayerPort;
   ttsEngine?: TtsEnginePort;
 }
 
 export function AppWorkspace({
   bilibiliMetadataLoader,
+  fileSystem,
   player,
   ttsEngine,
 }: AppWorkspaceProps) {
@@ -122,6 +125,7 @@ export function AppWorkspace({
           {hasOpenedAudiobook ? (
             <AudiobookView
               engine={audiobookEngine}
+              fileSystem={fileSystem}
               globalStopRequestId={sleepTimer.globalStopRequestId}
               playbackControlRequestId={playbackControlRequestIds.audiobook}
               onPlaybackControlStateChange={

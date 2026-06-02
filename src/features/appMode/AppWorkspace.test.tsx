@@ -12,6 +12,7 @@ import {
   createPlayerPortTestDouble,
   createTtsEngineTestDouble,
 } from "../../test/audioTestDoubles";
+import { createMemoryFileSystem } from "../../test/storageTestDoubles";
 import { AppWorkspace } from "./AppWorkspace";
 
 const TEST_AUDIOBOOK_TEXT = "用户自己的第一段。\n\n用户自己的第二段。";
@@ -26,7 +27,13 @@ describe("AppWorkspace", () => {
     const user = userEvent.setup();
     const { play, player, stopAll } = createPlayerPortTestDouble();
     const { cancel, engine, speak } = createTtsEngineTestDouble();
-    render(<AppWorkspace player={player} ttsEngine={engine} />);
+    render(
+      <AppWorkspace
+        fileSystem={createMemoryFileSystem()}
+        player={player}
+        ttsEngine={engine}
+      />,
+    );
 
     await user.click(screen.getByRole("button", { name: "大雨" }));
     await user.click(screen.getByRole("button", { name: "听书" }));
@@ -97,6 +104,7 @@ describe("AppWorkspace", () => {
     const { engine, handlePause, speak } = createTtsEngineTestDouble();
     render(
       <AppWorkspace
+        fileSystem={createMemoryFileSystem()}
         player={createPlayerPortTestDouble().player}
         ttsEngine={engine}
       />,
@@ -161,7 +169,13 @@ describe("AppWorkspace", () => {
     const user = userEvent.setup();
     const { player, stopAll } = createPlayerPortTestDouble();
     const { engine, handlePause } = createTtsEngineTestDouble();
-    render(<AppWorkspace player={player} ttsEngine={engine} />);
+    render(
+      <AppWorkspace
+        fileSystem={createMemoryFileSystem()}
+        player={player}
+        ttsEngine={engine}
+      />,
+    );
 
     await user.click(screen.getByRole("button", { name: "大雨" }));
     await user.click(screen.getByRole("button", { name: "听书" }));
@@ -177,7 +191,13 @@ describe("AppWorkspace", () => {
     const user = userEvent.setup();
     const { play, player } = createPlayerPortTestDouble();
     const { engine, speak } = createTtsEngineTestDouble();
-    render(<AppWorkspace player={player} ttsEngine={engine} />);
+    render(
+      <AppWorkspace
+        fileSystem={createMemoryFileSystem()}
+        player={player}
+        ttsEngine={engine}
+      />,
+    );
 
     await user.click(screen.getByRole("button", { name: "播放全部" }));
 
@@ -291,7 +311,13 @@ describe("AppWorkspace", () => {
     const user = userEvent.setup();
     const { play, player, stopAll } = createPlayerPortTestDouble();
     const { cancel, engine, speak } = createTtsEngineTestDouble();
-    render(<AppWorkspace player={player} ttsEngine={engine} />);
+    render(
+      <AppWorkspace
+        fileSystem={createMemoryFileSystem()}
+        player={player}
+        ttsEngine={engine}
+      />,
+    );
 
     await user.click(screen.getByRole("button", { name: "大雨" }));
     await user.click(screen.getByRole("button", { name: "听书" }));

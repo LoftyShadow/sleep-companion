@@ -26,6 +26,7 @@ export async function createMinimalEpubFile(): Promise<File> {
   </metadata>
   <manifest>
     <item id="cover" href="Text/cover.xhtml" media-type="application/xhtml+xml"/>
+    <item id="cover-image" href="Images/cover.png" media-type="image/png" properties="cover-image"/>
     <item id="chapter1" href="Text/chapter1.xhtml" media-type="application/xhtml+xml"/>
     <item id="chapter2" href="Text/chapter2.xhtml" media-type="application/xhtml+xml"/>
   </manifest>
@@ -45,6 +46,7 @@ export async function createMinimalEpubFile(): Promise<File> {
   </body>
 </html>`),
   );
+  await writer.add("OPS/Images/cover.png", new TextReader("fake-cover-image"));
   await writer.add(
     "OPS/Text/chapter1.xhtml",
     new TextReader(`<?xml version="1.0" encoding="UTF-8"?>

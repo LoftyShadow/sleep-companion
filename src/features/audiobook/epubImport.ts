@@ -1,5 +1,6 @@
 import {
   BlobReader,
+  BlobWriter,
   configure,
   TextWriter,
   ZipReader,
@@ -8,13 +9,15 @@ import {
 } from "@zip.js/zip.js";
 import type { SegmentedAudiobookBook } from "./audiobookTypes";
 import {
+  readBookAuthor,
   readBookTitle,
   readContainerOpfPath,
+  readCoverItem,
   readManifest,
   readSpine,
 } from "./epubPackage";
 import { readEpubSegments } from "./epubSegments";
-import { normalizeZipPath, parseXmlDocument } from "./epubXml";
+import { normalizeZipPath, parseXmlDocument, resolveZipHref } from "./epubXml";
 import { getPlainTextBookTitle } from "./textSegmentation";
 
 const EPUB_EXTENSION = ".epub";
@@ -86,6 +89,19 @@ async function loadRequiredText(
   return entry.getData(new TextWriter("utf-8"));
 }
 
+async function loadOptionalBlob(
+  entryMap: EpubZipEntryMap,
+  path: string,
+  type: string,
+): Promise<Blob | null> {
+  const entry = findEntry(entryMap, path);
+  if (!entry || entry.encrypted) {
+    return null;
+  }
+
+  return entry.getData(new BlobWriter(type));
+}
+
 export async function readEpubBookFile(
   file: File,
 ): Promise<SegmentedAudiobookBook> {
@@ -110,8 +126,18 @@ export async function readEpubBookFile(
     );
     const manifestItems = readManifest(opfDocument);
     const spineItems = readSpine(opfDocument);
+    const coverItem = readCoverItem(opfDocument, manifestItems);
+    const coverPath = coverItem ? resolveZipHref(coverItem.href, opfPath) : null;
+    const coverBlob =
+      coverItem && coverPath
+        ? await loadOptionalBlob(entryMap, coverPath, coverItem.mediaType)
+        : null;
 
     return {
+      author: readBookAuthor(opfDocument),
+      ...(coverBlob && coverItem
+        ? { coverImage: { blob: coverBlob, type: coverItem.mediaType } }
+        : {}),
       format: "epub",
       kind: "segmented",
       segments: await readEpubSegments({

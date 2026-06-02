@@ -6,6 +6,7 @@ import {
   createTtsEngineTestDouble,
 } from "../../test/audioTestDoubles";
 import { createMinimalEpubFile } from "../../test/epubTestDoubles";
+import { createMemoryFileSystem } from "../../test/storageTestDoubles";
 import type { BilibiliMetadataLoader } from "../videoListening/bilibiliMetadata";
 import type { BilibiliReference } from "../videoListening/bilibiliVideo";
 import { AppWorkspace } from "./AppWorkspace";
@@ -213,6 +214,7 @@ describe("AppWorkspace integration", () => {
     const { engine, speak } = createTtsEngineTestDouble();
     render(
       <AppWorkspace
+        fileSystem={createMemoryFileSystem()}
         player={createPlayerPortTestDouble().player}
         ttsEngine={engine}
       />,
@@ -240,6 +242,7 @@ describe("AppWorkspace integration", () => {
     const { engine, speak } = createTtsEngineTestDouble();
     render(
       <AppWorkspace
+        fileSystem={createMemoryFileSystem()}
         player={createPlayerPortTestDouble().player}
         ttsEngine={engine}
       />,
@@ -293,6 +296,7 @@ describe("AppWorkspace integration", () => {
     const user = userEvent.setup();
     render(
       <AppWorkspace
+        fileSystem={createMemoryFileSystem()}
         player={createPlayerPortTestDouble().player}
         ttsEngine={createTtsEngineTestDouble().engine}
       />,
@@ -308,6 +312,33 @@ describe("AppWorkspace integration", () => {
     expect(await screen.findByText("已导入 测试 EPUB · 5 段")).toBeInTheDocument();
     expect(screen.queryByLabelText("书稿文本")).not.toBeInTheDocument();
     expect(screen.getByText("EPUB · 2 章 · 5 个朗读片段")).toBeInTheDocument();
+  });
+
+  it("imports multiple audiobook files into the bookshelf", async () => {
+    const user = userEvent.setup();
+    render(
+      <AppWorkspace
+        fileSystem={createMemoryFileSystem()}
+        player={createPlayerPortTestDouble().player}
+        ttsEngine={createTtsEngineTestDouble().engine}
+      />,
+    );
+    const plainTextBook = new File(["第一本第一段。"], "第一本.txt", {
+      type: "text/plain",
+    });
+
+    await user.click(screen.getByRole("button", { name: "听书" }));
+    await user.upload(screen.getByLabelText("导入听书书稿"), [
+      plainTextBook,
+      await createMinimalEpubFile(),
+    ]);
+
+    expect(
+      await screen.findByText("已导入 2 本，当前打开 测试 EPUB"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("第一本")).toBeInTheDocument();
+    expect(screen.getByText("测试 EPUB")).toBeInTheDocument();
+    expect(screen.getByText("2 本")).toBeInTheDocument();
   });
 
   it("loads a Bilibili link in the official video player", async () => {
