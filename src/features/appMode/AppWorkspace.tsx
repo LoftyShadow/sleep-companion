@@ -8,6 +8,7 @@ import type { PlayerPort } from "../player/PlayerPort";
 import { useRuntimePlayer } from "../player/useRuntimePlayer";
 import { useGlobalSleepTimer } from "../sleepTimer/useGlobalSleepTimer";
 import { VideoListeningView } from "../videoListening/VideoListeningView";
+import type { BilibiliCreatorVideosLoader } from "../videoListening/bilibiliCreator";
 import type { BilibiliMetadataLoader } from "../videoListening/bilibiliMetadata";
 import { AppModeSwitcher } from "./AppModeSwitcher";
 import { APP_MODE_WORKSPACE_LABELS, type AppMode } from "./appModeTypes";
@@ -18,6 +19,7 @@ import "./AppWorkspace.css";
 import "./AppWorkspace.mobile.css";
 
 interface AppWorkspaceProps {
+  bilibiliCreatorVideosLoader?: BilibiliCreatorVideosLoader;
   bilibiliMetadataLoader?: BilibiliMetadataLoader;
   fileSystem?: FileSystemPort;
   player?: PlayerPort;
@@ -25,6 +27,7 @@ interface AppWorkspaceProps {
 }
 
 export function AppWorkspace({
+  bilibiliCreatorVideosLoader,
   bilibiliMetadataLoader,
   fileSystem,
   player,
@@ -142,6 +145,8 @@ export function AppWorkspace({
         >
           {hasOpenedVideo ? (
             <VideoListeningView
+              creatorVideosLoader={bilibiliCreatorVideosLoader}
+              fileSystem={fileSystem}
               globalStopRequestId={sleepTimer.globalStopRequestId}
               metadataLoader={bilibiliMetadataLoader}
               playbackControlRequestId={playbackControlRequestIds.video}

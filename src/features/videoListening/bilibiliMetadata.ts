@@ -1,5 +1,5 @@
-import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import type { BilibiliReference } from "./bilibiliVideo";
+import { createSafeTauriInvoke, type InvokeFn } from "./tauriInvoke";
 
 export interface BilibiliMetadata {
   imageUrl?: string;
@@ -9,11 +9,6 @@ export interface BilibiliMetadata {
 export type BilibiliMetadataLoader = (
   reference: BilibiliReference,
 ) => Promise<BilibiliMetadata>;
-
-type InvokeFn = (
-  cmd: string,
-  args?: Record<string, unknown>,
-) => Promise<unknown>;
 
 function isBilibiliMetadata(value: unknown): value is BilibiliMetadata {
   if (!value || typeof value !== "object") {
@@ -30,7 +25,7 @@ function isBilibiliMetadata(value: unknown): value is BilibiliMetadata {
 }
 
 export function createBilibiliMetadataLoader(
-  invoke: InvokeFn = tauriInvoke,
+  invoke: InvokeFn = createSafeTauriInvoke("当前环境不能读取 B 站元信息"),
 ): BilibiliMetadataLoader {
   return async (reference) => {
     const metadata = await invoke("fetch_bilibili_metadata", { reference });

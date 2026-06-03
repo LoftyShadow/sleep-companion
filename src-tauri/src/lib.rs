@@ -11,6 +11,7 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            bilibili_metadata::fetch_bilibili_creator_videos,
             bilibili_metadata::fetch_bilibili_metadata,
             native_tts::native_tts_cancel,
             native_tts::native_tts_list_voices,

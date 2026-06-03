@@ -165,6 +165,59 @@ describe("AppWorkspace", () => {
     ).toBeInTheDocument();
   });
 
+  it("saves a Bilibili creator and plays a refreshed latest video", async () => {
+    const user = userEvent.setup();
+    const loadCreatorVideos = vi.fn().mockResolvedValue({
+      creator: {
+        avatarUrl: "https://i0.hdslb.com/avatar.jpg",
+        mid: "123456",
+        name: "测试UP",
+      },
+      videos: [
+        {
+          bvid: "BV1xx411c7mD",
+          coverUrl: "https://i0.hdslb.com/video.jpg",
+          durationSeconds: 62,
+          playCount: 1024,
+          publishedAt: 1710000000,
+          title: "最新助眠视频",
+        },
+      ],
+    });
+    render(
+      <AppWorkspace
+        bilibiliCreatorVideosLoader={loadCreatorVideos}
+        fileSystem={createMemoryFileSystem()}
+        player={createPlayerPortTestDouble().player}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "听视频" }));
+    expect(await screen.findByText("还没有保存 UP 主")).toBeInTheDocument();
+
+    await user.type(
+      screen.getByLabelText("UP 主主页或 mid"),
+      "https://space.bilibili.com/123456",
+    );
+    await user.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => {
+      expect(loadCreatorVideos).toHaveBeenCalledWith("123456", 12);
+    });
+    expect(
+      (await screen.findAllByText("测试UP")).length,
+    ).toBeGreaterThan(0);
+
+    await user.click(
+      screen.getByRole("button", { name: /最新助眠视频/u }),
+    );
+
+    expect(
+      screen.getByTitle("B 站视频播放器 BV BV1xx411c7mD"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("最新助眠视频").length).toBeGreaterThan(0);
+  });
+
   it("uses the floating global button to pause active modules", async () => {
     const user = userEvent.setup();
     const { player, stopAll } = createPlayerPortTestDouble();

@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import type { FileSystemPort } from "../storage/FileSystemPort";
 import {
   BilibiliSourceKind,
   createBilibiliPlaybackSource,
   type BilibiliPlaybackSource,
 } from "./bilibiliVideo";
+import type {
+  BilibiliCreatorVideo,
+  BilibiliCreatorVideosLoader,
+} from "./bilibiliCreator";
+import { BilibiliCreatorPanel } from "./BilibiliCreatorPanel";
 import {
   loadBilibiliMetadata,
   type BilibiliMetadata,
@@ -20,6 +26,8 @@ const DEFAULT_VIDEO_INPUT = "";
 const DEFAULT_LISTENING_VOLUME = 70;
 
 interface VideoListeningViewProps {
+  creatorVideosLoader?: BilibiliCreatorVideosLoader;
+  fileSystem?: FileSystemPort;
   globalStopRequestId: number;
   metadataLoader?: BilibiliMetadataLoader;
   playbackControlRequestId?: number;
@@ -75,6 +83,8 @@ function getVideoStatusText({
 }
 
 export function VideoListeningView({
+  creatorVideosLoader,
+  fileSystem,
   globalStopRequestId,
   metadataLoader = loadBilibiliMetadata,
   playbackControlRequestId = 0,
@@ -179,36 +189,13 @@ export function VideoListeningView({
     handleTogglePlayback();
   }, [handleTogglePlayback, playbackControlRequestId]);
 
-  async function handleLoadVideo() {
-    const trimmedInput = videoInput.trim();
-    if (!trimmedInput) {
-      metadataRequestIdRef.current += 1;
-      setVideoSource(null);
-      setVideoMetadata(null);
-      setIsMetadataLoading(false);
-      setMetadataErrorMessage(null);
-      setIsPlaybackMounted(false);
-      setIsPlayerExpanded(false);
-      setErrorMessage("请输入 B 站视频或直播链接");
-      return;
-    }
-
-    const nextVideoSource = createBilibiliPlaybackSource(trimmedInput);
-    if (!nextVideoSource) {
-      metadataRequestIdRef.current += 1;
-      setVideoSource(null);
-      setVideoMetadata(null);
-      setIsMetadataLoading(false);
-      setMetadataErrorMessage(null);
-      setIsPlaybackMounted(false);
-      setIsPlayerExpanded(false);
-      setErrorMessage("暂时只支持 B 站 BV、av、ep 和直播间链接");
-      return;
-    }
-
+  async function loadVideoSource(
+    nextVideoSource: BilibiliPlaybackSource,
+    metadataHint?: BilibiliMetadata,
+  ) {
     setVideoSource(nextVideoSource);
-    setVideoMetadata(null);
-    setIsMetadataLoading(true);
+    setVideoMetadata(metadataHint ?? null);
+    setIsMetadataLoading(!metadataHint);
     setMetadataErrorMessage(null);
     setIsPlaybackMounted(true);
     setIsPlayerExpanded(false);
@@ -216,6 +203,9 @@ export function VideoListeningView({
 
     const requestId = metadataRequestIdRef.current + 1;
     metadataRequestIdRef.current = requestId;
+    if (metadataHint) {
+      return;
+    }
 
     try {
       const metadata = await metadataLoader(nextVideoSource.reference);
@@ -235,6 +225,47 @@ export function VideoListeningView({
         setIsMetadataLoading(false);
       }
     }
+  }
+
+  function resetVideoSource(errorText: string) {
+    metadataRequestIdRef.current += 1;
+    setVideoSource(null);
+    setVideoMetadata(null);
+    setIsMetadataLoading(false);
+    setMetadataErrorMessage(null);
+    setIsPlaybackMounted(false);
+    setIsPlayerExpanded(false);
+    setErrorMessage(errorText);
+  }
+
+  async function handleLoadVideo() {
+    const trimmedInput = videoInput.trim();
+    if (!trimmedInput) {
+      resetVideoSource("请输入 B 站视频或直播链接");
+      return;
+    }
+
+    const nextVideoSource = createBilibiliPlaybackSource(trimmedInput);
+    if (!nextVideoSource) {
+      resetVideoSource("暂时只支持 B 站 BV、av、ep 和直播间链接");
+      return;
+    }
+
+    await loadVideoSource(nextVideoSource);
+  }
+
+  function handleCreatorVideoSelect(video: BilibiliCreatorVideo) {
+    const nextVideoSource = createBilibiliPlaybackSource(video.bvid);
+    if (!nextVideoSource) {
+      setErrorMessage("无法载入这个 B 站视频");
+      return;
+    }
+
+    setVideoInput(video.bvid);
+    void loadVideoSource(nextVideoSource, {
+      imageUrl: video.coverUrl,
+      title: video.title,
+    });
   }
 
   function handlePlayerFrameLoad() {
@@ -458,6 +489,12 @@ export function VideoListeningView({
             )}
           </div>
         </section>
+
+        <BilibiliCreatorPanel
+          fileSystem={fileSystem}
+          videosLoader={creatorVideosLoader}
+          onVideoSelect={handleCreatorVideoSelect}
+        />
       </div>
     </div>
   );
