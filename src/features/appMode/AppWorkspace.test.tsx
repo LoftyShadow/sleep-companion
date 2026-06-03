@@ -131,7 +131,7 @@ describe("AppWorkspace", () => {
     expect(handlePause).toHaveBeenCalledTimes(1);
   });
 
-  it("uses the floating control to open and toggle video listening", async () => {
+  it("keeps regular Bilibili video playback inside the official iframe controls", async () => {
     const user = userEvent.setup();
     render(<AppWorkspace player={createPlayerPortTestDouble().player} />);
 
@@ -148,18 +148,13 @@ describe("AppWorkspace", () => {
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "展开模块播放控制" }));
-    await user.click(
-      await screen.findByRole("button", { name: "暂停听视频模块" }),
-    );
 
-    expect(
-      screen.queryByTitle("B 站视频播放器 BV BV1xx411c7mD"),
-    ).not.toBeInTheDocument();
-
-    await user.click(
-      await screen.findByRole("button", { name: "播放听视频模块" }),
-    );
-
+    const videoModuleButton = await screen.findByRole("button", {
+      name: "查看听视频模块",
+    });
+    expect(videoModuleButton).toBeEnabled();
+    expect(videoModuleButton).toHaveTextContent("查看");
+    expect(screen.getAllByText("已载入").length).toBeGreaterThan(0);
     expect(
       screen.getByTitle("B 站视频播放器 BV BV1xx411c7mD"),
     ).toBeInTheDocument();

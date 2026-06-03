@@ -1,5 +1,6 @@
 export type PlaybackControlStatus =
   | "idle"
+  | "loaded"
   | "loading"
   | "playing"
   | "paused"

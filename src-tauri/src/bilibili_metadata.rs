@@ -69,7 +69,7 @@ pub struct BilibiliBrowserFingerprint {
 
 const DEFAULT_CREATOR_VIDEO_LIMIT: u8 = 12;
 const MAX_CREATOR_VIDEO_LIMIT: u8 = 12;
-const MAX_CREATOR_DYNAMIC_PAGE_COUNT: u8 = 5;
+const MAX_CREATOR_DYNAMIC_PAGE_COUNT: u8 = 10;
 type BilibiliCookieStore = BTreeMap<String, String>;
 const WBI_MIXIN_KEY_ENC_TAB: [usize; 64] = [
     46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35, 27, 43, 5, 49, 33, 9, 42, 19, 29,
@@ -331,9 +331,13 @@ fn build_query_string(params: &[(String, String)]) -> Result<String, String> {
 }
 
 fn modules_value<'a>(item: &'a Value, key: &str) -> Option<&'a Value> {
-    read_array(item, &["modules"])?
-        .iter()
-        .find_map(|module| module.get(key))
+    let modules = item.get("modules")?;
+
+    if let Some(module_items) = modules.as_array() {
+        return module_items.iter().find_map(|module| module.get(key));
+    }
+
+    modules.as_object()?.get(key)
 }
 
 fn store_response_cookies(cookie_store: &mut BilibiliCookieStore, response: &reqwest::Response) {
@@ -519,7 +523,8 @@ fn parse_creator_videos(mid: &str, value: &Value) -> Result<BilibiliCreatorVideo
 }
 
 fn parse_dynamic_creator_profile(mid: &str, value: &Value) -> Option<BilibiliCreatorProfile> {
-    let user = modules_value(value, "module_author")?.get("user")?;
+    let author = modules_value(value, "module_author")?;
+    let user = author.get("user").unwrap_or(author);
     let user_mid = read_i64(user, &["mid"]).map(|value| value.to_string())?;
     if user_mid != mid {
         return None;
@@ -535,17 +540,35 @@ fn parse_dynamic_creator_profile(mid: &str, value: &Value) -> Option<BilibiliCre
     })
 }
 
+fn dynamic_archive_value(module_dynamic: &Value) -> Option<&Value> {
+    module_dynamic.get("dyn_archive").or_else(|| {
+        module_dynamic
+            .get("major")
+            .and_then(|major| major.get("archive"))
+    })
+}
+
 fn parse_dynamic_archive_video(value: &Value) -> Option<BilibiliCreatorVideo> {
     let module_dynamic = modules_value(value, "module_dynamic")?;
-    let archive = module_dynamic.get("dyn_archive")?;
+    let archive = dynamic_archive_value(module_dynamic)?;
     let bvid = read_non_empty_string(archive, &["bvid"])?;
     let title = read_non_empty_string(archive, &["title"])?;
     let author = modules_value(value, "module_author")?;
-    let published_at = read_i64(author, &["pub_ts"])?;
+    let published_at = read_i64(author, &["pub_ts"])
+        .or_else(|| read_i64(archive, &["pubdate"]))
+        .or_else(|| read_i64(archive, &["ctime"]))
+        .or_else(|| read_i64(archive, &["created"]))?;
     let aid = read_number_as_string(archive, &["aid"]);
-    let cover_url = normalize_image_url(read_non_empty_string(archive, &["cover"]));
-    let duration_seconds = parse_duration_seconds(archive, &["duration_text"]);
-    let play_count = read_bilibili_count(archive, &["stat", "play"]);
+    let cover_url = normalize_image_url(
+        read_non_empty_string(archive, &["cover"])
+            .or_else(|| read_non_empty_string(archive, &["pic"])),
+    );
+    let duration_seconds = parse_duration_seconds(archive, &["duration_text"])
+        .or_else(|| parse_duration_seconds(archive, &["duration"]))
+        .or_else(|| parse_duration_seconds(archive, &["length"]));
+    let play_count = read_bilibili_count(archive, &["stat", "play"])
+        .or_else(|| read_bilibili_count(archive, &["stat", "view"]))
+        .or_else(|| read_bilibili_count(archive, &["play"]));
 
     Some(BilibiliCreatorVideo {
         aid,
@@ -1278,6 +1301,60 @@ mod tests {
         assert_eq!(
             videos.videos[0].cover_url,
             Some("https://i0.hdslb.com/video.jpg".to_string())
+        );
+    }
+
+    #[test]
+    fn parses_creator_dynamic_major_archive_videos() {
+        let value = serde_json::json!({
+            "code": 0,
+            "data": {
+                "items": [
+                    {
+                        "type": "DYNAMIC_TYPE_AV",
+                        "modules": {
+                            "module_author": {
+                                "user": {
+                                    "face": "//i0.hdslb.com/avatar.jpg",
+                                    "mid": 15810,
+                                    "name": "Mr.Quin"
+                                }
+                            },
+                            "module_dynamic": {
+                                "major": {
+                                    "archive": {
+                                        "aid": 116656965684065_i64,
+                                        "bvid": "BV1g5Vh63EqE",
+                                        "duration": 650,
+                                        "pic": "//i0.hdslb.com/major-video.jpg",
+                                        "pubdate": 1780279202,
+                                        "stat": {
+                                            "view": 30000
+                                        },
+                                        "title": "摸鱼禁止&Mr.Quin十周年新品服饰发布会"
+                                    },
+                                    "type": "MAJOR_TYPE_ARCHIVE"
+                                }
+                            }
+                        }
+                    }
+                ]
+            }
+        });
+
+        let videos = parse_creator_dynamic_videos_page("15810", 12, &value).unwrap();
+
+        assert_eq!(videos.creator.mid, "15810");
+        assert_eq!(videos.creator.name, "Mr.Quin");
+        assert_eq!(videos.videos.len(), 1);
+        assert_eq!(videos.videos[0].aid, Some("116656965684065".to_string()));
+        assert_eq!(videos.videos[0].bvid, "BV1g5Vh63EqE");
+        assert_eq!(videos.videos[0].published_at, 1780279202);
+        assert_eq!(videos.videos[0].duration_seconds, Some(650));
+        assert_eq!(videos.videos[0].play_count, Some(30_000));
+        assert_eq!(
+            videos.videos[0].cover_url,
+            Some("https://i0.hdslb.com/major-video.jpg".to_string())
         );
     }
 

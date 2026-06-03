@@ -30,6 +30,7 @@ interface FloatingPlaybackControlProps {
 
 const STATUS_LABELS: Record<PlaybackControlStatus, string> = {
   idle: "待机",
+  loaded: "已载入",
   loading: "准备中",
   paused: "已暂停",
   playing: "播放中",

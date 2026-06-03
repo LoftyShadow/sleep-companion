@@ -15,7 +15,7 @@ const DEFAULT_DM_COVER_IMG_STR =
 const DEFAULT_DM_IMG_INTER = "{\"ds\":[],\"wh\":[1920,1080,100],\"of\":[0,0,0]}";
 const DEFAULT_CREATOR_VIDEO_LIMIT = 12;
 const MAX_CREATOR_VIDEO_LIMIT = 12;
-const MAX_CREATOR_DYNAMIC_PAGE_COUNT = 5;
+const MAX_CREATOR_DYNAMIC_PAGE_COUNT = 10;
 const WBI_MIXIN_KEY_ENC_TAB = [
   46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35, 27, 43, 5, 49,
   33, 9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13, 37, 48, 7, 16, 24, 55, 40,
@@ -104,6 +104,28 @@ function readBilibiliCount(value: unknown): number | undefined {
   }
 
   return typeof value === "string" ? parseBilibiliCountText(value) : undefined;
+}
+
+function readFirstDurationSeconds(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    const duration = parseDurationSeconds(value);
+    if (duration !== undefined) {
+      return duration;
+    }
+  }
+
+  return undefined;
+}
+
+function readFirstBilibiliCount(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    const count = readBilibiliCount(value);
+    if (count !== undefined) {
+      return count;
+    }
+  }
+
+  return undefined;
 }
 
 function normalizeImageUrl(value: unknown): string | undefined {
@@ -288,13 +310,21 @@ function modulesValue(
   item: Record<string, unknown>,
   key: string,
 ): Record<string, unknown> | null {
-  const modules = Array.isArray(item.modules) ? item.modules : [];
-
-  for (const moduleValue of modules) {
-    const moduleRecord = asRecord(moduleValue);
-    const value = asRecord(moduleRecord?.[key]);
+  const moduleMap = asRecord(item.modules);
+  if (moduleMap) {
+    const value = asRecord(moduleMap[key]);
     if (value) {
       return value;
+    }
+  }
+
+  if (Array.isArray(item.modules)) {
+    for (const moduleValue of item.modules) {
+      const moduleRecord = asRecord(moduleValue);
+      const value = asRecord(moduleRecord?.[key]);
+      if (value) {
+        return value;
+      }
     }
   }
 
@@ -351,7 +381,7 @@ function parseDynamicCreatorProfile(
   item: Record<string, unknown>,
 ): BilibiliCreatorVideosPayload["creator"] | null {
   const author = modulesValue(item, "module_author");
-  const user = asRecord(author?.user);
+  const user = asRecord(author?.user) ?? author;
   const userMid = readString(user?.mid);
   const name = readString(user?.name);
   if (!userMid || userMid !== mid || !name) {
@@ -369,11 +399,17 @@ function parseDynamicArchiveVideo(
   item: Record<string, unknown>,
 ): BilibiliCreatorVideoPayload | null {
   const moduleDynamic = modulesValue(item, "module_dynamic");
-  const archive = asRecord(moduleDynamic?.dyn_archive);
+  const major = asRecord(moduleDynamic?.major);
+  const archive =
+    asRecord(moduleDynamic?.dyn_archive) ?? asRecord(major?.archive);
   const bvid = readString(archive?.bvid);
   const title = readString(archive?.title);
   const author = modulesValue(item, "module_author");
-  const publishedAt = readNumber(author?.pub_ts);
+  const publishedAt =
+    readNumber(author?.pub_ts) ??
+    readNumber(archive?.pubdate) ??
+    readNumber(archive?.ctime) ??
+    readNumber(archive?.created);
   if (!bvid || !title || publishedAt === undefined) {
     return null;
   }
@@ -382,9 +418,17 @@ function parseDynamicArchiveVideo(
   return {
     aid: readString(archive?.aid) ?? undefined,
     bvid,
-    coverUrl: normalizeImageUrl(archive?.cover),
-    durationSeconds: parseDurationSeconds(archive?.duration_text),
-    playCount: readBilibiliCount(stat?.play),
+    coverUrl: normalizeImageUrl(archive?.cover ?? archive?.pic),
+    durationSeconds: readFirstDurationSeconds(
+      archive?.duration_text,
+      archive?.duration,
+      archive?.length,
+    ),
+    playCount: readFirstBilibiliCount(
+      stat?.play,
+      stat?.view,
+      archive?.play,
+    ),
     publishedAt,
     title,
   };

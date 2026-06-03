@@ -195,6 +195,15 @@
   accent-color: var(--teal);
 }
 
+.video-control-hint {
+  grid-column: 1 / -1;
+  margin: -2px 0 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 780;
+  line-height: 1.42;
+}
+
 .video-source-header {
   display: flex;
   align-items: center;
@@ -224,7 +233,7 @@
   box-shadow:
     0 16px 34px rgba(20, 33, 28, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.48);
-  aspect-ratio: 16 / 7;
+  aspect-ratio: 16 / 9;
 }
 
 .video-player-frame-shell-collapsed {

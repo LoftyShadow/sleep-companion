@@ -112,13 +112,19 @@ export function usePlaybackControlBus(openAppMode: (mode: AppMode) => void) {
         return;
       }
 
-      if (
-        moduleId === "video" &&
-        playbackControlStates.video.status === "unavailable"
-      ) {
-        setHasOpenedVideo(true);
-        openAppMode("video");
-        return;
+      if (moduleId === "video") {
+        if (playbackControlStates.video.status === "unavailable") {
+          setHasOpenedVideo(true);
+          openAppMode("video");
+          return;
+        }
+
+        if (playbackControlStates.video.status === "loaded") {
+          setHasOpenedVideo(true);
+          openAppMode("video");
+          issuePlaybackControlRequests([moduleId]);
+          return;
+        }
       }
 
       issuePlaybackControlRequests([moduleId]);
@@ -166,4 +172,3 @@ export function usePlaybackControlBus(openAppMode: (mode: AppMode) => void) {
     requestModulePlaybackToggle,
   };
 }
-

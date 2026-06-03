@@ -34,12 +34,20 @@ interface VideoListeningViewProps {
   onPlaybackControlStateChange?: (state: PlaybackControlState) => void;
 }
 
+function usesOfficialFrameControls(videoSource: BilibiliPlaybackSource | null) {
+  return videoSource?.sourceKind === BilibiliSourceKind.Video;
+}
+
 function getVideoPlaybackControlStatus(
   videoSource: BilibiliPlaybackSource | null,
   isPlaybackMounted: boolean,
 ): PlaybackControlStatus {
   if (!videoSource) {
     return "unavailable";
+  }
+
+  if (usesOfficialFrameControls(videoSource)) {
+    return "loaded";
   }
 
   return isPlaybackMounted ? "playing" : "paused";
@@ -53,7 +61,40 @@ function getVideoPlaybackControlActionLabel(
     return "打开";
   }
 
+  if (usesOfficialFrameControls(videoSource)) {
+    return "查看";
+  }
+
   return isPlaybackMounted ? "暂停" : "播放";
+}
+
+function getVideoTransportButtonLabel(
+  videoSource: BilibiliPlaybackSource | null,
+  isPlaybackMounted: boolean,
+): string {
+  if (!videoSource) {
+    return "播放";
+  }
+
+  if (usesOfficialFrameControls(videoSource)) {
+    return "播放/暂停";
+  }
+
+  return isPlaybackMounted ? "暂停" : "播放";
+}
+
+function getVideoControlHintText(
+  videoSource: BilibiliPlaybackSource | null,
+): string {
+  if (videoSource?.sourceKind === BilibiliSourceKind.Live) {
+    return "播放和音量会同步到 B 站直播播放器。";
+  }
+
+  if (usesOfficialFrameControls(videoSource)) {
+    return "普通视频请在官方播放器内播放、暂停和调音量。";
+  }
+
+  return "载入 B 站视频或直播后可收听。";
 }
 
 function getVideoStatusText({
@@ -77,6 +118,10 @@ function getVideoStatusText({
 
   if (!videoSource) {
     return "粘贴链接后开始收听";
+  }
+
+  if (usesOfficialFrameControls(videoSource)) {
+    return "官方播放器已载入";
   }
 
   return isPlaybackMounted ? "已连接官方播放源" : "已暂停官方播放源";
@@ -114,6 +159,15 @@ export function VideoListeningView({
   const metadataRequestIdRef = useRef(0);
   const canControlOfficialPlayer =
     videoSource?.sourceKind === BilibiliSourceKind.Live;
+  const usesOfficialVideoControls = Boolean(
+    videoSource && usesOfficialFrameControls(videoSource),
+  );
+  const canUsePlaybackControlAction =
+    !videoSource || canControlOfficialPlayer || usesOfficialVideoControls;
+  const canUseOuterPlaybackButton = Boolean(
+    videoSource && (canControlOfficialPlayer || usesOfficialVideoControls),
+  );
+  const canUseOuterVolumeControl = canControlOfficialPlayer;
   const playbackControlStatus = getVideoPlaybackControlStatus(
     videoSource,
     isPlaybackMounted,
@@ -136,13 +190,18 @@ export function VideoListeningView({
       return;
     }
 
-    setIsPlaybackMounted((currentValue) => {
-      const nextValue = !currentValue;
-      postLivePlayerCommand("play", nextValue);
-      return nextValue;
-    });
+    if (usesOfficialFrameControls(videoSource)) {
+      setIsPlaybackMounted(true);
+      setIsPlayerExpanded(true);
+      setErrorMessage(null);
+      return;
+    }
+
+    const nextValue = !isPlaybackMounted;
+    postLivePlayerCommand("play", nextValue);
+    setIsPlaybackMounted(nextValue);
     setErrorMessage(null);
-  }, [postLivePlayerCommand, videoSource]);
+  }, [isPlaybackMounted, postLivePlayerCommand, videoSource]);
 
   useEffect(() => {
     if (globalStopRequestId === handledGlobalStopRequestIdRef.current) {
@@ -165,11 +224,12 @@ export function VideoListeningView({
         videoSource,
         isPlaybackMounted,
       ),
-      canToggle: true,
+      canToggle: canUsePlaybackControlAction,
       status: playbackControlStatus,
       summary: videoMetadata?.title ?? videoSource?.label ?? "未载入来源",
     });
   }, [
+    canUsePlaybackControlAction,
     isPlaybackMounted,
     videoMetadata,
     onPlaybackControlStateChange,
@@ -198,7 +258,7 @@ export function VideoListeningView({
     setIsMetadataLoading(!metadataHint);
     setMetadataErrorMessage(null);
     setIsPlaybackMounted(true);
-    setIsPlayerExpanded(false);
+    setIsPlayerExpanded(true);
     setErrorMessage(null);
 
     const requestId = metadataRequestIdRef.current + 1;
@@ -299,6 +359,23 @@ export function VideoListeningView({
     metadataErrorMessage,
     videoSource,
   });
+  const videoPanelStatusText =
+    videoSource && usesOfficialFrameControls(videoSource)
+      ? "已载入"
+      : isPlaybackMounted
+        ? "播放中"
+        : "待命";
+  const videoTransportLabel = videoSource
+    ? getVideoTransportButtonLabel(videoSource, isPlaybackMounted)
+    : "播放";
+  const videoControlHintText = getVideoControlHintText(videoSource);
+  const frameEmbedUrl = videoSource?.embedUrl ?? "";
+  const shouldShowOfficialPlayerFrame = Boolean(
+    videoSource &&
+      (usesOfficialFrameControls(videoSource) ||
+        isPlaybackMounted ||
+        canControlOfficialPlayer),
+  );
 
   return (
     <div className="video-listening-view">
@@ -325,7 +402,7 @@ export function VideoListeningView({
                   className="video-link-input"
                   id={inputId}
                   placeholder="https://www.bilibili.com/video/BV... 或 https://live.bilibili.com/..."
-                  type="url"
+                  type="text"
                   value={videoInput}
                   onChange={(event) => {
                     setVideoInput(event.currentTarget.value);
@@ -375,7 +452,7 @@ export function VideoListeningView({
                 <h2 id="video-player-heading">收听面板</h2>
               </div>
               <span className="section-meta">
-                {isPlaybackMounted ? "播放中" : "待命"}
+                {videoPanelStatusText}
               </span>
             </div>
 
@@ -407,12 +484,16 @@ export function VideoListeningView({
               <button
                 className="transport-button video-playback-button"
                 type="button"
-                aria-pressed={videoSource ? isPlaybackMounted : false}
-                disabled={!videoSource}
+                aria-pressed={
+                  canControlOfficialPlayer ? isPlaybackMounted : undefined
+                }
+                disabled={!canUseOuterPlaybackButton}
                 onClick={handleTogglePlayback}
               >
-                <PlaybackGlyph isPlaying={videoSource ? isPlaybackMounted : false} />
-                <span>{isPlaybackMounted ? "暂停" : "播放"}</span>
+                <PlaybackGlyph
+                  isPlaying={canControlOfficialPlayer && isPlaybackMounted}
+                />
+                <span>{videoTransportLabel}</span>
               </button>
               <label className="video-volume-control">
                 <span className="field-label">
@@ -422,9 +503,14 @@ export function VideoListeningView({
                 <input
                   aria-label="收听音量"
                   className="video-volume-range"
-                  disabled={!canControlOfficialPlayer}
+                  disabled={!canUseOuterVolumeControl}
                   min="0"
                   max="100"
+                  title={
+                    canUseOuterVolumeControl
+                      ? "调整直播收听音量"
+                      : "普通视频请在官方播放器内调整音量"
+                  }
                   type="range"
                   value={listeningVolume}
                   onChange={(event) => {
@@ -434,6 +520,7 @@ export function VideoListeningView({
                   }}
                 />
               </label>
+              <p className="video-control-hint">{videoControlHintText}</p>
             </section>
           </section>
         </section>
@@ -463,16 +550,16 @@ export function VideoListeningView({
             }
             aria-label="官方播放源"
           >
-            {videoSource && (isPlaybackMounted || canControlOfficialPlayer) ? (
+            {videoSource && shouldShowOfficialPlayerFrame ? (
               <>
                 <iframe
                   allow="autoplay; fullscreen; picture-in-picture"
                   allowFullScreen
                   className="video-player-frame"
-                  key={videoSource.embedUrl}
+                  key={frameEmbedUrl}
                   ref={iframeRef}
                   referrerPolicy="strict-origin-when-cross-origin"
-                  src={videoSource.embedUrl}
+                  src={frameEmbedUrl}
                   title={`${videoSource.playerLabel} ${videoSource.label}`}
                   onLoad={handlePlayerFrameLoad}
                 />
