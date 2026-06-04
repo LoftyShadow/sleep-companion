@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  BilibiliSourceKind,
-  createBilibiliPlaybackSource,
-  parseBilibiliInput,
-} from "./bilibiliVideo";
+import { parseBilibiliInput } from "./bilibiliVideo";
 
 describe("bilibiliVideo", () => {
   it("parses BV video links", () => {
@@ -72,35 +68,5 @@ describe("bilibiliVideo", () => {
       null,
     );
     expect(parseBilibiliInput("https://b23.tv/shortlink")).toBe(null);
-  });
-
-  it("creates a display source for valid input", () => {
-    expect(createBilibiliPlaybackSource("BV1xx411c7mD")).toEqual({
-      embedUrl:
-        "https://player.bilibili.com/player.html?autoplay=1&bvid=BV1xx411c7mD",
-      label: "BV BV1xx411c7mD",
-      playerLabel: "B 站视频播放器",
-      reference: {
-        kind: "bvid",
-        value: "BV1xx411c7mD",
-      },
-      sourceKind: BilibiliSourceKind.Video,
-    });
-  });
-
-  it("creates a live source for live room links", () => {
-    expect(
-      createBilibiliPlaybackSource("https://live.bilibili.com/23058"),
-    ).toEqual({
-      embedUrl:
-        "https://www.bilibili.com/blackboard/live/live-activity-player.html?cid=23058&mute=0",
-      label: "直播间 23058",
-      playerLabel: "B 站直播播放器",
-      reference: {
-        kind: "live",
-        value: "23058",
-      },
-      sourceKind: BilibiliSourceKind.Live,
-    });
   });
 });

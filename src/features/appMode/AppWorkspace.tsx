@@ -8,8 +8,9 @@ import type { PlayerPort } from "../player/PlayerPort";
 import { useRuntimePlayer } from "../player/useRuntimePlayer";
 import { useGlobalSleepTimer } from "../sleepTimer/useGlobalSleepTimer";
 import { VideoListeningView } from "../videoListening/VideoListeningView";
+import type { BilibiliAuthClient } from "../videoListening/bilibiliAuth";
 import type { BilibiliCreatorVideosLoader } from "../videoListening/bilibiliCreator";
-import type { BilibiliMetadataLoader } from "../videoListening/bilibiliMetadata";
+import type { BilibiliDirectAudioLoader } from "../videoListening/bilibiliDirectAudio";
 import { AppModeSwitcher } from "./AppModeSwitcher";
 import { APP_MODE_WORKSPACE_LABELS, type AppMode } from "./appModeTypes";
 import { FloatingPlaybackControl } from "./FloatingPlaybackControl";
@@ -19,16 +20,18 @@ import "./AppWorkspace.css";
 import "./AppWorkspace.mobile.css";
 
 interface AppWorkspaceProps {
+  bilibiliAuthClient?: BilibiliAuthClient;
   bilibiliCreatorVideosLoader?: BilibiliCreatorVideosLoader;
-  bilibiliMetadataLoader?: BilibiliMetadataLoader;
+  bilibiliDirectAudioLoader?: BilibiliDirectAudioLoader;
   fileSystem?: FileSystemPort;
   player?: PlayerPort;
   ttsEngine?: TtsEnginePort;
 }
 
 export function AppWorkspace({
+  bilibiliAuthClient,
   bilibiliCreatorVideosLoader,
-  bilibiliMetadataLoader,
+  bilibiliDirectAudioLoader,
   fileSystem,
   player,
   ttsEngine,
@@ -145,10 +148,11 @@ export function AppWorkspace({
         >
           {hasOpenedVideo ? (
             <VideoListeningView
+              bilibiliAuthClient={bilibiliAuthClient}
               creatorVideosLoader={bilibiliCreatorVideosLoader}
+              directAudioLoader={bilibiliDirectAudioLoader}
               fileSystem={fileSystem}
               globalStopRequestId={sleepTimer.globalStopRequestId}
-              metadataLoader={bilibiliMetadataLoader}
               playbackControlRequestId={playbackControlRequestIds.video}
               onPlaybackControlStateChange={
                 handleVideoPlaybackControlStateChange

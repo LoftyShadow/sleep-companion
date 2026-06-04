@@ -3,7 +3,12 @@ import type { Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { createHash } from "node:crypto";
+import { promises as fs } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { homedir, tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { Readable } from "node:stream";
+import QRCode from "qrcode";
 
 const host = process.env.TAURI_DEV_HOST;
 const BILIBILI_BROWSER_USER_AGENT =
@@ -16,6 +21,7 @@ const DEFAULT_DM_IMG_INTER = "{\"ds\":[],\"wh\":[1920,1080,100],\"of\":[0,0,0]}"
 const DEFAULT_CREATOR_VIDEO_LIMIT = 12;
 const MAX_CREATOR_VIDEO_LIMIT = 12;
 const MAX_CREATOR_DYNAMIC_PAGE_COUNT = 10;
+const BILIBILI_WEB_SESSION_FILE_NAME = "bilibili-web-session.json";
 const WBI_MIXIN_KEY_ENC_TAB = [
   46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35, 27, 43, 5, 49,
   33, 9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13, 37, 48, 7, 16, 24, 55, 40,
@@ -47,10 +53,73 @@ interface BilibiliCreatorDynamicVideosPage extends BilibiliCreatorVideosPayload 
   nextOffset?: string;
 }
 
+interface BilibiliDirectAudioReferencePayload {
+  kind: "aid" | "bvid";
+  value: string;
+}
+
+interface BilibiliDirectAudioSourcePayload {
+  aid: string;
+  audioUrl: string;
+  backupUrls: string[];
+  bandwidth?: number;
+  bvid: string;
+  cid: string;
+  codecs?: string;
+  coverUrl?: string;
+  expiresAt?: number;
+  mimeType?: string;
+  title: string;
+}
+
+interface BilibiliVideoIdentityPayload {
+  aid: string;
+  bvid: string;
+  cid: string;
+  coverUrl?: string;
+  title: string;
+}
+
+interface BilibiliDashAudioTrackPayload {
+  audioUrl: string;
+  backupUrls: string[];
+  bandwidth?: number;
+  codecs?: string;
+  mimeType?: string;
+}
+
+interface BilibiliAuthAccountPayload {
+  avatarUrl?: string;
+  mid: string;
+  name: string;
+}
+
+interface BilibiliWebAuthSession {
+  avatarUrl?: string;
+  biliJct?: string;
+  buvid3?: string;
+  dedeUserId?: string;
+  dedeUserIdCkMd5?: string;
+  expiresAt?: number;
+  mid?: string;
+  name?: string;
+  sessData: string;
+  sid?: string;
+  updatedAt: number;
+}
+
+let bilibiliWebAuthSession: BilibiliWebAuthSession | null = null;
+let bilibiliWebAuthSessionStoreLoaded = false;
+let bilibiliWebAuthSessionLoadPromise: Promise<void> | null = null;
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object"
     ? (value as Record<string, unknown>)
     : null;
+}
+
+function isNodeErrorCode(error: unknown, code: string): boolean {
+  return asRecord(error)?.code === code;
 }
 
 function readString(value: unknown): string | null {
@@ -235,7 +304,7 @@ function buildSignedWbiQuery(
   };
   const sortedEntries = Object.entries(signedParams)
     .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, value]) => [key, sanitizeWbiValue(value)] as const);
+    .map(([key, value]): [string, string] => [key, sanitizeWbiValue(value)]);
   const query = new URLSearchParams(sortedEntries).toString();
   const wRid = createHash("md5")
     .update(`${query}${createWbiMixinKey(imgKey, subKey)}`)
@@ -262,6 +331,214 @@ function readSetCookieHeaders(headers: Headers): string[] {
   return combinedHeader ? splitSetCookieHeader(combinedHeader) : [];
 }
 
+function nowUnixSeconds(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
+function optionalString(value: unknown): string | undefined {
+  return readString(value) ?? undefined;
+}
+
+function isUsableBilibiliWebAuthSession(
+  session: BilibiliWebAuthSession,
+  now = nowUnixSeconds(),
+): boolean {
+  return (
+    session.sessData.trim().length > 0 &&
+    (session.expiresAt === undefined || session.expiresAt > now)
+  );
+}
+
+function parsePersistedBilibiliWebAuthSession(
+  value: unknown,
+): BilibiliWebAuthSession | null {
+  const record = asRecord(value);
+  const sessData = readString(record?.sessData);
+  const updatedAt = readNumber(record?.updatedAt);
+  if (!sessData || updatedAt === undefined) {
+    return null;
+  }
+
+  const session: BilibiliWebAuthSession = {
+    avatarUrl: optionalString(record?.avatarUrl),
+    biliJct: optionalString(record?.biliJct),
+    buvid3: optionalString(record?.buvid3),
+    dedeUserId: optionalString(record?.dedeUserId),
+    dedeUserIdCkMd5: optionalString(record?.dedeUserIdCkMd5),
+    expiresAt: readNumber(record?.expiresAt),
+    mid: optionalString(record?.mid),
+    name: optionalString(record?.name),
+    sessData,
+    sid: optionalString(record?.sid),
+    updatedAt: Math.floor(updatedAt),
+  };
+
+  return isUsableBilibiliWebAuthSession(session) ? session : null;
+}
+
+function bilibiliWebSessionPath(): string {
+  const xdgCacheHome = process.env.XDG_CACHE_HOME?.trim();
+  const homeDirectory = process.env.HOME?.trim() || homedir();
+  const cacheDirectory = xdgCacheHome
+    ? join(xdgCacheHome, "sleep-companion")
+    : homeDirectory
+      ? join(homeDirectory, ".cache", "sleep-companion")
+      : join(tmpdir(), "sleep-companion");
+
+  return join(cacheDirectory, BILIBILI_WEB_SESSION_FILE_NAME);
+}
+
+async function restrictBilibiliWebSessionFilePermissions(
+  path: string,
+): Promise<void> {
+  if (process.platform !== "win32") {
+    await fs.chmod(path, 0o600);
+  }
+}
+
+async function clearPersistedBilibiliWebAuthSession(): Promise<void> {
+  const sessionPath = bilibiliWebSessionPath();
+
+  try {
+    await fs.unlink(sessionPath);
+  } catch (error) {
+    if (!isNodeErrorCode(error, "ENOENT")) {
+      throw error;
+    }
+  }
+}
+
+async function saveBilibiliWebAuthSession(
+  session: BilibiliWebAuthSession,
+): Promise<void> {
+  if (!isUsableBilibiliWebAuthSession(session)) {
+    await clearPersistedBilibiliWebAuthSession();
+    return;
+  }
+
+  const sessionPath = bilibiliWebSessionPath();
+  const temporaryPath = `${sessionPath}.tmp`;
+
+  await fs.mkdir(dirname(sessionPath), { recursive: true });
+  await fs.writeFile(temporaryPath, `${JSON.stringify(session, null, 2)}\n`, {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+  await restrictBilibiliWebSessionFilePermissions(temporaryPath);
+  await fs.rename(temporaryPath, sessionPath);
+  await restrictBilibiliWebSessionFilePermissions(sessionPath);
+}
+
+async function loadPersistedBilibiliWebAuthSession(): Promise<void> {
+  const sessionPath = bilibiliWebSessionPath();
+
+  try {
+    const sessionText = await fs.readFile(sessionPath, "utf8");
+    const session = parsePersistedBilibiliWebAuthSession(
+      JSON.parse(sessionText) as unknown,
+    );
+
+    if (session) {
+      bilibiliWebAuthSession = session;
+      bilibiliWebAuthSessionStoreLoaded = true;
+      return;
+    }
+
+    bilibiliWebAuthSession = null;
+    await clearPersistedBilibiliWebAuthSession();
+  } catch (error) {
+    if (isNodeErrorCode(error, "ENOENT")) {
+      bilibiliWebAuthSession = null;
+      bilibiliWebAuthSessionStoreLoaded = true;
+      return;
+    }
+
+    if (error instanceof SyntaxError) {
+      bilibiliWebAuthSession = null;
+      await clearPersistedBilibiliWebAuthSession();
+      bilibiliWebAuthSessionStoreLoaded = true;
+      return;
+    }
+
+    throw error;
+  }
+
+  bilibiliWebAuthSessionStoreLoaded = true;
+}
+
+async function ensureBilibiliWebAuthSessionLoaded(): Promise<void> {
+  if (bilibiliWebAuthSessionStoreLoaded) {
+    return;
+  }
+
+  bilibiliWebAuthSessionLoadPromise ??= loadPersistedBilibiliWebAuthSession()
+    .finally(() => {
+      bilibiliWebAuthSessionLoadPromise = null;
+    });
+
+  await bilibiliWebAuthSessionLoadPromise;
+}
+
+function preloadBilibiliWebAuthSession(): void {
+  void ensureBilibiliWebAuthSessionLoaded().catch(() => {
+    // 预热失败不阻塞 Vite 启动；后续接口请求会重新暴露可见错误。
+  });
+}
+
+function cookieValue(
+  cookies: Map<string, string>,
+  name: string,
+): string | undefined {
+  return optionalString(cookies.get(name));
+}
+
+function parseCookieMaxAge(attribute: string): number | undefined {
+  const [rawKey, rawValue] = attribute.split("=");
+  if (rawKey?.trim().toLowerCase() !== "max-age") {
+    return undefined;
+  }
+
+  const maxAge = Number(rawValue?.trim());
+
+  return Number.isFinite(maxAge) && maxAge > 0 ? maxAge : undefined;
+}
+
+function parseBilibiliLoginCookies(
+  setCookieHeaders: readonly string[],
+): {
+  cookies: Map<string, string>;
+  sessDataExpiresAt?: number;
+} {
+  const cookies = new Map<string, string>();
+  let sessDataExpiresAt: number | undefined;
+
+  setCookieHeaders.forEach((setCookieHeader) => {
+    const [cookiePair, ...attributes] = setCookieHeader.split(";");
+    const separatorIndex = cookiePair.indexOf("=");
+    if (separatorIndex <= 0) {
+      return;
+    }
+
+    const name = cookiePair.slice(0, separatorIndex).trim();
+    const value = cookiePair.slice(separatorIndex + 1).trim();
+    if (!name || !value) {
+      return;
+    }
+
+    cookies.set(name, value);
+    if (name === "SESSDATA") {
+      const maxAge = attributes
+        .map(parseCookieMaxAge)
+        .find((value): value is number => value !== undefined);
+      if (maxAge !== undefined) {
+        sessDataExpiresAt = nowUnixSeconds() + maxAge;
+      }
+    }
+  });
+
+  return { cookies, sessDataExpiresAt };
+}
+
 function storeResponseCookies(
   cookieStore: Map<string, string>,
   response: Response,
@@ -286,16 +563,93 @@ function cookieHeader(cookieStore: Map<string, string>): string {
     .join("; ");
 }
 
+function createCookieStoreFromSession(
+  session: BilibiliWebAuthSession | null,
+): Map<string, string> {
+  const cookieStore = new Map<string, string>();
+  if (!session) {
+    return cookieStore;
+  }
+
+  cookieStore.set("SESSDATA", session.sessData);
+  if (session.biliJct) {
+    cookieStore.set("bili_jct", session.biliJct);
+  }
+  if (session.dedeUserId) {
+    cookieStore.set("DedeUserID", session.dedeUserId);
+  }
+  if (session.dedeUserIdCkMd5) {
+    cookieStore.set("DedeUserID__ckMd5", session.dedeUserIdCkMd5);
+  }
+  if (session.sid) {
+    cookieStore.set("sid", session.sid);
+  }
+  if (session.buvid3) {
+    cookieStore.set("buvid3", session.buvid3);
+  }
+
+  return cookieStore;
+}
+
+function getActiveBilibiliWebAuthSession(): BilibiliWebAuthSession | null {
+  if (!bilibiliWebAuthSession) {
+    return null;
+  }
+
+  if (!isUsableBilibiliWebAuthSession(bilibiliWebAuthSession)) {
+    bilibiliWebAuthSession = null;
+    void clearPersistedBilibiliWebAuthSession().catch(() => {
+      // 状态读取不能因为过期文件清理失败而阻塞；显式退出时会返回可见错误。
+    });
+
+    return null;
+  }
+
+  return bilibiliWebAuthSession;
+}
+
+function accountFromWebAuthSession(
+  session: BilibiliWebAuthSession | null,
+): BilibiliAuthAccountPayload | undefined {
+  if (!session) {
+    return undefined;
+  }
+
+  const mid = optionalString(session.mid) ?? optionalString(session.dedeUserId);
+  if (!mid) {
+    return undefined;
+  }
+
+  return {
+    avatarUrl: optionalString(session.avatarUrl),
+    mid,
+    name: optionalString(session.name) ?? "B 站账号",
+  };
+}
+
+function webAuthStatusPayload() {
+  const session = getActiveBilibiliWebAuthSession();
+
+  return {
+    account: accountFromWebAuthSession(session) ?? null,
+    expiresAt: session?.expiresAt,
+    isLoggedIn: Boolean(session),
+    updatedAt: session?.updatedAt,
+  };
+}
+
 async function fetchBilibiliJson(
   url: string,
   cookieStore: Map<string, string>,
   referer: string,
+  extraHeaders: Record<string, string> = {},
 ): Promise<unknown> {
   const response = await fetch(url, {
     headers: {
       Cookie: cookieHeader(cookieStore),
       Referer: referer,
       "User-Agent": BILIBILI_BROWSER_USER_AGENT,
+      ...extraHeaders,
     },
   });
   storeResponseCookies(cookieStore, response);
@@ -509,6 +863,316 @@ function validateCreatorRequest(url: URL): { limit: number; mid: string } {
   return { limit: requestedLimit, mid };
 }
 
+function validateDirectAudioRequest(
+  url: URL,
+): BilibiliDirectAudioReferencePayload {
+  const kind = url.searchParams.get("kind")?.trim() ?? "";
+  const value = url.searchParams.get("value")?.trim() ?? "";
+  if (!value) {
+    throw new Error("B 站视频引用为空");
+  }
+
+  if (kind === "bvid") {
+    if (/^BV[0-9A-Za-z]+$/u.test(value)) {
+      return { kind, value };
+    }
+
+    throw new Error("B 站 BV 号格式不正确");
+  }
+
+  if (kind === "aid") {
+    if (/^\d+$/u.test(value)) {
+      return { kind, value };
+    }
+
+    throw new Error("B 站 av 号格式不正确");
+  }
+
+  if (kind === "ep") {
+    throw new Error("当前直连模式暂不支持番剧链接");
+  }
+
+  if (kind === "live") {
+    throw new Error("当前直连模式暂不支持直播间");
+  }
+
+  throw new Error("当前直连模式只支持 BV 和 av 视频");
+}
+
+function directAudioViewUrl(reference: BilibiliDirectAudioReferencePayload) {
+  const searchParams = new URLSearchParams({
+    [reference.kind === "bvid" ? "bvid" : "aid"]: reference.value,
+  });
+
+  return `https://api.bilibili.com/x/web-interface/view?${searchParams.toString()}`;
+}
+
+function parseBilibiliVideoIdentity(
+  responseValue: unknown,
+): BilibiliVideoIdentityPayload {
+  const response = ensureBilibiliSuccess(responseValue);
+  const data = asRecord(response.data);
+  const bvid = readString(data?.bvid);
+  const aid = readString(data?.aid);
+  const title = readString(data?.title);
+  const cid =
+    readString(data?.cid) ??
+    (Array.isArray(data?.pages)
+      ? readString(asRecord(data.pages[0])?.cid)
+      : null);
+  if (!bvid || !aid || !cid || !title) {
+    throw new Error("B 站视频信息响应格式不正确");
+  }
+
+  return {
+    aid,
+    bvid,
+    cid,
+    coverUrl: normalizeImageUrl(data?.pic),
+    title,
+  };
+}
+
+function readDashAudioUrl(track: Record<string, unknown>): string | undefined {
+  return readString(track.baseUrl) ?? readString(track.base_url);
+}
+
+function readDashAudioBackupUrls(track: Record<string, unknown>): string[] {
+  const backupUrls = Array.isArray(track.backupUrl)
+    ? track.backupUrl
+    : Array.isArray(track.backup_url)
+      ? track.backup_url
+      : [];
+
+  return backupUrls
+    .map(readString)
+    .filter((url): url is string => Boolean(url));
+}
+
+function parseBestDashAudioTrack(
+  responseValue: unknown,
+): BilibiliDashAudioTrackPayload {
+  const response = ensureBilibiliSuccess(responseValue);
+  const data = asRecord(response.data);
+  const dash = asRecord(data?.dash);
+  const audioValues = Array.isArray(dash?.audio) ? dash.audio : null;
+  if (!audioValues) {
+    throw new Error("B 站直连音频响应缺少 DASH 音频轨");
+  }
+
+  const audioTracks = audioValues
+    .map(asRecord)
+    .filter((track): track is Record<string, unknown> => Boolean(track))
+    .map((track): BilibiliDashAudioTrackPayload | null => {
+      const audioUrl = readDashAudioUrl(track);
+      if (!audioUrl) {
+        return null;
+      }
+
+      return {
+        audioUrl,
+        backupUrls: readDashAudioBackupUrls(track),
+        bandwidth: readNumber(track.bandwidth),
+        codecs: readString(track.codecs) ?? undefined,
+        mimeType:
+          readString(track.mime_type) ?? readString(track.mimeType) ?? undefined,
+      };
+    })
+    .filter(
+      (track): track is BilibiliDashAudioTrackPayload => track !== null,
+    )
+    .sort(
+      (left, right) => (right.bandwidth ?? 0) - (left.bandwidth ?? 0),
+    );
+
+  const bestTrack = audioTracks[0];
+  if (!bestTrack) {
+    throw new Error("B 站直连音频不可用");
+  }
+
+  return bestTrack;
+}
+
+function directAudioPlayurl(
+  identity: BilibiliVideoIdentityPayload,
+  imgKey: string,
+  subKey: string,
+): string {
+  const query = buildSignedWbiQuery(
+    {
+      bvid: identity.bvid,
+      cid: identity.cid,
+      fnval: "4048",
+      fnver: "0",
+      fourk: "1",
+      qn: "80",
+    },
+    imgKey,
+    subKey,
+  );
+
+  return `https://api.bilibili.com/x/player/wbi/playurl?${query}`;
+}
+
+function proxiedBilibiliAudioUrl(audioUrl: string, bvid: string): string {
+  const searchParams = new URLSearchParams({
+    bvid,
+    url: audioUrl,
+  });
+
+  return `/api/bilibili/audio-proxy?${searchParams.toString()}`;
+}
+
+async function resolveBilibiliDirectAudioForDevApi(
+  url: URL,
+): Promise<BilibiliDirectAudioSourcePayload> {
+  await ensureBilibiliWebAuthSessionLoaded();
+  const reference = validateDirectAudioRequest(url);
+  const cookieStore = createCookieStoreFromSession(
+    getActiveBilibiliWebAuthSession(),
+  );
+  const viewResponse = await fetchBilibiliJson(
+    directAudioViewUrl(reference),
+    cookieStore,
+    "https://www.bilibili.com/",
+    {
+      Origin: "https://www.bilibili.com",
+    },
+  );
+  const identity = parseBilibiliVideoIdentity(viewResponse);
+  const wbiResponse = await fetchBilibiliJson(
+    "https://api.bilibili.com/x/web-interface/nav",
+    cookieStore,
+    "https://www.bilibili.com/",
+  );
+  const { imgKey, subKey } = parseWbiKeys(wbiResponse);
+  const playurlResponse = await fetchBilibiliJson(
+    directAudioPlayurl(identity, imgKey, subKey),
+    cookieStore,
+    `https://www.bilibili.com/video/${identity.bvid}`,
+    {
+      Origin: "https://www.bilibili.com",
+    },
+  );
+  const audioTrack = parseBestDashAudioTrack(playurlResponse);
+
+  return {
+    aid: identity.aid,
+    audioUrl: proxiedBilibiliAudioUrl(audioTrack.audioUrl, identity.bvid),
+    backupUrls: audioTrack.backupUrls.map((backupUrl) =>
+      proxiedBilibiliAudioUrl(backupUrl, identity.bvid),
+    ),
+    bandwidth: audioTrack.bandwidth,
+    bvid: identity.bvid,
+    cid: identity.cid,
+    codecs: audioTrack.codecs,
+    coverUrl: identity.coverUrl,
+    expiresAt: undefined,
+    mimeType: audioTrack.mimeType,
+    title: identity.title,
+  };
+}
+
+function isTrustedBilibiliAudioHost(hostname: string): boolean {
+  const normalizedHost = hostname.toLowerCase();
+  const trustedRootDomains = [
+    "bilibili.com",
+    "bilivideo.cn",
+    "bilivideo.com",
+    "hdslb.com",
+  ];
+  const trustedExactHosts = new Set([
+    "upos-hz-mirrorakam.akamaized.net",
+    "upos-sz-mirrorakam.akamaized.net",
+  ]);
+
+  return (
+    trustedExactHosts.has(normalizedHost) ||
+    trustedRootDomains.some(
+      (domain) =>
+        normalizedHost === domain || normalizedHost.endsWith(`.${domain}`),
+    )
+  );
+}
+
+function parseTrustedAudioProxyUrl(url: URL): URL {
+  const rawAudioUrl = url.searchParams.get("url")?.trim() ?? "";
+  if (!rawAudioUrl) {
+    throw new Error("B 站音频代理 URL 不能为空");
+  }
+
+  const audioUrl = new URL(rawAudioUrl);
+  if (!["http:", "https:"].includes(audioUrl.protocol)) {
+    throw new Error("B 站音频代理 URL 协议不支持");
+  }
+
+  if (!isTrustedBilibiliAudioHost(audioUrl.hostname)) {
+    throw new Error("B 站音频代理 URL 域名不受信任");
+  }
+
+  return audioUrl;
+}
+
+function copyAudioProxyResponseHeaders(
+  upstreamResponse: Response,
+  response: ServerResponse,
+) {
+  [
+    "accept-ranges",
+    "cache-control",
+    "content-length",
+    "content-range",
+    "content-type",
+    "etag",
+    "last-modified",
+  ].forEach((headerName) => {
+    const headerValue = upstreamResponse.headers.get(headerName);
+    if (headerValue) {
+      response.setHeader(headerName, headerValue);
+    }
+  });
+}
+
+async function proxyBilibiliAudioForDevApi(
+  request: IncomingMessage,
+  response: ServerResponse,
+  url: URL,
+) {
+  await ensureBilibiliWebAuthSessionLoaded();
+  const audioUrl = parseTrustedAudioProxyUrl(url);
+  const cookieStore = createCookieStoreFromSession(
+    getActiveBilibiliWebAuthSession(),
+  );
+  const bvid = url.searchParams.get("bvid")?.trim();
+  const referer =
+    bvid && /^BV[0-9A-Za-z]+$/u.test(bvid)
+      ? `https://www.bilibili.com/video/${bvid}`
+      : "https://www.bilibili.com/";
+  const headers: Record<string, string> = {
+    Cookie: cookieHeader(cookieStore),
+    Origin: "https://www.bilibili.com",
+    Referer: referer,
+    "User-Agent": BILIBILI_BROWSER_USER_AGENT,
+  };
+  const range = request.headers.range;
+  if (typeof range === "string" && range.trim()) {
+    headers.Range = range;
+  }
+
+  const upstreamResponse = await fetch(audioUrl, { headers });
+  response.statusCode = upstreamResponse.status;
+  response.statusMessage = upstreamResponse.statusText;
+  copyAudioProxyResponseHeaders(upstreamResponse, response);
+  if (!upstreamResponse.body) {
+    response.end();
+    return;
+  }
+
+  Readable.fromWeb(
+    upstreamResponse.body as Parameters<typeof Readable.fromWeb>[0],
+  ).pipe(response);
+}
+
 function creatorFingerprintParams(url: URL): Record<string, string> {
   return {
     dm_cover_img_str:
@@ -542,14 +1206,59 @@ function dynamicVideosQuery(
 async function fetchBilibiliCreatorVideosForDevApi(
   url: URL,
 ): Promise<BilibiliCreatorVideosPayload> {
+  await ensureBilibiliWebAuthSessionLoaded();
   const { limit, mid } = validateCreatorRequest(url);
+  const session = getActiveBilibiliWebAuthSession();
+
+  if (session) {
+    try {
+      return await fetchBilibiliCreatorVideosForDevApiMode(
+        url,
+        mid,
+        limit,
+        "登录态刷新",
+        session,
+      );
+    } catch (authenticatedError) {
+      return fetchBilibiliCreatorVideosForDevApiMode(
+        url,
+        mid,
+        limit,
+        "匿名刷新",
+        null,
+      ).catch((anonymousError: unknown) => {
+        throw new Error(
+          `${errorMessage(authenticatedError)}；匿名降级也失败：${errorMessage(anonymousError)}。可退出后重新扫码登录，或稍后重试。`,
+        );
+      });
+    }
+  }
+
+  return fetchBilibiliCreatorVideosForDevApiMode(
+    url,
+    mid,
+    limit,
+    "匿名刷新",
+    null,
+  ).catch((error: unknown) => {
+    throw new Error(`${errorMessage(error)}。登录 B 站后可能提高刷新成功率。`);
+  });
+}
+
+async function fetchBilibiliCreatorVideosForDevApiMode(
+  url: URL,
+  mid: string,
+  limit: number,
+  modeLabel: string,
+  session: BilibiliWebAuthSession | null,
+): Promise<BilibiliCreatorVideosPayload> {
   try {
-    return await fetchBilibiliCreatorDynamicVideos(mid, limit);
+    return await fetchBilibiliCreatorDynamicVideos(mid, limit, session);
   } catch (dynamicError) {
-    return fetchBilibiliCreatorSpaceVideos(url, mid, limit).catch(
+    return fetchBilibiliCreatorSpaceVideos(url, mid, limit, session).catch(
       (spaceError: unknown) => {
         throw new Error(
-          `刷新 B 站 UP 主视频失败：动态接口：${errorMessage(dynamicError)}；投稿接口：${errorMessage(spaceError)}`,
+          `${modeLabel}失败：动态接口：${errorMessage(dynamicError)}；投稿接口：${errorMessage(spaceError)}`,
         );
       },
     );
@@ -563,6 +1272,7 @@ async function prepareBilibiliCreatorSession(
   const spaceUrl = `https://space.bilibili.com/${mid}/upload/video`;
   const spaceResponse = await fetch(spaceUrl, {
     headers: {
+      Cookie: cookieHeader(cookieStore),
       Referer: "https://www.bilibili.com/",
       "User-Agent": BILIBILI_BROWSER_USER_AGENT,
     },
@@ -587,6 +1297,7 @@ async function fetchBilibiliCreatorDynamicVideosPage(
     {
       headers: {
         Cookie: cookieHeader(cookieStore),
+        Origin: "https://t.bilibili.com",
         Referer: `https://space.bilibili.com/${mid}/dynamic`,
         "User-Agent": BILIBILI_BROWSER_USER_AGENT,
       },
@@ -597,14 +1308,17 @@ async function fetchBilibiliCreatorDynamicVideosPage(
     throw new Error(`请求 B 站 UP 主动态失败：HTTP ${response.status}`);
   }
 
-  return parseCreatorDynamicVideosPage(mid, limit, await response.json());
+  const responseValue: unknown = await response.json();
+
+  return parseCreatorDynamicVideosPage(mid, limit, responseValue);
 }
 
 async function fetchBilibiliCreatorDynamicVideos(
   mid: string,
   limit: number,
+  session: BilibiliWebAuthSession | null,
 ): Promise<BilibiliCreatorVideosPayload> {
-  const cookieStore = new Map<string, string>();
+  const cookieStore = createCookieStoreFromSession(session);
   await prepareBilibiliCreatorSession(mid, cookieStore);
   const wbiResponse = await fetchBilibiliJson(
     "https://api.bilibili.com/x/web-interface/nav",
@@ -677,8 +1391,9 @@ async function fetchBilibiliCreatorSpaceVideos(
   url: URL,
   mid: string,
   limit: number,
+  session: BilibiliWebAuthSession | null,
 ): Promise<BilibiliCreatorVideosPayload> {
-  const cookieStore = new Map<string, string>();
+  const cookieStore = createCookieStoreFromSession(session);
   const spaceUrl = `https://space.bilibili.com/${mid}/upload/video`;
   await prepareBilibiliCreatorSession(mid, cookieStore);
 
@@ -725,6 +1440,280 @@ function writeJsonResponse(
   response.end(JSON.stringify(body));
 }
 
+function readRequestBody(request: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => {
+      chunks.push(chunk);
+    });
+    request.on("end", () => {
+      resolve(Buffer.concat(chunks).toString("utf8"));
+    });
+    request.on("error", reject);
+  });
+}
+
+async function readJsonBody(request: IncomingMessage): Promise<unknown> {
+  const bodyText = await readRequestBody(request);
+  if (!bodyText.trim()) {
+    return null;
+  }
+
+  return JSON.parse(bodyText) as unknown;
+}
+
+async function createBilibiliLoginQrForWebApi() {
+  const response = await fetch(
+    "https://passport.bilibili.com/x/passport-login/web/qrcode/generate",
+    {
+      headers: {
+        Referer: "https://www.bilibili.com/",
+        "User-Agent": BILIBILI_BROWSER_USER_AGENT,
+      },
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`请求 B 站登录二维码失败：HTTP ${response.status}`);
+  }
+
+  const responseValue: unknown = await response.json();
+  const responseRecord = asRecord(responseValue);
+  const code = readNumber(responseRecord?.code);
+  if (code !== 0) {
+    throw new Error(
+      readString(responseRecord?.message) ?? "B 站登录二维码接口返回失败",
+    );
+  }
+
+  const data = asRecord(responseRecord?.data);
+  const url = readString(data?.url);
+  const qrcodeKey = readString(data?.qrcode_key);
+  if (!url || !qrcodeKey) {
+    throw new Error("B 站登录二维码响应格式不正确");
+  }
+
+  const qrSvg = await QRCode.toString(url, {
+    color: {
+      dark: "#14211cff",
+      light: "#ffffffff",
+    },
+    margin: 1,
+    type: "svg",
+    width: 168,
+  });
+
+  return {
+    expiresInSeconds: 180,
+    qrSvg,
+    qrcodeKey,
+    url,
+  };
+}
+
+function createWebSessionFromLoginCookies(
+  setCookieHeaders: readonly string[],
+): BilibiliWebAuthSession {
+  const { cookies, sessDataExpiresAt } =
+    parseBilibiliLoginCookies(setCookieHeaders);
+  const sessData = cookieValue(cookies, "SESSDATA");
+  if (!sessData) {
+    throw new Error("B 站登录成功但没有返回 SESSDATA");
+  }
+
+  return {
+    biliJct: cookieValue(cookies, "bili_jct"),
+    buvid3: cookieValue(cookies, "buvid3"),
+    dedeUserId: cookieValue(cookies, "DedeUserID"),
+    dedeUserIdCkMd5: cookieValue(cookies, "DedeUserID__ckMd5"),
+    expiresAt: sessDataExpiresAt,
+    mid: cookieValue(cookies, "DedeUserID"),
+    sessData,
+    sid: cookieValue(cookies, "sid"),
+    updatedAt: nowUnixSeconds(),
+  };
+}
+
+async function fetchBilibiliNavAccountForWebApi(
+  session: BilibiliWebAuthSession,
+): Promise<BilibiliAuthAccountPayload | undefined> {
+  const cookieStore = createCookieStoreFromSession(session);
+  const response = await fetch(
+    "https://api.bilibili.com/x/web-interface/nav",
+    {
+      headers: {
+        Cookie: cookieHeader(cookieStore),
+        Referer: "https://www.bilibili.com/",
+        "User-Agent": BILIBILI_BROWSER_USER_AGENT,
+      },
+    },
+  );
+  if (!response.ok) {
+    return undefined;
+  }
+
+  const responseValue: unknown = await response.json();
+  const responseRecord = asRecord(responseValue);
+  if (readNumber(responseRecord?.code) !== 0) {
+    return undefined;
+  }
+
+  const data = asRecord(responseRecord?.data);
+  if (data?.isLogin !== true) {
+    return undefined;
+  }
+
+  const mid = readString(data.mid);
+  if (!mid) {
+    return undefined;
+  }
+
+  return {
+    avatarUrl: normalizeImageUrl(data.face),
+    mid,
+    name: readString(data.uname) ?? "B 站账号",
+  };
+}
+
+function webLoginPollStateFromCode(code: number): string {
+  switch (code) {
+    case 0:
+      return "success";
+    case 86038:
+      return "expired";
+    case 86090:
+      return "scanned";
+    case 86101:
+      return "pending";
+    default:
+      return "error";
+  }
+}
+
+async function pollBilibiliLoginQrForWebApi(qrcodeKey: string) {
+  const response = await fetch(
+    `https://passport.bilibili.com/x/passport-login/web/qrcode/poll?qrcode_key=${encodeURIComponent(qrcodeKey)}`,
+    {
+      headers: {
+        Referer: "https://www.bilibili.com/",
+        "User-Agent": BILIBILI_BROWSER_USER_AGENT,
+      },
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`轮询 B 站登录状态失败：HTTP ${response.status}`);
+  }
+
+  const setCookieHeaders = readSetCookieHeaders(response.headers);
+  const responseValue: unknown = await response.json();
+  const responseRecord = asRecord(responseValue);
+  if (readNumber(responseRecord?.code) !== 0) {
+    return {
+      account: null,
+      message: readString(responseRecord?.message) ?? "B 站登录失败",
+      state: "error",
+    };
+  }
+
+  const data = asRecord(responseRecord?.data);
+  const stateCode = readNumber(data?.code);
+  const state =
+    stateCode === undefined ? "error" : webLoginPollStateFromCode(stateCode);
+  if (state !== "success") {
+    return {
+      account: null,
+      message: readString(data?.message),
+      state,
+    };
+  }
+
+  await ensureBilibiliWebAuthSessionLoaded();
+  const session = createWebSessionFromLoginCookies(setCookieHeaders);
+  const account = await fetchBilibiliNavAccountForWebApi(session);
+  if (account) {
+    session.avatarUrl = account.avatarUrl;
+    session.mid = account.mid;
+    session.name = account.name;
+    session.updatedAt = nowUnixSeconds();
+  }
+  bilibiliWebAuthSession = session;
+  await saveBilibiliWebAuthSession(session);
+
+  return {
+    account: accountFromWebAuthSession(session) ?? null,
+    message: "登录成功",
+    state,
+  };
+}
+
+async function handleBilibiliAuthWebApiRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  next: () => void,
+) {
+  if (!request.url?.startsWith("/api/bilibili/auth/")) {
+    next();
+    return;
+  }
+
+  try {
+    if (
+      request.method === "GET" &&
+      request.url.startsWith("/api/bilibili/auth/status")
+    ) {
+      await ensureBilibiliWebAuthSessionLoaded();
+      writeJsonResponse(response, 200, webAuthStatusPayload());
+      return;
+    }
+
+    if (
+      request.method === "POST" &&
+      request.url.startsWith("/api/bilibili/auth/login-qr")
+    ) {
+      writeJsonResponse(response, 200, await createBilibiliLoginQrForWebApi());
+      return;
+    }
+
+    if (
+      request.method === "POST" &&
+      request.url.startsWith("/api/bilibili/auth/login-poll")
+    ) {
+      const body = asRecord(await readJsonBody(request));
+      const qrcodeKey = readString(body?.qrcodeKey);
+      if (!qrcodeKey) {
+        writeJsonResponse(response, 400, {
+          message: "B 站登录二维码 key 不能为空",
+        });
+        return;
+      }
+      writeJsonResponse(
+        response,
+        200,
+        await pollBilibiliLoginQrForWebApi(qrcodeKey),
+      );
+      return;
+    }
+
+    if (
+      request.method === "POST" &&
+      request.url.startsWith("/api/bilibili/auth/logout")
+    ) {
+      await ensureBilibiliWebAuthSessionLoaded();
+      bilibiliWebAuthSession = null;
+      await clearPersistedBilibiliWebAuthSession();
+      writeJsonResponse(response, 200, {});
+      return;
+    }
+
+    writeJsonResponse(response, 404, {
+      message: "未知的 B 站登录接口",
+    });
+  } catch (error) {
+    writeJsonResponse(response, 502, {
+      message: error instanceof Error ? error.message : "B 站登录失败",
+    });
+  }
+}
+
 function handleBilibiliCreatorWebApiRequest(
   request: IncomingMessage,
   response: ServerResponse,
@@ -750,13 +1739,68 @@ function handleBilibiliCreatorWebApiRequest(
     });
 }
 
+function handleBilibiliDirectAudioWebApiRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  next: () => void,
+) {
+  if (request.method !== "GET" || !request.url?.startsWith("/api/bilibili/")) {
+    next();
+    return;
+  }
+
+  const requestUrl = new URL(request.url, "http://localhost");
+  if (requestUrl.pathname === "/api/bilibili/direct-audio") {
+    void resolveBilibiliDirectAudioForDevApi(requestUrl)
+      .then((payload) => {
+        writeJsonResponse(response, 200, payload);
+      })
+      .catch((error: unknown) => {
+        writeJsonResponse(response, 502, {
+          message:
+            error instanceof Error ? error.message : "解析 B 站直连音频失败",
+        });
+      });
+    return;
+  }
+
+  if (requestUrl.pathname === "/api/bilibili/audio-proxy") {
+    void proxyBilibiliAudioForDevApi(request, response, requestUrl).catch(
+      (error: unknown) => {
+        if (response.headersSent) {
+          response.destroy(error instanceof Error ? error : undefined);
+          return;
+        }
+
+        writeJsonResponse(response, 502, {
+          message:
+            error instanceof Error ? error.message : "代理 B 站音频失败",
+        });
+      },
+    );
+    return;
+  }
+
+  next();
+}
+
 function bilibiliCreatorDevApiPlugin(): Plugin {
   return {
     name: "sleep-companion-bilibili-creator-dev-api",
     configureServer(server) {
+      preloadBilibiliWebAuthSession();
+      server.middlewares.use((request, response, next) => {
+        void handleBilibiliAuthWebApiRequest(request, response, next);
+      });
+      server.middlewares.use(handleBilibiliDirectAudioWebApiRequest);
       server.middlewares.use(handleBilibiliCreatorWebApiRequest);
     },
     configurePreviewServer(server) {
+      preloadBilibiliWebAuthSession();
+      server.middlewares.use((request, response, next) => {
+        void handleBilibiliAuthWebApiRequest(request, response, next);
+      });
+      server.middlewares.use(handleBilibiliDirectAudioWebApiRequest);
       server.middlewares.use(handleBilibiliCreatorWebApiRequest);
     },
   };

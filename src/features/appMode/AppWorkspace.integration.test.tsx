@@ -7,42 +7,85 @@ import {
 } from "../../test/audioTestDoubles";
 import { createMinimalEpubFile } from "../../test/epubTestDoubles";
 import { createMemoryFileSystem } from "../../test/storageTestDoubles";
-import type { BilibiliMetadataLoader } from "../videoListening/bilibiliMetadata";
-import type { BilibiliReference } from "../videoListening/bilibiliVideo";
+import type { BilibiliAuthClient } from "../videoListening/bilibiliAuth";
+import type { BilibiliDirectAudioLoader } from "../videoListening/bilibiliDirectAudio";
 import { AppWorkspace } from "./AppWorkspace";
+
+const TEST_BILIBILI_DIRECT_AUDIO_SOURCE = {
+  aid: "170001",
+  audioUrl: "/api/bilibili/audio-proxy?url=https%3A%2F%2Fexample.com%2Fa.m4s",
+  backupUrls: [],
+  bandwidth: 128000,
+  bvid: "BV1xx411c7mD",
+  cid: "110002",
+  codecs: "mp4a.40.2",
+  coverUrl: "https://i0.hdslb.com/video-cover.jpg",
+  mimeType: "audio/mp4",
+  title: "视频测试标题",
+};
 
 describe("AppWorkspace integration", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  function createBilibiliMetadataLoaderTestDouble(): BilibiliMetadataLoader {
-    return vi.fn((reference: BilibiliReference) =>
-      Promise.resolve({
-        imageUrl:
-          reference.kind === "live"
-            ? "https://i0.hdslb.com/live-cover.jpg"
-            : "https://i0.hdslb.com/video-cover.jpg",
-        title: reference.kind === "live" ? "直播测试标题" : "视频测试标题",
+  function createLoggedOutBilibiliAuthClient(): BilibiliAuthClient {
+    return {
+      createLoginQr: vi.fn(),
+      getStatus: vi.fn().mockResolvedValue({
+        account: undefined,
+        isLoggedIn: false,
       }),
-    );
+      logout: vi.fn(),
+      pollLoginQr: vi.fn(),
+    };
+  }
+
+  function createBilibiliDirectAudioLoaderTestDouble(): BilibiliDirectAudioLoader {
+    return vi.fn().mockResolvedValue(TEST_BILIBILI_DIRECT_AUDIO_SOURCE);
+  }
+
+  function mockHtmlMediaPlayback() {
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockImplementation(function mockPlay(this: HTMLMediaElement) {
+        this.dispatchEvent(new Event("play"));
+
+        return Promise.resolve();
+      });
+    const pause = vi
+      .spyOn(HTMLMediaElement.prototype, "pause")
+      .mockImplementation(function mockPause(this: HTMLMediaElement) {
+        this.dispatchEvent(new Event("pause"));
+      });
+    const load = vi
+      .spyOn(HTMLMediaElement.prototype, "load")
+      .mockImplementation(() => {});
+
+    return { load, pause, play };
   }
 
   function renderVideoWorkspace() {
-    const bilibiliMetadataLoader = createBilibiliMetadataLoaderTestDouble();
+    const bilibiliDirectAudioLoader = createBilibiliDirectAudioLoaderTestDouble();
     const user = userEvent.setup();
     render(
       <AppWorkspace
-        bilibiliMetadataLoader={bilibiliMetadataLoader}
+        bilibiliAuthClient={createLoggedOutBilibiliAuthClient()}
+        bilibiliDirectAudioLoader={bilibiliDirectAudioLoader}
         player={createPlayerPortTestDouble().player}
       />,
     );
 
-    return { bilibiliMetadataLoader, user };
+    return { bilibiliDirectAudioLoader, user };
   }
 
   it("renders the built-in sound grid", () => {
-    render(<AppWorkspace player={createPlayerPortTestDouble().player} />);
+    render(
+      <AppWorkspace
+        bilibiliAuthClient={createLoggedOutBilibiliAuthClient()}
+        player={createPlayerPortTestDouble().player}
+      />,
+    );
 
     expect(
       screen.getByRole("heading", { name: "白噪音" }),
@@ -345,8 +388,9 @@ describe("AppWorkspace integration", () => {
     expect(screen.getByText("2 本")).toBeInTheDocument();
   });
 
-  it("loads a Bilibili link in the official video player", async () => {
-    const { bilibiliMetadataLoader, user } = renderVideoWorkspace();
+  it("loads a Bilibili link in the direct audio player", async () => {
+    mockHtmlMediaPlayback();
+    const { bilibiliDirectAudioLoader, user } = renderVideoWorkspace();
 
     await user.click(screen.getByRole("button", { name: "听视频" }));
     expect(screen.getByRole("heading", { name: "听视频" })).toBeInTheDocument();
@@ -371,18 +415,19 @@ describe("AppWorkspace integration", () => {
       "referrerpolicy",
       "no-referrer",
     );
-    expect(bilibiliMetadataLoader).toHaveBeenCalledWith({
+    expect(bilibiliDirectAudioLoader).toHaveBeenCalledWith({
       kind: "bvid",
       value: "BV1xx411c7mD",
     });
-    expect(screen.getByTitle("B 站视频播放器 BV BV1xx411c7mD")).toHaveAttribute(
+    expect(screen.getByLabelText("直连音频播放器")).toHaveAttribute(
       "src",
-      "https://player.bilibili.com/player.html?autoplay=1&bvid=BV1xx411c7mD",
+      TEST_BILIBILI_DIRECT_AUDIO_SOURCE.audioUrl,
     );
+    expect(screen.queryByTitle(/B 站视频播放器/u)).not.toBeInTheDocument();
   });
 
-  it("loads a Bilibili live room in the official live player", async () => {
-    const { bilibiliMetadataLoader, user } = renderVideoWorkspace();
+  it("shows a direct-mode unsupported message for Bilibili live rooms", async () => {
+    const { bilibiliDirectAudioLoader, user } = renderVideoWorkspace();
 
     await user.click(screen.getByRole("button", { name: "听视频" }));
     await user.type(
@@ -391,120 +436,74 @@ describe("AppWorkspace integration", () => {
     );
     await user.click(screen.getByRole("button", { name: "载入" }));
 
-    expect(screen.getByText("已载入 直播间 23058")).toBeInTheDocument();
-    expect(await screen.findByText("直播测试标题")).toBeInTheDocument();
-    expect(screen.getByAltText("直播测试标题 封面")).toHaveAttribute(
-      "src",
-      "https://i0.hdslb.com/live-cover.jpg",
-    );
-    expect(bilibiliMetadataLoader).toHaveBeenCalledWith({
-      kind: "live",
-      value: "23058",
-    });
-    expect(screen.getByTitle("B 站直播播放器 直播间 23058")).toHaveAttribute(
-      "src",
-      "https://www.bilibili.com/blackboard/live/live-activity-player.html?cid=23058&mute=0",
-    );
+    expect(
+      screen.getAllByText("当前直连模式暂不支持直播间").length,
+    ).toBeGreaterThan(0);
+    expect(bilibiliDirectAudioLoader).not.toHaveBeenCalled();
+    expect(screen.queryByTitle(/B 站直播播放器/u)).not.toBeInTheDocument();
   });
 
-  it("keeps regular Bilibili videos mounted for official player controls", async () => {
+  it("controls regular Bilibili video playback through the direct audio element", async () => {
+    const media = mockHtmlMediaPlayback();
     const { user } = renderVideoWorkspace();
 
     await user.click(screen.getByRole("button", { name: "听视频" }));
     await user.type(screen.getByLabelText("视频或直播链接"), "BV1xx411c7mD");
     await user.click(screen.getByRole("button", { name: "载入" }));
 
-    expect(
-      screen.getByTitle("B 站视频播放器 BV BV1xx411c7mD"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "播放/暂停" }),
-    ).toBeEnabled();
-    expect(
-      screen.queryByRole("button", { name: "暂停" }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("收听音量")).toBeDisabled();
-    expect(screen.queryByText("播放源已暂停")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "播放/暂停" }));
-
-    expect(
-      screen.getByTitle("B 站视频播放器 BV BV1xx411c7mD"),
-    ).toBeInTheDocument();
-    expect(screen.queryByText("播放源已暂停")).not.toBeInTheDocument();
-    expect(
-      screen.getByTitle("B 站视频播放器 BV BV1xx411c7mD"),
-    ).toHaveAttribute(
+    const audio = await screen.findByLabelText("直连音频播放器");
+    expect(audio).toHaveAttribute(
       "src",
-      "https://player.bilibili.com/player.html?autoplay=1&bvid=BV1xx411c7mD",
+      TEST_BILIBILI_DIRECT_AUDIO_SOURCE.audioUrl,
     );
+    expect(screen.queryByTitle(/B 站视频播放器/u)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "暂停" }),
+    ).toBeEnabled();
+    expect(screen.getByLabelText("收听音量")).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "暂停" }));
+
+    expect(media.pause).toHaveBeenCalled();
+    expect(await screen.findByRole("button", { name: "播放" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "播放" }));
+
+    expect(media.play).toHaveBeenCalledTimes(2);
   });
 
-  it("controls Bilibili live playback volume through the official iframe API", async () => {
+  it("controls Bilibili direct audio volume", async () => {
+    mockHtmlMediaPlayback();
     const { user } = renderVideoWorkspace();
 
     await user.click(screen.getByRole("button", { name: "听视频" }));
-    await user.type(
-      screen.getByLabelText("视频或直播链接"),
-      "https://live.bilibili.com/23058",
-    );
+    await user.type(screen.getByLabelText("视频或直播链接"), "BV1xx411c7mD");
     await user.click(screen.getByRole("button", { name: "载入" }));
 
-    const frame = screen.getByTitle("B 站直播播放器 直播间 23058");
-    if (!(frame instanceof HTMLIFrameElement)) {
-      throw new Error("测试目标不是 iframe");
-    }
-    const contentWindow = frame.contentWindow;
-    if (!contentWindow) {
-      throw new Error("测试环境缺少 iframe window");
-    }
-    const postMessage = vi.spyOn(contentWindow, "postMessage");
-
-    fireEvent.load(frame);
+    const audio = await screen.findByLabelText("直连音频播放器");
     fireEvent.change(screen.getByLabelText("收听音量"), {
       target: { value: "35" },
     });
 
     expect(screen.getByText("35%")).toBeInTheDocument();
-    expect(postMessage).toHaveBeenCalledWith(
-      'setPlayer-{"type":"changeVolume","value":{"volume":35}}',
-      "https://www.bilibili.com",
-    );
-
-    await user.click(screen.getByRole("button", { name: "暂停" }));
-
-    expect(postMessage).toHaveBeenCalledWith(
-      'setPlayer-{"type":"play","value":false}',
-      "https://www.bilibili.com",
-    );
-    expect(
-      screen.getByTitle("B 站直播播放器 直播间 23058"),
-    ).toBeInTheDocument();
+    expect(audio).toHaveProperty("volume", 0.35);
   });
 
-  it("expands the official player by default while still allowing collapse", async () => {
+  it("shows direct audio source details instead of an official player", async () => {
+    mockHtmlMediaPlayback();
     const { user } = renderVideoWorkspace();
 
     await user.click(screen.getByRole("button", { name: "听视频" }));
     await user.type(screen.getByLabelText("视频或直播链接"), "BV1xx411c7mD");
     await user.click(screen.getByRole("button", { name: "载入" }));
 
-    expect(
-      screen.queryByText("画面已收起，继续收听声音"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "收起播放源" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByTitle("B 站视频播放器 BV BV1xx411c7mD"),
-    ).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "收起播放源" }));
-
-    expect(screen.getByText("画面已收起，继续收听声音")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "展开播放源" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "直连音频源" })).toBeInTheDocument();
+    expect(await screen.findByText("BV1xx411c7mD")).toBeInTheDocument();
+    expect(screen.getByText("170001")).toBeInTheDocument();
+    expect(screen.getByText("110002")).toBeInTheDocument();
+    expect(screen.getByText("audio/mp4")).toBeInTheDocument();
+    expect(screen.getByText("128 kbps")).toBeInTheDocument();
+    expect(screen.queryByTitle(/B 站视频播放器/u)).not.toBeInTheDocument();
   });
 
   it("pastes a Bilibili link from the clipboard", async () => {

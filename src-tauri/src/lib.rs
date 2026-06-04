@@ -1,5 +1,9 @@
 mod android_tts;
+mod bilibili_auth;
+mod bilibili_common;
+mod bilibili_direct_audio;
 mod bilibili_metadata;
+mod bilibili_session;
 mod native_audio;
 mod native_tts;
 
@@ -11,6 +15,11 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            bilibili_auth::create_bilibili_login_qr,
+            bilibili_auth::get_bilibili_auth_status,
+            bilibili_auth::logout_bilibili,
+            bilibili_auth::poll_bilibili_login_qr,
+            bilibili_direct_audio::resolve_bilibili_direct_audio,
             bilibili_metadata::fetch_bilibili_creator_videos,
             bilibili_metadata::fetch_bilibili_metadata,
             native_tts::native_tts_cancel,

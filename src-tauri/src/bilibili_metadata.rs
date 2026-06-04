@@ -1,10 +1,13 @@
+use crate::bilibili_common::{
+    apply_cookie_header, normalize_image_url, now_unix_seconds, parse_wbi_keys, read_array,
+    read_non_empty_string, read_number_as_string, read_path, read_u64, signed_wbi_query,
+    store_response_cookies, BilibiliCookieStore, BILIBILI_BROWSER_USER_AGENT,
+};
+use crate::bilibili_session::{load_active_bilibili_session, StoredBilibiliSession};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::{BTreeMap, BTreeSet};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
-const BILIBILI_BROWSER_USER_AGENT: &str =
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
+use std::collections::BTreeSet;
+use std::time::Duration;
 const DEFAULT_DM_IMG_LIST: &str = "[]";
 const DEFAULT_DM_IMG_STR: &str = "V2ViR0wgMS4wIChPcGVuR0wgRVMgMi4wIENocm9taXVtKQ";
 const DEFAULT_DM_COVER_IMG_STR: &str = "QU5HTEUgKEFNRCwgQU1EIFJhZGVvbiA3ODBNIEdyYXBoaWNzIChyYWRlb25zaSBwaG9lbml4IEFDTyksIE9wZW5HTCBFUyAzLjIpR29vZ2xlIEluYy4gKEFNRC";
@@ -70,78 +73,24 @@ pub struct BilibiliBrowserFingerprint {
 const DEFAULT_CREATOR_VIDEO_LIMIT: u8 = 12;
 const MAX_CREATOR_VIDEO_LIMIT: u8 = 12;
 const MAX_CREATOR_DYNAMIC_PAGE_COUNT: u8 = 10;
-type BilibiliCookieStore = BTreeMap<String, String>;
-const WBI_MIXIN_KEY_ENC_TAB: [usize; 64] = [
-    46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35, 27, 43, 5, 49, 33, 9, 42, 19, 29,
-    28, 14, 39, 12, 38, 41, 13, 37, 48, 7, 16, 24, 55, 40, 61, 26, 17, 0, 1, 60, 51, 30, 4, 22, 25,
-    54, 21, 56, 59, 6, 63, 57, 62, 11, 36, 20, 34, 44, 52,
-];
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BilibiliCreatorFetchMode {
+    Anonymous,
+    Authenticated,
+}
 
-fn normalize_image_url(value: Option<&str>) -> Option<String> {
-    let trimmed_value = value?.trim();
-    if trimmed_value.is_empty() {
-        return None;
-    }
-
-    if trimmed_value.starts_with("//") {
-        return Some(format!("https:{trimmed_value}"));
-    }
-
-    if let Ok(mut url) = reqwest::Url::parse(trimmed_value) {
-        if url.scheme() == "http" {
-            let _ = url.set_scheme("https");
+impl BilibiliCreatorFetchMode {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Anonymous => "匿名刷新",
+            Self::Authenticated => "登录态刷新",
         }
-
-        return Some(url.to_string());
     }
-
-    Some(trimmed_value.to_string())
 }
 
-fn read_number_as_string(value: &Value, path: &[&str]) -> Option<String> {
-    let mut current_value = value;
-    for key in path {
-        current_value = current_value.get(*key)?;
-    }
-
-    if let Some(number) = current_value.as_i64() {
-        return Some(number.to_string());
-    }
-
-    current_value
-        .as_str()
-        .map(str::trim)
-        .filter(|text| !text.is_empty())
-        .map(str::to_string)
-}
-
-fn read_path<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {
-    let mut current_value = value;
-    for key in path {
-        current_value = current_value.get(*key)?;
-    }
-
-    Some(current_value)
-}
-
-fn read_non_empty_string<'a>(value: &'a Value, path: &[&str]) -> Option<&'a str> {
-    read_path(value, path)?
-        .as_str()
-        .filter(|text| !text.trim().is_empty())
-}
-
-fn read_array<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Vec<Value>> {
-    read_path(value, path)?.as_array()
-}
-
-fn read_u64(value: &Value, path: &[&str]) -> Option<u64> {
-    let current_value = read_path(value, path)?;
-
-    current_value.as_u64().or_else(|| {
-        current_value
-            .as_str()
-            .and_then(|text| text.trim().parse::<u64>().ok())
-    })
+struct BilibiliCreatorRequestContext {
+    cookie_store: BilibiliCookieStore,
+    mode: BilibiliCreatorFetchMode,
 }
 
 fn parse_bilibili_count_text(text: &str) -> Option<u64> {
@@ -278,58 +227,6 @@ fn validate_creator_video_limit(limit: Option<u8>) -> Result<u8, String> {
     Ok(normalized_limit)
 }
 
-fn now_unix_seconds() -> Result<i64, String> {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs() as i64)
-        .map_err(|error| format!("读取当前时间失败：{error}"))
-}
-
-fn extract_wbi_key(image_url: &str) -> Option<String> {
-    let url = reqwest::Url::parse(image_url).ok()?;
-    let file_name = url.path_segments()?.next_back()?;
-    let key = file_name.split('.').next()?.trim();
-
-    if key.is_empty() {
-        None
-    } else {
-        Some(key.to_string())
-    }
-}
-
-fn create_wbi_mixin_key(img_key: &str, sub_key: &str) -> String {
-    let raw_key: Vec<char> = format!("{img_key}{sub_key}").chars().collect();
-
-    WBI_MIXIN_KEY_ENC_TAB
-        .iter()
-        .filter_map(|index| raw_key.get(*index))
-        .take(32)
-        .collect()
-}
-
-fn sanitize_wbi_value(value: &str) -> String {
-    value
-        .chars()
-        .filter(|character| !matches!(character, '!' | '\'' | '(' | ')' | '*'))
-        .collect()
-}
-
-fn build_query_string(params: &[(String, String)]) -> Result<String, String> {
-    let mut url = reqwest::Url::parse("https://api.bilibili.com/")
-        .map_err(|error| format!("创建 B 站请求参数失败：{error}"))?;
-    {
-        let mut query_pairs = url.query_pairs_mut();
-        query_pairs.clear();
-        for (key, value) in params {
-            query_pairs.append_pair(key, value);
-        }
-    }
-
-    url.query()
-        .map(str::to_string)
-        .ok_or_else(|| "创建 B 站请求参数失败".to_string())
-}
-
 fn modules_value<'a>(item: &'a Value, key: &str) -> Option<&'a Value> {
     let modules = item.get("modules")?;
 
@@ -340,64 +237,18 @@ fn modules_value<'a>(item: &'a Value, key: &str) -> Option<&'a Value> {
     modules.as_object()?.get(key)
 }
 
-fn store_response_cookies(cookie_store: &mut BilibiliCookieStore, response: &reqwest::Response) {
-    response
-        .headers()
-        .get_all(reqwest::header::SET_COOKIE)
-        .iter()
-        .filter_map(|header_value| header_value.to_str().ok())
-        .for_each(|set_cookie| {
-            let cookie_pair = set_cookie.split(';').next().unwrap_or_default();
-            let Some((key, value)) = cookie_pair.split_once('=') else {
-                return;
-            };
-            if key.trim().is_empty() {
-                return;
-            }
-
-            cookie_store.insert(key.trim().to_string(), value.to_string());
-        });
-}
-
-fn cookie_header(cookie_store: &BilibiliCookieStore) -> String {
-    cookie_store
-        .iter()
-        .map(|(key, value)| format!("{key}={value}"))
-        .collect::<Vec<_>>()
-        .join("; ")
-}
-
-fn apply_cookie_header(
-    request: reqwest::RequestBuilder,
-    cookie_store: &BilibiliCookieStore,
-) -> reqwest::RequestBuilder {
-    if cookie_store.is_empty() {
-        request
+fn create_creator_request_context(
+    session: Option<&StoredBilibiliSession>,
+) -> BilibiliCreatorRequestContext {
+    let mut cookie_store = BilibiliCookieStore::new();
+    let mode = if let Some(session) = session {
+        session.write_cookies_to(&mut cookie_store);
+        BilibiliCreatorFetchMode::Authenticated
     } else {
-        request.header(reqwest::header::COOKIE, cookie_header(cookie_store))
-    }
-}
+        BilibiliCreatorFetchMode::Anonymous
+    };
 
-fn signed_wbi_query(
-    mut params: Vec<(String, String)>,
-    img_key: &str,
-    sub_key: &str,
-    wts: i64,
-) -> Result<String, String> {
-    params.push(("wts".to_string(), wts.to_string()));
-    params.sort_by(|left, right| left.0.cmp(&right.0));
-
-    let sanitized_params = params
-        .into_iter()
-        .map(|(key, value)| (key, sanitize_wbi_value(&value)))
-        .collect::<Vec<_>>();
-    let query = build_query_string(&sanitized_params)?;
-    let mixin_key = create_wbi_mixin_key(img_key, sub_key);
-    let w_rid = format!("{:x}", md5::compute(format!("{query}{mixin_key}")));
-    let mut signed_params = sanitized_params;
-
-    signed_params.push(("w_rid".to_string(), w_rid));
-    build_query_string(&signed_params)
+    BilibiliCreatorRequestContext { cookie_store, mode }
 }
 
 fn parse_video_metadata(value: &Value) -> Result<BilibiliMetadata, String> {
@@ -701,17 +552,6 @@ fn parse_metadata(
     }
 }
 
-fn parse_wbi_keys(value: &Value) -> Result<(String, String), String> {
-    let img_url = read_non_empty_string(value, &["data", "wbi_img", "img_url"])
-        .ok_or_else(|| "B 站 WBI 响应缺少图片 key".to_string())?;
-    let sub_url = read_non_empty_string(value, &["data", "wbi_img", "sub_url"])
-        .ok_or_else(|| "B 站 WBI 响应缺少子 key".to_string())?;
-    let img_key = extract_wbi_key(img_url).ok_or_else(|| "B 站 WBI 图片 key 无效".to_string())?;
-    let sub_key = extract_wbi_key(sub_url).ok_or_else(|| "B 站 WBI 子 key 无效".to_string())?;
-
-    Ok((img_key, sub_key))
-}
-
 async fn fetch_wbi_keys(
     client: &reqwest::Client,
     cookie_store: &mut BilibiliCookieStore,
@@ -860,12 +700,15 @@ async fn prepare_bilibili_creator_session(
     cookie_store: &mut BilibiliCookieStore,
     mid: &str,
 ) -> Result<(), String> {
-    let response = client
-        .get(format!("https://space.bilibili.com/{mid}/upload/video"))
-        .header("Referer", "https://www.bilibili.com/")
-        .send()
-        .await
-        .map_err(|error| format!("建立 B 站匿名访问会话失败：{error}"))?;
+    let response = apply_cookie_header(
+        client
+            .get(format!("https://space.bilibili.com/{mid}/upload/video"))
+            .header("Referer", "https://www.bilibili.com/"),
+        cookie_store,
+    )
+    .send()
+    .await
+    .map_err(|error| format!("建立 B 站匿名访问会话失败：{error}"))?;
     store_response_cookies(cookie_store, &response);
     let status = response.status();
     if status.is_success() {
@@ -886,10 +729,13 @@ async fn fetch_bilibili_creator_dynamic_videos_page(
 ) -> Result<BilibiliCreatorDynamicVideosPage, String> {
     let url = creator_dynamic_videos_url(mid, offset, img_key, sub_key, now_unix_seconds()?)?;
     let response = apply_cookie_header(
-        client.get(url).header(
-            "Referer",
-            format!("https://space.bilibili.com/{mid}/dynamic"),
-        ),
+        client
+            .get(url)
+            .header("Origin", "https://t.bilibili.com")
+            .header(
+                "Referer",
+                format!("https://space.bilibili.com/{mid}/dynamic"),
+            ),
         cookie_store,
     )
     .send()
@@ -912,10 +758,10 @@ async fn fetch_bilibili_creator_dynamic_videos(
     client: &reqwest::Client,
     mid: &str,
     limit: u8,
+    context: &mut BilibiliCreatorRequestContext,
 ) -> Result<BilibiliCreatorVideos, String> {
-    let mut cookie_store = BilibiliCookieStore::new();
-    prepare_bilibili_creator_session(client, &mut cookie_store, mid).await?;
-    let (img_key, sub_key) = fetch_wbi_keys(client, &mut cookie_store).await?;
+    prepare_bilibili_creator_session(client, &mut context.cookie_store, mid).await?;
+    let (img_key, sub_key) = fetch_wbi_keys(client, &mut context.cookie_store).await?;
     let mut creator = None;
     let mut videos = Vec::new();
     let mut seen_bvids = BTreeSet::new();
@@ -931,7 +777,7 @@ async fn fetch_bilibili_creator_dynamic_videos(
             client,
             mid,
             remaining_limit,
-            &mut cookie_store,
+            &mut context.cookie_store,
             &img_key,
             &sub_key,
             offset.as_deref(),
@@ -977,10 +823,10 @@ async fn fetch_bilibili_creator_space_videos(
     mid: &str,
     limit: u8,
     fingerprint: &BilibiliBrowserFingerprint,
+    context: &mut BilibiliCreatorRequestContext,
 ) -> Result<BilibiliCreatorVideos, String> {
-    let mut cookie_store = BilibiliCookieStore::new();
-    prepare_bilibili_creator_session(client, &mut cookie_store, mid).await?;
-    let (img_key, sub_key) = fetch_wbi_keys(client, &mut cookie_store).await?;
+    prepare_bilibili_creator_session(client, &mut context.cookie_store, mid).await?;
+    let (img_key, sub_key) = fetch_wbi_keys(client, &mut context.cookie_store).await?;
     let url = creator_videos_url(
         mid,
         limit,
@@ -994,7 +840,7 @@ async fn fetch_bilibili_creator_space_videos(
             "Referer",
             format!("https://space.bilibili.com/{mid}/upload/video"),
         ),
-        &cookie_store,
+        &context.cookie_store,
     )
     .send()
     .await
@@ -1010,6 +856,88 @@ async fn fetch_bilibili_creator_space_videos(
         .map_err(|error| format!("解析 B 站 UP 主视频失败：{error}"))?;
 
     parse_creator_videos(mid, &value)
+}
+
+async fn fetch_bilibili_creator_videos_with_context(
+    client: &reqwest::Client,
+    mid: &str,
+    limit: u8,
+    fingerprint: &BilibiliBrowserFingerprint,
+    context: &mut BilibiliCreatorRequestContext,
+) -> Result<BilibiliCreatorVideos, String> {
+    match fetch_bilibili_creator_dynamic_videos(client, mid, limit, context).await {
+        Ok(videos) => Ok(videos),
+        Err(dynamic_error) => {
+            fetch_bilibili_creator_space_videos(client, mid, limit, fingerprint, context)
+                .await
+                .map_err(|space_error| {
+                    format!(
+                        "{}失败：动态接口：{dynamic_error}；投稿接口：{space_error}",
+                        context.mode.label()
+                    )
+                })
+        }
+    }
+}
+
+async fn fetch_bilibili_creator_videos_with_session(
+    mid: String,
+    limit: Option<u8>,
+    fingerprint: Option<BilibiliBrowserFingerprint>,
+    session: Option<&StoredBilibiliSession>,
+) -> Result<BilibiliCreatorVideos, String> {
+    let normalized_mid = validate_creator_mid(&mid)?;
+    let normalized_limit = validate_creator_video_limit(limit)?;
+    let normalized_fingerprint = normalize_browser_fingerprint(fingerprint);
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .user_agent(BILIBILI_BROWSER_USER_AGENT)
+        .build()
+        .map_err(|error| format!("创建 B 站 UP 主视频请求失败：{error}"))?;
+
+    if let Some(session) = session {
+        let mut authenticated_context = create_creator_request_context(Some(session));
+        let authenticated_result = fetch_bilibili_creator_videos_with_context(
+            &client,
+            &normalized_mid,
+            normalized_limit,
+            &normalized_fingerprint,
+            &mut authenticated_context,
+        )
+        .await;
+        let Err(authenticated_error) = authenticated_result else {
+            return authenticated_result;
+        };
+
+        let mut anonymous_context = create_creator_request_context(None);
+
+        let anonymous_result = fetch_bilibili_creator_videos_with_context(
+            &client,
+            &normalized_mid,
+            normalized_limit,
+            &normalized_fingerprint,
+            &mut anonymous_context,
+        )
+        .await
+        .map_err(|anonymous_error| {
+            format!(
+                "{authenticated_error}；匿名降级也失败：{anonymous_error}。可退出后重新扫码登录，或稍后重试。"
+            )
+        });
+
+        return anonymous_result;
+    }
+
+    let mut anonymous_context = create_creator_request_context(None);
+    fetch_bilibili_creator_videos_with_context(
+        &client,
+        &normalized_mid,
+        normalized_limit,
+        &normalized_fingerprint,
+        &mut anonymous_context,
+    )
+    .await
+    .map_err(|error| format!("{error}。登录 B 站后可能提高刷新成功率。"))
 }
 
 #[tauri::command]
@@ -1036,31 +964,14 @@ pub async fn fetch_bilibili_metadata(
 
 #[tauri::command]
 pub async fn fetch_bilibili_creator_videos(
+    app: tauri::AppHandle,
     mid: String,
     limit: Option<u8>,
     fingerprint: Option<BilibiliBrowserFingerprint>,
 ) -> Result<BilibiliCreatorVideos, String> {
-    let normalized_mid = validate_creator_mid(&mid)?;
-    let normalized_limit = validate_creator_video_limit(limit)?;
-    let normalized_fingerprint = normalize_browser_fingerprint(fingerprint);
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .user_agent(BILIBILI_BROWSER_USER_AGENT)
-        .build()
-        .map_err(|error| format!("创建 B 站 UP 主视频请求失败：{error}"))?;
-    match fetch_bilibili_creator_dynamic_videos(&client, &normalized_mid, normalized_limit).await {
-        Ok(videos) => Ok(videos),
-        Err(dynamic_error) => fetch_bilibili_creator_space_videos(
-            &client,
-            &normalized_mid,
-            normalized_limit,
-            &normalized_fingerprint,
-        )
-        .await
-        .map_err(|space_error| {
-            format!("刷新 B 站 UP 主视频失败：动态接口：{dynamic_error}；投稿接口：{space_error}")
-        }),
-    }
+    let session = load_active_bilibili_session(&app)?;
+
+    fetch_bilibili_creator_videos_with_session(mid, limit, fingerprint, session.as_ref()).await
 }
 
 #[cfg(test)]
@@ -1230,7 +1141,7 @@ mod tests {
                 "items": [
                     {
                         "type": "DYNAMIC_TYPE_AV",
-                        "modules": [
+                    "modules": [
                             {
                                 "module_author": {
                                     "pub_ts": 1780425165,
@@ -1246,7 +1157,10 @@ mod tests {
                                     "dyn_archive": {
                                         "aid": "116681745697349",
                                         "bvid": "BV1ZzVk6XEfb",
-                                        "cover": "http://i0.hdslb.com/video.jpg",
+                                        "cover": format!(
+                                            "{}://i0.hdslb.com/video.jpg",
+                                            "http"
+                                        ),
                                         "duration_text": "04:18:55",
                                         "stat": {
                                             "play": "3.3万"
@@ -1361,7 +1275,7 @@ mod tests {
     #[test]
     #[ignore = "外网验证依赖 B 站当前风控策略和本机网络，只在调试 UP 主刷新时手动运行"]
     fn fetches_creator_videos_from_bilibili_for_uid_15810() {
-        let videos = tauri::async_runtime::block_on(fetch_bilibili_creator_videos(
+        let videos = tauri::async_runtime::block_on(fetch_bilibili_creator_videos_with_session(
             "15810".to_string(),
             Some(12),
             Some(BilibiliBrowserFingerprint {
@@ -1372,6 +1286,7 @@ mod tests {
                 ),
                 dm_img_inter: Some("{\"ds\":[],\"wh\":[1920,1080,100],\"of\":[0,0,0]}".to_string()),
             }),
+            None,
         ))
         .unwrap();
 

@@ -1,5 +1,7 @@
 import { useId, useState } from "react";
 import type { FileSystemPort } from "../storage/FileSystemPort";
+import type { BilibiliAuthClient } from "./bilibiliAuth";
+import { BilibiliLoginPanel } from "./BilibiliLoginPanel";
 import type {
   BilibiliCreatorVideo,
   BilibiliCreatorVideosLoader,
@@ -7,6 +9,7 @@ import type {
 import { useBilibiliCreators } from "./useBilibiliCreators";
 
 interface BilibiliCreatorPanelProps {
+  authClient?: BilibiliAuthClient;
   fileSystem?: FileSystemPort;
   videosLoader?: BilibiliCreatorVideosLoader;
   onVideoSelect: (video: BilibiliCreatorVideo) => void;
@@ -50,6 +53,7 @@ function formatPlayCount(playCount?: number): string {
 }
 
 export function BilibiliCreatorPanel({
+  authClient,
   fileSystem,
   videosLoader,
   onVideoSelect,
@@ -107,6 +111,8 @@ export function BilibiliCreatorPanel({
           {errorMessage}
         </p>
       ) : null}
+
+      <BilibiliLoginPanel authClient={authClient} />
 
       <div className="bilibili-creator-add">
         <label className="field-label" htmlFor={inputId}>

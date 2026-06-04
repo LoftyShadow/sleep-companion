@@ -1,20 +1,23 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { FileSystemPort } from "../storage/FileSystemPort";
+import type { BilibiliAuthClient } from "./bilibiliAuth";
 import {
-  BilibiliSourceKind,
-  createBilibiliPlaybackSource,
-  type BilibiliPlaybackSource,
+  parseBilibiliInput,
+  type BilibiliReference,
+  type BilibiliVideoReference,
 } from "./bilibiliVideo";
+import {
+  loadBilibiliDirectAudio,
+  type BilibiliDirectAudioLoader,
+  type BilibiliDirectAudioSource,
+} from "./bilibiliDirectAudio";
 import type {
   BilibiliCreatorVideo,
   BilibiliCreatorVideosLoader,
 } from "./bilibiliCreator";
 import { BilibiliCreatorPanel } from "./BilibiliCreatorPanel";
-import {
-  loadBilibiliMetadata,
-  type BilibiliMetadata,
-  type BilibiliMetadataLoader,
-} from "./bilibiliMetadata";
+import type { BilibiliMetadata } from "./bilibiliMetadata";
+import { useBilibiliDirectAudioPlayer } from "./useBilibiliDirectAudioPlayer";
 import type {
   PlaybackControlState,
   PlaybackControlStatus,
@@ -25,183 +28,163 @@ import "./VideoListeningView.css";
 const DEFAULT_VIDEO_INPUT = "";
 const DEFAULT_LISTENING_VOLUME = 70;
 
+type BilibiliDirectAudioReference = Extract<
+  BilibiliVideoReference,
+  { kind: "aid" | "bvid" }
+>;
+
 interface VideoListeningViewProps {
+  bilibiliAuthClient?: BilibiliAuthClient;
   creatorVideosLoader?: BilibiliCreatorVideosLoader;
+  directAudioLoader?: BilibiliDirectAudioLoader;
   fileSystem?: FileSystemPort;
   globalStopRequestId: number;
-  metadataLoader?: BilibiliMetadataLoader;
   playbackControlRequestId?: number;
   onPlaybackControlStateChange?: (state: PlaybackControlState) => void;
 }
 
-function usesOfficialFrameControls(videoSource: BilibiliPlaybackSource | null) {
-  return videoSource?.sourceKind === BilibiliSourceKind.Video;
-}
-
 function getVideoPlaybackControlStatus(
-  videoSource: BilibiliPlaybackSource | null,
-  isPlaybackMounted: boolean,
+  audioSource: BilibiliDirectAudioSource | null,
+  isLoading: boolean,
+  isPlaying: boolean,
 ): PlaybackControlStatus {
-  if (!videoSource) {
+  if (isLoading) {
+    return "loading";
+  }
+
+  if (!audioSource) {
     return "unavailable";
   }
 
-  if (usesOfficialFrameControls(videoSource)) {
-    return "loaded";
-  }
-
-  return isPlaybackMounted ? "playing" : "paused";
+  return isPlaying ? "playing" : "paused";
 }
 
 function getVideoPlaybackControlActionLabel(
-  videoSource: BilibiliPlaybackSource | null,
-  isPlaybackMounted: boolean,
+  audioSource: BilibiliDirectAudioSource | null,
+  isLoading: boolean,
+  isPlaying: boolean,
 ): string {
-  if (!videoSource) {
+  if (isLoading) {
+    return "载入中";
+  }
+
+  if (!audioSource) {
     return "打开";
   }
 
-  if (usesOfficialFrameControls(videoSource)) {
-    return "查看";
-  }
-
-  return isPlaybackMounted ? "暂停" : "播放";
+  return isPlaying ? "暂停" : "播放";
 }
 
 function getVideoTransportButtonLabel(
-  videoSource: BilibiliPlaybackSource | null,
-  isPlaybackMounted: boolean,
+  audioSource: BilibiliDirectAudioSource | null,
+  isLoading: boolean,
+  isPlaying: boolean,
 ): string {
-  if (!videoSource) {
+  if (isLoading) {
+    return "载入中";
+  }
+
+  if (!audioSource) {
     return "播放";
   }
 
-  if (usesOfficialFrameControls(videoSource)) {
-    return "播放/暂停";
-  }
-
-  return isPlaybackMounted ? "暂停" : "播放";
-}
-
-function getVideoControlHintText(
-  videoSource: BilibiliPlaybackSource | null,
-): string {
-  if (videoSource?.sourceKind === BilibiliSourceKind.Live) {
-    return "播放和音量会同步到 B 站直播播放器。";
-  }
-
-  if (usesOfficialFrameControls(videoSource)) {
-    return "普通视频请在官方播放器内播放、暂停和调音量。";
-  }
-
-  return "载入 B 站视频或直播后可收听。";
+  return isPlaying ? "暂停" : "播放";
 }
 
 function getVideoStatusText({
-  isMetadataLoading,
-  isPlaybackMounted,
-  metadataErrorMessage,
-  videoSource,
+  audioSource,
+  errorMessage,
+  isLoading,
+  isPlaying,
 }: {
-  isMetadataLoading: boolean;
-  isPlaybackMounted: boolean;
-  metadataErrorMessage: string | null;
-  videoSource: BilibiliPlaybackSource | null;
+  audioSource: BilibiliDirectAudioSource | null;
+  errorMessage: string | null;
+  isLoading: boolean;
+  isPlaying: boolean;
 }): string {
-  if (isMetadataLoading) {
-    return "正在获取封面和标题";
+  if (isLoading) {
+    return "正在解析 B 站直连音频";
   }
 
-  if (metadataErrorMessage) {
-    return metadataErrorMessage;
+  if (errorMessage) {
+    return errorMessage;
   }
 
-  if (!videoSource) {
+  if (!audioSource) {
     return "粘贴链接后开始收听";
   }
 
-  if (usesOfficialFrameControls(videoSource)) {
-    return "官方播放器已载入";
-  }
+  return isPlaying ? "正在播放直连音频" : "直连音频已暂停";
+}
 
-  return isPlaybackMounted ? "已连接官方播放源" : "已暂停官方播放源";
+function getBilibiliReferenceLabel(reference: BilibiliReference): string {
+  switch (reference.kind) {
+    case "bvid":
+      return `BV ${reference.value}`;
+    case "aid":
+      return `av ${reference.value}`;
+    case "ep":
+      return `ep ${reference.value}`;
+    case "live":
+      return `直播间 ${reference.value}`;
+  }
+}
+
+function canUseDirectAudio(
+  reference: BilibiliReference,
+): reference is BilibiliDirectAudioReference {
+  return reference.kind === "bvid" || reference.kind === "aid";
 }
 
 export function VideoListeningView({
+  bilibiliAuthClient,
   creatorVideosLoader,
+  directAudioLoader = loadBilibiliDirectAudio,
   fileSystem,
   globalStopRequestId,
-  metadataLoader = loadBilibiliMetadata,
   playbackControlRequestId = 0,
   onPlaybackControlStateChange,
 }: VideoListeningViewProps) {
   const inputId = useId();
   const [videoInput, setVideoInput] = useState(DEFAULT_VIDEO_INPUT);
-  const [videoSource, setVideoSource] = useState<BilibiliPlaybackSource | null>(
-    null,
-  );
+  const [activeReference, setActiveReference] =
+    useState<BilibiliReference | null>(null);
   const [videoMetadata, setVideoMetadata] = useState<BilibiliMetadata | null>(
     null,
   );
-  const [isMetadataLoading, setIsMetadataLoading] = useState(false);
-  const [metadataErrorMessage, setMetadataErrorMessage] = useState<string | null>(
-    null,
-  );
-  const [isPlaybackMounted, setIsPlaybackMounted] = useState(false);
-  const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
-  const [listeningVolume, setListeningVolume] = useState(
-    DEFAULT_LISTENING_VOLUME,
-  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const handledGlobalStopRequestIdRef = useRef(globalStopRequestId);
   const handledPlaybackControlRequestIdRef = useRef(0);
-  const metadataRequestIdRef = useRef(0);
-  const canControlOfficialPlayer =
-    videoSource?.sourceKind === BilibiliSourceKind.Live;
-  const usesOfficialVideoControls = Boolean(
-    videoSource && usesOfficialFrameControls(videoSource),
-  );
+  const {
+    audioRef,
+    audioSource,
+    errorMessage: directAudioErrorMessage,
+    isLoading: isDirectAudioLoading,
+    isPlaying: isDirectAudioPlaying,
+    load: loadDirectAudio,
+    setVolume: setDirectAudioVolume,
+    stop: stopDirectAudio,
+    toggle: toggleDirectAudio,
+    volume: listeningVolume,
+  } = useBilibiliDirectAudioPlayer({
+    defaultVolume: DEFAULT_LISTENING_VOLUME,
+    loader: directAudioLoader,
+  });
+  const combinedErrorMessage = errorMessage ?? directAudioErrorMessage;
   const canUsePlaybackControlAction =
-    !videoSource || canControlOfficialPlayer || usesOfficialVideoControls;
-  const canUseOuterPlaybackButton = Boolean(
-    videoSource && (canControlOfficialPlayer || usesOfficialVideoControls),
-  );
-  const canUseOuterVolumeControl = canControlOfficialPlayer;
+    !isDirectAudioLoading && (Boolean(audioSource) || !activeReference);
+  const canUseOuterPlaybackButton = Boolean(audioSource) && !isDirectAudioLoading;
+  const canUseOuterVolumeControl = Boolean(audioSource);
   const playbackControlStatus = getVideoPlaybackControlStatus(
-    videoSource,
-    isPlaybackMounted,
+    audioSource,
+    isDirectAudioLoading,
+    isDirectAudioPlaying,
   );
-
-  const postLivePlayerCommand = useCallback((type: string, value: unknown) => {
-    if (!canControlOfficialPlayer || !iframeRef.current?.contentWindow) {
-      return;
-    }
-
-    iframeRef.current.contentWindow.postMessage(
-      `setPlayer-${JSON.stringify({ type, value })}`,
-      "https://www.bilibili.com",
-    );
-  }, [canControlOfficialPlayer]);
 
   const handleTogglePlayback = useCallback(() => {
-    if (!videoSource) {
-      setErrorMessage("请先载入 B 站视频或直播链接");
-      return;
-    }
-
-    if (usesOfficialFrameControls(videoSource)) {
-      setIsPlaybackMounted(true);
-      setIsPlayerExpanded(true);
-      setErrorMessage(null);
-      return;
-    }
-
-    const nextValue = !isPlaybackMounted;
-    postLivePlayerCommand("play", nextValue);
-    setIsPlaybackMounted(nextValue);
     setErrorMessage(null);
-  }, [isPlaybackMounted, postLivePlayerCommand, videoSource]);
+    void toggleDirectAudio();
+  }, [toggleDirectAudio]);
 
   useEffect(() => {
     if (globalStopRequestId === handledGlobalStopRequestIdRef.current) {
@@ -209,32 +192,37 @@ export function VideoListeningView({
     }
 
     handledGlobalStopRequestIdRef.current = globalStopRequestId;
-    metadataRequestIdRef.current += 1;
-    setVideoSource(null);
+    stopDirectAudio();
+    setActiveReference(null);
     setVideoMetadata(null);
-    setIsMetadataLoading(false);
-    setMetadataErrorMessage(null);
-    setIsPlaybackMounted(false);
-    setIsPlayerExpanded(false);
-  }, [globalStopRequestId]);
+    setErrorMessage(null);
+  }, [globalStopRequestId, stopDirectAudio]);
 
   useEffect(() => {
     onPlaybackControlStateChange?.({
       actionLabel: getVideoPlaybackControlActionLabel(
-        videoSource,
-        isPlaybackMounted,
+        audioSource,
+        isDirectAudioLoading,
+        isDirectAudioPlaying,
       ),
       canToggle: canUsePlaybackControlAction,
       status: playbackControlStatus,
-      summary: videoMetadata?.title ?? videoSource?.label ?? "未载入来源",
+      summary:
+        videoMetadata?.title ??
+        audioSource?.title ??
+        (activeReference
+          ? getBilibiliReferenceLabel(activeReference)
+          : "未载入来源"),
     });
   }, [
+    activeReference,
+    audioSource,
     canUsePlaybackControlAction,
-    isPlaybackMounted,
+    isDirectAudioLoading,
+    isDirectAudioPlaying,
     videoMetadata,
     onPlaybackControlStateChange,
     playbackControlStatus,
-    videoSource,
   ]);
 
   useEffect(() => {
@@ -249,52 +237,29 @@ export function VideoListeningView({
     handleTogglePlayback();
   }, [handleTogglePlayback, playbackControlRequestId]);
 
-  async function loadVideoSource(
-    nextVideoSource: BilibiliPlaybackSource,
+  async function loadVideoReference(
+    reference: BilibiliDirectAudioReference,
     metadataHint?: BilibiliMetadata,
   ) {
-    setVideoSource(nextVideoSource);
+    setActiveReference(reference);
     setVideoMetadata(metadataHint ?? null);
-    setIsMetadataLoading(!metadataHint);
-    setMetadataErrorMessage(null);
-    setIsPlaybackMounted(true);
-    setIsPlayerExpanded(true);
     setErrorMessage(null);
 
-    const requestId = metadataRequestIdRef.current + 1;
-    metadataRequestIdRef.current = requestId;
-    if (metadataHint) {
+    const nextAudioSource = await loadDirectAudio(reference);
+    if (!nextAudioSource) {
       return;
     }
 
-    try {
-      const metadata = await metadataLoader(nextVideoSource.reference);
-      if (metadataRequestIdRef.current !== requestId) {
-        return;
-      }
-
-      setVideoMetadata(metadata);
-    } catch {
-      if (metadataRequestIdRef.current !== requestId) {
-        return;
-      }
-
-      setMetadataErrorMessage("元信息暂不可用");
-    } finally {
-      if (metadataRequestIdRef.current === requestId) {
-        setIsMetadataLoading(false);
-      }
-    }
+    setVideoMetadata({
+      imageUrl: nextAudioSource.coverUrl ?? metadataHint?.imageUrl,
+      title: nextAudioSource.title,
+    });
   }
 
   function resetVideoSource(errorText: string) {
-    metadataRequestIdRef.current += 1;
-    setVideoSource(null);
+    stopDirectAudio();
+    setActiveReference(null);
     setVideoMetadata(null);
-    setIsMetadataLoading(false);
-    setMetadataErrorMessage(null);
-    setIsPlaybackMounted(false);
-    setIsPlayerExpanded(false);
     setErrorMessage(errorText);
   }
 
@@ -305,37 +270,39 @@ export function VideoListeningView({
       return;
     }
 
-    const nextVideoSource = createBilibiliPlaybackSource(trimmedInput);
-    if (!nextVideoSource) {
-      resetVideoSource("暂时只支持 B 站 BV、av、ep 和直播间链接");
+    const reference = parseBilibiliInput(trimmedInput);
+    if (!reference) {
+      resetVideoSource("暂时只支持 B 站 BV 和 av 视频链接");
       return;
     }
 
-    await loadVideoSource(nextVideoSource);
+    if (!canUseDirectAudio(reference)) {
+      resetVideoSource(
+        reference.kind === "ep"
+          ? "当前直连模式暂不支持番剧链接"
+          : "当前直连模式暂不支持直播间",
+      );
+      return;
+    }
+
+    await loadVideoReference(reference);
   }
 
   function handleCreatorVideoSelect(video: BilibiliCreatorVideo) {
-    const nextVideoSource = createBilibiliPlaybackSource(video.bvid);
-    if (!nextVideoSource) {
-      setErrorMessage("无法载入这个 B 站视频");
-      return;
-    }
+    const reference: BilibiliDirectAudioReference = {
+      kind: "bvid",
+      value: video.bvid,
+    };
 
     setVideoInput(video.bvid);
-    void loadVideoSource(nextVideoSource, {
+    void loadVideoReference(reference, {
       imageUrl: video.coverUrl,
       title: video.title,
     });
   }
 
-  function handlePlayerFrameLoad() {
-    postLivePlayerCommand("changeVolume", { volume: listeningVolume });
-    postLivePlayerCommand("play", isPlaybackMounted);
-  }
-
   function handleListeningVolumeChange(nextVolume: number) {
-    setListeningVolume(nextVolume);
-    postLivePlayerCommand("changeVolume", { volume: nextVolume });
+    setDirectAudioVolume(nextVolume);
   }
 
   async function handlePasteVideoLink() {
@@ -354,34 +321,37 @@ export function VideoListeningView({
   }
 
   const videoStatusText = getVideoStatusText({
-    isMetadataLoading,
-    isPlaybackMounted,
-    metadataErrorMessage,
-    videoSource,
+    audioSource,
+    errorMessage: combinedErrorMessage,
+    isLoading: isDirectAudioLoading,
+    isPlaying: isDirectAudioPlaying,
   });
-  const videoPanelStatusText =
-    videoSource && usesOfficialFrameControls(videoSource)
-      ? "已载入"
-      : isPlaybackMounted
+  const videoPanelStatusText = isDirectAudioLoading
+    ? "解析中"
+    : audioSource
+      ? isDirectAudioPlaying
         ? "播放中"
-        : "待命";
-  const videoTransportLabel = videoSource
-    ? getVideoTransportButtonLabel(videoSource, isPlaybackMounted)
-    : "播放";
-  const videoControlHintText = getVideoControlHintText(videoSource);
-  const frameEmbedUrl = videoSource?.embedUrl ?? "";
-  const shouldShowOfficialPlayerFrame = Boolean(
-    videoSource &&
-      (usesOfficialFrameControls(videoSource) ||
-        isPlaybackMounted ||
-        canControlOfficialPlayer),
+        : "已暂停"
+      : "待命";
+  const videoTransportLabel = getVideoTransportButtonLabel(
+    audioSource,
+    isDirectAudioLoading,
+    isDirectAudioPlaying,
   );
+  const loadedReferenceLabel = activeReference
+    ? getBilibiliReferenceLabel(activeReference)
+    : null;
+  const sourceSummaryText = isDirectAudioLoading
+    ? "正在解析直连音频"
+    : audioSource && loadedReferenceLabel
+      ? `已载入 ${loadedReferenceLabel}`
+      : "等待载入直连音频";
 
   return (
     <div className="video-listening-view">
-      {errorMessage ? (
+      {combinedErrorMessage ? (
         <p className="error-message" role="alert">
-          {errorMessage}
+          {combinedErrorMessage}
         </p>
       ) : null}
 
@@ -434,10 +404,10 @@ export function VideoListeningView({
               </div>
               <div className="video-link-meta">
                 <p className="video-link-hint">
-                  支持 BV、av、ep 和直播间链接；载入后会尝试自动播放。
+                  支持 BV 和 av 视频链接；直连模式暂不支持番剧和直播。
                 </p>
                 <p className="custom-audio-status" role="status">
-                  {videoSource ? `已载入 ${videoSource.label}` : "等待载入播放源"}
+                  {sourceSummaryText}
                 </p>
               </div>
             </div>
@@ -473,25 +443,29 @@ export function VideoListeningView({
               </div>
               <div className="video-listening-copy">
                 <p className="app-kicker">
-                  {videoSource?.playerLabel ?? "等待来源"}
+                  {audioSource ? "B 站直连音频" : "等待来源"}
                 </p>
-                <h3>{videoMetadata?.title ?? videoSource?.label ?? "尚未载入"}</h3>
+                <h3>{videoMetadata?.title ?? loadedReferenceLabel ?? "尚未载入"}</h3>
                 <p>{videoStatusText}</p>
               </div>
             </div>
 
             <section className="video-listening-controls" aria-label="收听控制">
+              <audio
+                aria-label="直连音频播放器"
+                className="video-direct-audio"
+                preload="none"
+                ref={audioRef}
+              />
               <button
                 className="transport-button video-playback-button"
                 type="button"
-                aria-pressed={
-                  canControlOfficialPlayer ? isPlaybackMounted : undefined
-                }
+                aria-pressed={audioSource ? isDirectAudioPlaying : undefined}
                 disabled={!canUseOuterPlaybackButton}
                 onClick={handleTogglePlayback}
               >
                 <PlaybackGlyph
-                  isPlaying={canControlOfficialPlayer && isPlaybackMounted}
+                  isPlaying={isDirectAudioPlaying}
                 />
                 <span>{videoTransportLabel}</span>
               </button>
@@ -508,8 +482,8 @@ export function VideoListeningView({
                   max="100"
                   title={
                     canUseOuterVolumeControl
-                      ? "调整直播收听音量"
-                      : "普通视频请在官方播放器内调整音量"
+                      ? "调整直连音频音量"
+                      : "载入直连音频后可调整音量"
                   }
                   type="range"
                   value={listeningVolume}
@@ -520,7 +494,9 @@ export function VideoListeningView({
                   }}
                 />
               </label>
-              <p className="video-control-hint">{videoControlHintText}</p>
+              <p className="video-control-hint">
+                直连模式使用应用内音频播放器，可直接播放、暂停和调音量。
+              </p>
             </section>
           </section>
         </section>
@@ -528,56 +504,52 @@ export function VideoListeningView({
         <section className="video-source-panel glass-panel">
           <div className="video-source-header">
             <div>
-              <h2>官方播放源</h2>
+              <h2>直连音频源</h2>
             </div>
-            <button
-              className="secondary-control-button video-source-toggle"
-              type="button"
-              disabled={!videoSource}
-              onClick={() => {
-                setIsPlayerExpanded((currentValue) => !currentValue);
-              }}
-            >
-              {isPlayerExpanded ? "收起播放源" : "展开播放源"}
-            </button>
           </div>
 
-          <div
-            className={
-              isPlayerExpanded
-                ? "video-player-frame-shell"
-                : "video-player-frame-shell video-player-frame-shell-collapsed"
-            }
-            aria-label="官方播放源"
-          >
-            {videoSource && shouldShowOfficialPlayerFrame ? (
-              <>
-                <iframe
-                  allow="autoplay; fullscreen; picture-in-picture"
-                  allowFullScreen
-                  className="video-player-frame"
-                  key={frameEmbedUrl}
-                  ref={iframeRef}
-                  referrerPolicy="strict-origin-when-cross-origin"
-                  src={frameEmbedUrl}
-                  title={`${videoSource.playerLabel} ${videoSource.label}`}
-                  onLoad={handlePlayerFrameLoad}
-                />
-                {!isPlayerExpanded ? (
-                  <div className="video-player-collapsed-cover" aria-hidden="true">
-                    <span>画面已收起，继续收听声音</span>
-                  </div>
-                ) : null}
-              </>
+          <div className="video-direct-source-shell" aria-label="直连音频源">
+            {audioSource ? (
+              <dl className="video-direct-source-list">
+                <div>
+                  <dt>BV</dt>
+                  <dd>{audioSource.bvid}</dd>
+                </div>
+                <div>
+                  <dt>av</dt>
+                  <dd>{audioSource.aid}</dd>
+                </div>
+                <div>
+                  <dt>cid</dt>
+                  <dd>{audioSource.cid}</dd>
+                </div>
+                <div>
+                  <dt>格式</dt>
+                  <dd>{audioSource.mimeType ?? audioSource.codecs ?? "音频轨"}</dd>
+                </div>
+                <div>
+                  <dt>码率</dt>
+                  <dd>
+                    {audioSource.bandwidth
+                      ? `${Math.round(audioSource.bandwidth / 1000)} kbps`
+                      : "未知"}
+                  </dd>
+                </div>
+              </dl>
             ) : (
               <div className="video-player-empty" role="status">
-                <p>{videoSource ? "播放源已暂停" : "等待载入 B 站视频或直播"}</p>
+                <p>
+                  {isDirectAudioLoading
+                    ? "正在解析 B 站直连音频"
+                    : "等待载入 BV 或 av 视频"}
+                </p>
               </div>
             )}
           </div>
         </section>
 
         <BilibiliCreatorPanel
+          authClient={bilibiliAuthClient}
           fileSystem={fileSystem}
           videosLoader={creatorVideosLoader}
           onVideoSelect={handleCreatorVideoSelect}
