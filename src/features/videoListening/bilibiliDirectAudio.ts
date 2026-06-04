@@ -17,6 +17,13 @@ export interface BilibiliDirectAudioSource {
   expiresAt?: number;
   mimeType?: string;
   title: string;
+  videoBackupUrls: string[];
+  videoBandwidth?: number;
+  videoCodecs?: string;
+  videoHeight?: number;
+  videoMimeType?: string;
+  videoUrl?: string;
+  videoWidth?: number;
 }
 
 export type BilibiliDirectAudioReference = Extract<
@@ -59,7 +66,20 @@ function isDirectAudioSource(
     (source.codecs === undefined || typeof source.codecs === "string") &&
     (source.coverUrl === undefined || typeof source.coverUrl === "string") &&
     (source.expiresAt === undefined || typeof source.expiresAt === "number") &&
-    (source.mimeType === undefined || typeof source.mimeType === "string")
+    (source.mimeType === undefined || typeof source.mimeType === "string") &&
+    (source.videoBackupUrls === undefined ||
+      (Array.isArray(source.videoBackupUrls) &&
+        source.videoBackupUrls.every((url) => typeof url === "string"))) &&
+    (source.videoBandwidth === undefined ||
+      typeof source.videoBandwidth === "number") &&
+    (source.videoCodecs === undefined ||
+      typeof source.videoCodecs === "string") &&
+    (source.videoHeight === undefined ||
+      typeof source.videoHeight === "number") &&
+    (source.videoMimeType === undefined ||
+      typeof source.videoMimeType === "string") &&
+    (source.videoUrl === undefined || typeof source.videoUrl === "string") &&
+    (source.videoWidth === undefined || typeof source.videoWidth === "number")
   );
 }
 
@@ -84,6 +104,15 @@ function normalizeDirectAudioSource(
     expiresAt: value.expiresAt,
     mimeType: value.mimeType,
     title: value.title.trim(),
+    videoBackupUrls: (value.videoBackupUrls ?? [])
+      .map((url) => url.trim())
+      .filter((url) => url.length > 0),
+    videoBandwidth: value.videoBandwidth,
+    videoCodecs: value.videoCodecs,
+    videoHeight: value.videoHeight,
+    videoMimeType: value.videoMimeType,
+    videoUrl: value.videoUrl?.trim(),
+    videoWidth: value.videoWidth,
   };
 }
 

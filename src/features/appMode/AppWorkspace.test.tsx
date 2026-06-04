@@ -21,7 +21,7 @@ const TEST_AUDIOBOOK_TEXT = "用户自己的第一段。\n\n用户自己的第�
 const FIRST_TEST_AUDIOBOOK_SEGMENT = "用户自己的第一段。";
 const TEST_BILIBILI_DIRECT_AUDIO_SOURCE = {
   aid: "170001",
-  audioUrl: "/api/bilibili/audio-proxy?url=https%3A%2F%2Fexample.com%2Fa.m4s",
+  audioUrl: "/api/bilibili/media-proxy?url=https%3A%2F%2Fexample.com%2Fa.m4s",
   backupUrls: [],
   bandwidth: 128000,
   bvid: "BV1xx411c7mD",
@@ -30,6 +30,13 @@ const TEST_BILIBILI_DIRECT_AUDIO_SOURCE = {
   coverUrl: "https://i0.hdslb.com/video.jpg",
   mimeType: "audio/mp4",
   title: "视频测试标题",
+  videoBackupUrls: [],
+  videoBandwidth: 800000,
+  videoCodecs: "avc1.64001F",
+  videoHeight: 720,
+  videoMimeType: "video/mp4",
+  videoUrl: "/api/bilibili/media-proxy?url=https%3A%2F%2Fexample.com%2Fv.m4s",
+  videoWidth: 1280,
 };
 
 function createLoggedOutBilibiliAuthClient(): BilibiliAuthClient {
@@ -211,13 +218,24 @@ describe("AppWorkspace", () => {
       kind: "bvid",
       value: "BV1xx411c7mD",
     });
-    expect(await screen.findByText("视频测试标题")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "视频测试标题" }),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("直连音频播放器")).toHaveAttribute(
       "src",
       TEST_BILIBILI_DIRECT_AUDIO_SOURCE.audioUrl,
     );
     expect(screen.queryByTitle(/B 站视频播放器/u)).not.toBeInTheDocument();
+    expect(screen.getByText("视频画面已隐藏")).toBeInTheDocument();
+    expect(screen.queryByLabelText("直连视频播放器")).not.toBeInTheDocument();
     expect(media.play).toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "展开视频" }));
+
+    expect(screen.getByLabelText("直连视频播放器")).toHaveAttribute(
+      "src",
+      TEST_BILIBILI_DIRECT_AUDIO_SOURCE.videoUrl,
+    );
 
     await user.click(screen.getByRole("button", { name: "展开模块播放控制" }));
 
@@ -227,6 +245,64 @@ describe("AppWorkspace", () => {
     expect(videoModuleButton).toBeEnabled();
     expect(videoModuleButton).toHaveTextContent("暂停");
     expect(screen.getAllByText("播放中").length).toBeGreaterThan(0);
+  });
+
+  it("saves, replays, and deletes a favorite Bilibili video", async () => {
+    mockHtmlMediaPlayback();
+    const user = userEvent.setup();
+    const fileSystem = createMemoryFileSystem();
+    const loadDirectAudio = createBilibiliDirectAudioLoaderTestDouble();
+    render(
+      <AppWorkspace
+        bilibiliAuthClient={createLoggedOutBilibiliAuthClient()}
+        bilibiliDirectAudioLoader={loadDirectAudio}
+        fileSystem={fileSystem}
+        player={createPlayerPortTestDouble().player}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "听视频" }));
+    expect(await screen.findByText("还没有收藏视频")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("视频或直播链接"), "BV1xx411c7mD");
+    await user.click(screen.getByRole("button", { name: "载入" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "视频测试标题" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "收藏视频" }));
+
+    expect(await screen.findByText("已收藏 1 个视频")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "已收藏" })).toBeInTheDocument();
+
+    const favoriteList = screen.getByLabelText("已收藏视频");
+    await user.click(
+      within(favoriteList).getByRole("button", {
+        name: "播放收藏 视频测试标题",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(loadDirectAudio).toHaveBeenCalledTimes(2);
+    });
+    expect(loadDirectAudio).toHaveBeenLastCalledWith({
+      kind: "bvid",
+      value: "BV1xx411c7mD",
+    });
+
+    await user.click(
+      within(favoriteList).getByRole("button", {
+        name: "删除收藏 视频测试标题",
+      }),
+    );
+
+    expect(await screen.findByText("还没有收藏视频")).toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText("已收藏视频")).queryByRole("button", {
+        name: /视频测试标题/u,
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("saves a Bilibili creator and plays a refreshed latest video", async () => {

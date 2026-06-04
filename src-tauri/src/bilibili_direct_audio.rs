@@ -28,6 +28,13 @@ pub struct BilibiliDirectAudioSource {
     mime_type: Option<String>,
     codecs: Option<String>,
     bandwidth: Option<u64>,
+    video_url: Option<String>,
+    video_backup_urls: Vec<String>,
+    video_mime_type: Option<String>,
+    video_codecs: Option<String>,
+    video_bandwidth: Option<u64>,
+    video_width: Option<u64>,
+    video_height: Option<u64>,
     expires_at: Option<i64>,
 }
 
@@ -45,6 +52,16 @@ struct BilibiliDashAudioTrack {
     bandwidth: Option<u64>,
     codecs: Option<String>,
     mime_type: Option<String>,
+}
+
+struct BilibiliDashVideoTrack {
+    video_url: String,
+    backup_urls: Vec<String>,
+    bandwidth: Option<u64>,
+    codecs: Option<String>,
+    mime_type: Option<String>,
+    width: Option<u64>,
+    height: Option<u64>,
 }
 
 fn ensure_bilibili_success(value: &Value, fallback_message: &str) -> Result<(), String> {
@@ -160,7 +177,7 @@ fn read_dash_audio_url(value: &Value) -> Option<String> {
         .map(str::to_string)
 }
 
-fn read_dash_audio_backup_urls(value: &Value) -> Vec<String> {
+fn read_dash_backup_urls(value: &Value) -> Vec<String> {
     read_path(value, &["backupUrl"])
         .or_else(|| read_path(value, &["backup_url"]))
         .and_then(Value::as_array)
@@ -173,6 +190,10 @@ fn read_dash_audio_backup_urls(value: &Value) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+fn read_dash_video_url(value: &Value) -> Option<String> {
+    read_dash_audio_url(value)
 }
 
 fn read_optional_string(value: &Value, path: &[&str]) -> Option<String> {
@@ -192,7 +213,7 @@ fn parse_best_audio_track(value: &Value) -> Result<BilibiliDashAudioTrack, Strin
 
             Some(BilibiliDashAudioTrack {
                 audio_url,
-                backup_urls: read_dash_audio_backup_urls(track),
+                backup_urls: read_dash_backup_urls(track),
                 bandwidth: read_u64(track, &["bandwidth"]),
                 codecs: read_optional_string(track, &["codecs"]),
                 mime_type: read_optional_string(track, &["mime_type"])
@@ -202,6 +223,39 @@ fn parse_best_audio_track(value: &Value) -> Result<BilibiliDashAudioTrack, Strin
         .max_by_key(|track| track.bandwidth.unwrap_or(0));
 
     best_audio.ok_or_else(|| "B 站直连音频不可用".to_string())
+}
+
+fn parse_best_video_track(value: &Value) -> Option<BilibiliDashVideoTrack> {
+    let video_tracks = read_path(value, &["data", "dash", "video"])?.as_array()?;
+    video_tracks
+        .iter()
+        .filter_map(|track| {
+            let video_url = read_dash_video_url(track)?;
+
+            Some(BilibiliDashVideoTrack {
+                video_url,
+                backup_urls: read_dash_backup_urls(track),
+                bandwidth: read_u64(track, &["bandwidth"]),
+                codecs: read_optional_string(track, &["codecs"]),
+                mime_type: read_optional_string(track, &["mime_type"])
+                    .or_else(|| read_optional_string(track, &["mimeType"])),
+                width: read_u64(track, &["width"]),
+                height: read_u64(track, &["height"]),
+            })
+        })
+        .max_by_key(|track| {
+            let codec_priority = if track
+                .codecs
+                .as_deref()
+                .is_some_and(|codecs| codecs.starts_with("avc1"))
+            {
+                1_000_000_000
+            } else {
+                0
+            };
+
+            codec_priority + track.bandwidth.unwrap_or(0)
+        })
 }
 
 async fn fetch_json(
@@ -295,6 +349,7 @@ async fn resolve_direct_audio_with_session(
     let referer = format!("https://www.bilibili.com/video/{}", identity.bvid);
     let playurl_value = fetch_json(&client, playurl, &mut cookie_store, &referer).await?;
     let audio_track = parse_best_audio_track(&playurl_value)?;
+    let video_track = parse_best_video_track(&playurl_value);
 
     Ok(BilibiliDirectAudioSource {
         audio_url: audio_track.audio_url,
@@ -307,6 +362,18 @@ async fn resolve_direct_audio_with_session(
         mime_type: audio_track.mime_type,
         codecs: audio_track.codecs,
         bandwidth: audio_track.bandwidth,
+        video_url: video_track.as_ref().map(|track| track.video_url.clone()),
+        video_backup_urls: video_track
+            .as_ref()
+            .map(|track| track.backup_urls.clone())
+            .unwrap_or_default(),
+        video_mime_type: video_track
+            .as_ref()
+            .and_then(|track| track.mime_type.clone()),
+        video_codecs: video_track.as_ref().and_then(|track| track.codecs.clone()),
+        video_bandwidth: video_track.as_ref().and_then(|track| track.bandwidth),
+        video_width: video_track.as_ref().and_then(|track| track.width),
+        video_height: video_track.as_ref().and_then(|track| track.height),
         expires_at: None,
     })
 }
@@ -399,6 +466,45 @@ mod tests {
         assert_eq!(track.backup_urls.len(), 1);
         assert_eq!(track.bandwidth, Some(128000));
         assert_eq!(track.mime_type, Some("audio/mp4".to_string()));
+    }
+
+    #[test]
+    fn parses_best_video_track() {
+        let value = serde_json::json!({
+            "code": 0,
+            "data": {
+                "dash": {
+                    "video": [
+                        {
+                            "baseUrl": "https://video-av01.example.com/stream.m4s",
+                            "bandwidth": 900000,
+                            "codecs": "av01.0.05M.08",
+                            "height": 720,
+                            "mime_type": "video/mp4",
+                            "width": 1280
+                        },
+                        {
+                            "base_url": "https://video-avc.example.com/stream.m4s",
+                            "backup_url": ["https://video-backup.example.com/stream.m4s"],
+                            "bandwidth": 800000,
+                            "codecs": "avc1.64001F",
+                            "height": 720,
+                            "mime_type": "video/mp4",
+                            "width": 1280
+                        }
+                    ]
+                }
+            }
+        });
+
+        let track = parse_best_video_track(&value).unwrap();
+
+        assert_eq!(track.video_url, "https://video-avc.example.com/stream.m4s");
+        assert_eq!(track.backup_urls.len(), 1);
+        assert_eq!(track.bandwidth, Some(800000));
+        assert_eq!(track.mime_type, Some("video/mp4".to_string()));
+        assert_eq!(track.width, Some(1280));
+        assert_eq!(track.height, Some(720));
     }
 
     #[test]

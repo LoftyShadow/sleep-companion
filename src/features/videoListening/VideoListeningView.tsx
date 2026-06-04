@@ -11,13 +11,22 @@ import {
   type BilibiliDirectAudioLoader,
   type BilibiliDirectAudioSource,
 } from "./bilibiliDirectAudio";
+import {
+  createFavoriteVideoInputFromCreatorVideo,
+  createFavoriteVideoInputFromDirectSource,
+  type BilibiliFavoriteVideo,
+  type BilibiliFavoriteVideoInput,
+} from "./bilibiliFavoriteVideo";
 import type {
   BilibiliCreatorVideo,
   BilibiliCreatorVideosLoader,
 } from "./bilibiliCreator";
 import { BilibiliCreatorPanel } from "./BilibiliCreatorPanel";
+import { BilibiliFavoriteVideoPanel } from "./BilibiliFavoriteVideoPanel";
+import { BilibiliVideoPlaybackPanel } from "./BilibiliVideoPlaybackPanel";
 import type { BilibiliMetadata } from "./bilibiliMetadata";
 import { useBilibiliDirectAudioPlayer } from "./useBilibiliDirectAudioPlayer";
+import { useBilibiliFavoriteVideos } from "./useBilibiliFavoriteVideos";
 import type {
   PlaybackControlState,
   PlaybackControlStatus,
@@ -103,7 +112,7 @@ function getVideoStatusText({
   isPlaying: boolean;
 }): string {
   if (isLoading) {
-    return "正在解析 B 站直连音频";
+    return "正在解析 B 站直连媒体";
   }
 
   if (errorMessage) {
@@ -152,6 +161,8 @@ export function VideoListeningView({
   const [videoMetadata, setVideoMetadata] = useState<BilibiliMetadata | null>(
     null,
   );
+  const [currentFavoriteVideo, setCurrentFavoriteVideo] =
+    useState<BilibiliFavoriteVideoInput | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const handledGlobalStopRequestIdRef = useRef(globalStopRequestId);
   const handledPlaybackControlRequestIdRef = useRef(0);
@@ -170,7 +181,16 @@ export function VideoListeningView({
     defaultVolume: DEFAULT_LISTENING_VOLUME,
     loader: directAudioLoader,
   });
+  const {
+    deleteFavorite,
+    errorMessage: favoriteErrorMessage,
+    favoriteVideos,
+    isFavorite,
+    isLoadingFavorites,
+    saveFavorite,
+  } = useBilibiliFavoriteVideos({ fileSystem });
   const combinedErrorMessage = errorMessage ?? directAudioErrorMessage;
+  const isCurrentVideoFavorite = isFavorite(currentFavoriteVideo?.bvid);
   const canUsePlaybackControlAction =
     !isDirectAudioLoading && (Boolean(audioSource) || !activeReference);
   const canUseOuterPlaybackButton = Boolean(audioSource) && !isDirectAudioLoading;
@@ -195,6 +215,7 @@ export function VideoListeningView({
     stopDirectAudio();
     setActiveReference(null);
     setVideoMetadata(null);
+    setCurrentFavoriteVideo(null);
     setErrorMessage(null);
   }, [globalStopRequestId, stopDirectAudio]);
 
@@ -240,9 +261,11 @@ export function VideoListeningView({
   async function loadVideoReference(
     reference: BilibiliDirectAudioReference,
     metadataHint?: BilibiliMetadata,
+    favoriteHint?: BilibiliFavoriteVideoInput,
   ) {
     setActiveReference(reference);
     setVideoMetadata(metadataHint ?? null);
+    setCurrentFavoriteVideo(null);
     setErrorMessage(null);
 
     const nextAudioSource = await loadDirectAudio(reference);
@@ -254,12 +277,23 @@ export function VideoListeningView({
       imageUrl: nextAudioSource.coverUrl ?? metadataHint?.imageUrl,
       title: nextAudioSource.title,
     });
+    const directFavoriteInput =
+      createFavoriteVideoInputFromDirectSource(nextAudioSource);
+    setCurrentFavoriteVideo({
+      ...directFavoriteInput,
+      coverUrl: directFavoriteInput.coverUrl ?? favoriteHint?.coverUrl,
+      durationSeconds: favoriteHint?.durationSeconds,
+      playCount: favoriteHint?.playCount,
+      publishedAt: favoriteHint?.publishedAt,
+      source: favoriteHint?.source ?? directFavoriteInput.source,
+    });
   }
 
   function resetVideoSource(errorText: string) {
     stopDirectAudio();
     setActiveReference(null);
     setVideoMetadata(null);
+    setCurrentFavoriteVideo(null);
     setErrorMessage(errorText);
   }
 
@@ -298,7 +332,29 @@ export function VideoListeningView({
     void loadVideoReference(reference, {
       imageUrl: video.coverUrl,
       title: video.title,
-    });
+    }, createFavoriteVideoInputFromCreatorVideo(video));
+  }
+
+  function handleFavoriteVideoSelect(video: BilibiliFavoriteVideo) {
+    const reference: BilibiliDirectAudioReference = {
+      kind: "bvid",
+      value: video.bvid,
+    };
+
+    setVideoInput(video.bvid);
+    void loadVideoReference(reference, {
+      imageUrl: video.coverUrl,
+      title: video.title,
+    }, video);
+  }
+
+  function handleSaveCurrentVideo() {
+    if (!currentFavoriteVideo) {
+      setErrorMessage("请先载入 B 站视频后再收藏");
+      return;
+    }
+
+    void saveFavorite(currentFavoriteVideo);
   }
 
   function handleListeningVolumeChange(nextVolume: number) {
@@ -342,10 +398,10 @@ export function VideoListeningView({
     ? getBilibiliReferenceLabel(activeReference)
     : null;
   const sourceSummaryText = isDirectAudioLoading
-    ? "正在解析直连音频"
+    ? "正在解析直连媒体"
     : audioSource && loadedReferenceLabel
       ? `已载入 ${loadedReferenceLabel}`
-      : "等待载入直连音频";
+      : "等待载入直连媒体";
 
   return (
     <div className="video-listening-view">
@@ -495,58 +551,31 @@ export function VideoListeningView({
                 />
               </label>
               <p className="video-control-hint">
-                直连模式使用应用内音频播放器，可直接播放、暂停和调音量。
+                直连模式使用应用内音频播放器，可直接播放、暂停和调音量；视频画面可按需展开。
               </p>
             </section>
           </section>
         </section>
 
-        <section className="video-source-panel glass-panel">
-          <div className="video-source-header">
-            <div>
-              <h2>直连音频源</h2>
-            </div>
-          </div>
+        <BilibiliVideoPlaybackPanel
+          audioRef={audioRef}
+          audioSource={audioSource}
+          isAudioPlaying={isDirectAudioPlaying}
+          isLoading={isDirectAudioLoading}
+        />
 
-          <div className="video-direct-source-shell" aria-label="直连音频源">
-            {audioSource ? (
-              <dl className="video-direct-source-list">
-                <div>
-                  <dt>BV</dt>
-                  <dd>{audioSource.bvid}</dd>
-                </div>
-                <div>
-                  <dt>av</dt>
-                  <dd>{audioSource.aid}</dd>
-                </div>
-                <div>
-                  <dt>cid</dt>
-                  <dd>{audioSource.cid}</dd>
-                </div>
-                <div>
-                  <dt>格式</dt>
-                  <dd>{audioSource.mimeType ?? audioSource.codecs ?? "音频轨"}</dd>
-                </div>
-                <div>
-                  <dt>码率</dt>
-                  <dd>
-                    {audioSource.bandwidth
-                      ? `${Math.round(audioSource.bandwidth / 1000)} kbps`
-                      : "未知"}
-                  </dd>
-                </div>
-              </dl>
-            ) : (
-              <div className="video-player-empty" role="status">
-                <p>
-                  {isDirectAudioLoading
-                    ? "正在解析 B 站直连音频"
-                    : "等待载入 BV 或 av 视频"}
-                </p>
-              </div>
-            )}
-          </div>
-        </section>
+        <BilibiliFavoriteVideoPanel
+          currentVideo={currentFavoriteVideo}
+          errorMessage={favoriteErrorMessage}
+          favoriteVideos={favoriteVideos}
+          isCurrentVideoFavorite={isCurrentVideoFavorite}
+          isLoading={isLoadingFavorites}
+          onDeleteVideo={(bvid) => {
+            void deleteFavorite(bvid);
+          }}
+          onSaveCurrentVideo={handleSaveCurrentVideo}
+          onVideoSelect={handleFavoriteVideoSelect}
+        />
 
         <BilibiliCreatorPanel
           authClient={bilibiliAuthClient}

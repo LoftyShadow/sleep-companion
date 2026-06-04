@@ -13,7 +13,7 @@ import { AppWorkspace } from "./AppWorkspace";
 
 const TEST_BILIBILI_DIRECT_AUDIO_SOURCE = {
   aid: "170001",
-  audioUrl: "/api/bilibili/audio-proxy?url=https%3A%2F%2Fexample.com%2Fa.m4s",
+  audioUrl: "/api/bilibili/media-proxy?url=https%3A%2F%2Fexample.com%2Fa.m4s",
   backupUrls: [],
   bandwidth: 128000,
   bvid: "BV1xx411c7mD",
@@ -22,6 +22,13 @@ const TEST_BILIBILI_DIRECT_AUDIO_SOURCE = {
   coverUrl: "https://i0.hdslb.com/video-cover.jpg",
   mimeType: "audio/mp4",
   title: "视频测试标题",
+  videoBackupUrls: [],
+  videoBandwidth: 800000,
+  videoCodecs: "avc1.64001F",
+  videoHeight: 720,
+  videoMimeType: "video/mp4",
+  videoUrl: "/api/bilibili/media-proxy?url=https%3A%2F%2Fexample.com%2Fv.m4s",
+  videoWidth: 1280,
 };
 
 describe("AppWorkspace integration", () => {
@@ -406,7 +413,9 @@ describe("AppWorkspace integration", () => {
     await user.click(screen.getByRole("button", { name: "载入" }));
 
     expect(screen.getByText("已载入 BV BV1xx411c7mD")).toBeInTheDocument();
-    expect(await screen.findByText("视频测试标题")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "视频测试标题" }),
+    ).toBeInTheDocument();
     expect(screen.getByAltText("视频测试标题 封面")).toHaveAttribute(
       "src",
       "https://i0.hdslb.com/video-cover.jpg",
@@ -489,7 +498,7 @@ describe("AppWorkspace integration", () => {
     expect(audio).toHaveProperty("volume", 0.35);
   });
 
-  it("shows direct audio source details instead of an official player", async () => {
+  it("keeps the direct video panel hidden by default and toggles it", async () => {
     mockHtmlMediaPlayback();
     const { user } = renderVideoWorkspace();
 
@@ -497,13 +506,29 @@ describe("AppWorkspace integration", () => {
     await user.type(screen.getByLabelText("视频或直播链接"), "BV1xx411c7mD");
     await user.click(screen.getByRole("button", { name: "载入" }));
 
-    expect(screen.getByRole("heading", { name: "直连音频源" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "视频画面" })).toBeInTheDocument();
     expect(await screen.findByText("BV1xx411c7mD")).toBeInTheDocument();
     expect(screen.getByText("170001")).toBeInTheDocument();
     expect(screen.getByText("110002")).toBeInTheDocument();
-    expect(screen.getByText("audio/mp4")).toBeInTheDocument();
+    expect(screen.getAllByText("audio/mp4").length).toBeGreaterThan(0);
     expect(screen.getByText("128 kbps")).toBeInTheDocument();
+    expect(screen.getByText("800 kbps")).toBeInTheDocument();
+    expect(screen.getByText("1280 x 720")).toBeInTheDocument();
+    expect(screen.getByText("视频画面已隐藏")).toBeInTheDocument();
+    expect(screen.queryByLabelText("直连视频播放器")).not.toBeInTheDocument();
     expect(screen.queryByTitle(/B 站视频播放器/u)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "展开视频" }));
+
+    expect(screen.getByLabelText("直连视频播放器")).toHaveAttribute(
+      "src",
+      TEST_BILIBILI_DIRECT_AUDIO_SOURCE.videoUrl,
+    );
+
+    await user.click(screen.getByRole("button", { name: "隐藏视频" }));
+
+    expect(screen.getByText("视频画面已隐藏")).toBeInTheDocument();
+    expect(screen.queryByLabelText("直连视频播放器")).not.toBeInTheDocument();
   });
 
   it("pastes a Bilibili link from the clipboard", async () => {

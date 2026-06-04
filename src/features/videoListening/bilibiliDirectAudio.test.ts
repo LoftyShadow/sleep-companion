@@ -6,7 +6,7 @@ import {
 
 const TEST_DIRECT_AUDIO_SOURCE = {
   aid: "170001",
-  audioUrl: "/api/bilibili/audio-proxy?url=https%3A%2F%2Fexample.com%2Fa.m4s",
+  audioUrl: "/api/bilibili/media-proxy?url=https%3A%2F%2Fexample.com%2Fa.m4s",
   backupUrls: [],
   bandwidth: 128000,
   bvid: "BV1xx411c7mD",
@@ -15,6 +15,13 @@ const TEST_DIRECT_AUDIO_SOURCE = {
   coverUrl: "https://i0.hdslb.com/video.jpg",
   mimeType: "audio/mp4",
   title: "测试视频",
+  videoBackupUrls: [],
+  videoBandwidth: 800000,
+  videoCodecs: "avc1.64001F",
+  videoHeight: 720,
+  videoMimeType: "video/mp4",
+  videoUrl: "/api/bilibili/media-proxy?url=https%3A%2F%2Fexample.com%2Fv.m4s",
+  videoWidth: 1280,
 };
 
 describe("bilibiliDirectAudio", () => {

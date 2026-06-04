@@ -70,6 +70,13 @@ interface BilibiliDirectAudioSourcePayload {
   expiresAt?: number;
   mimeType?: string;
   title: string;
+  videoBackupUrls?: string[];
+  videoBandwidth?: number;
+  videoCodecs?: string;
+  videoHeight?: number;
+  videoMimeType?: string;
+  videoUrl?: string;
+  videoWidth?: number;
 }
 
 interface BilibiliVideoIdentityPayload {
@@ -86,6 +93,16 @@ interface BilibiliDashAudioTrackPayload {
   bandwidth?: number;
   codecs?: string;
   mimeType?: string;
+}
+
+interface BilibiliDashVideoTrackPayload {
+  backupUrls: string[];
+  bandwidth?: number;
+  codecs?: string;
+  height?: number;
+  mimeType?: string;
+  videoUrl: string;
+  width?: number;
 }
 
 interface BilibiliAuthAccountPayload {
@@ -933,11 +950,11 @@ function parseBilibiliVideoIdentity(
   };
 }
 
-function readDashAudioUrl(track: Record<string, unknown>): string | undefined {
+function readDashMediaUrl(track: Record<string, unknown>): string | undefined {
   return readString(track.baseUrl) ?? readString(track.base_url);
 }
 
-function readDashAudioBackupUrls(track: Record<string, unknown>): string[] {
+function readDashBackupUrls(track: Record<string, unknown>): string[] {
   const backupUrls = Array.isArray(track.backupUrl)
     ? track.backupUrl
     : Array.isArray(track.backup_url)
@@ -964,14 +981,14 @@ function parseBestDashAudioTrack(
     .map(asRecord)
     .filter((track): track is Record<string, unknown> => Boolean(track))
     .map((track): BilibiliDashAudioTrackPayload | null => {
-      const audioUrl = readDashAudioUrl(track);
+      const audioUrl = readDashMediaUrl(track);
       if (!audioUrl) {
         return null;
       }
 
       return {
         audioUrl,
-        backupUrls: readDashAudioBackupUrls(track),
+        backupUrls: readDashBackupUrls(track),
         bandwidth: readNumber(track.bandwidth),
         codecs: readString(track.codecs) ?? undefined,
         mimeType:
@@ -991,6 +1008,49 @@ function parseBestDashAudioTrack(
   }
 
   return bestTrack;
+}
+
+function videoTrackScore(track: BilibiliDashVideoTrackPayload): number {
+  const codecPriority = track.codecs?.startsWith("avc1") ? 1_000_000_000 : 0;
+
+  return codecPriority + (track.bandwidth ?? 0);
+}
+
+function parseBestDashVideoTrack(
+  responseValue: unknown,
+): BilibiliDashVideoTrackPayload | undefined {
+  const response = ensureBilibiliSuccess(responseValue);
+  const data = asRecord(response.data);
+  const dash = asRecord(data?.dash);
+  const videoValues = Array.isArray(dash?.video) ? dash.video : null;
+  if (!videoValues) {
+    return undefined;
+  }
+
+  return videoValues
+    .map(asRecord)
+    .filter((track): track is Record<string, unknown> => Boolean(track))
+    .map((track): BilibiliDashVideoTrackPayload | null => {
+      const videoUrl = readDashMediaUrl(track);
+      if (!videoUrl) {
+        return null;
+      }
+
+      return {
+        backupUrls: readDashBackupUrls(track),
+        bandwidth: readNumber(track.bandwidth),
+        codecs: readString(track.codecs) ?? undefined,
+        height: readNumber(track.height),
+        mimeType:
+          readString(track.mime_type) ?? readString(track.mimeType) ?? undefined,
+        videoUrl,
+        width: readNumber(track.width),
+      };
+    })
+    .filter(
+      (track): track is BilibiliDashVideoTrackPayload => track !== null,
+    )
+    .sort((left, right) => videoTrackScore(right) - videoTrackScore(left))[0];
 }
 
 function directAudioPlayurl(
@@ -1014,13 +1074,13 @@ function directAudioPlayurl(
   return `https://api.bilibili.com/x/player/wbi/playurl?${query}`;
 }
 
-function proxiedBilibiliAudioUrl(audioUrl: string, bvid: string): string {
+function proxiedBilibiliMediaUrl(mediaUrl: string, bvid: string): string {
   const searchParams = new URLSearchParams({
     bvid,
-    url: audioUrl,
+    url: mediaUrl,
   });
 
-  return `/api/bilibili/audio-proxy?${searchParams.toString()}`;
+  return `/api/bilibili/media-proxy?${searchParams.toString()}`;
 }
 
 async function resolveBilibiliDirectAudioForDevApi(
@@ -1055,12 +1115,13 @@ async function resolveBilibiliDirectAudioForDevApi(
     },
   );
   const audioTrack = parseBestDashAudioTrack(playurlResponse);
+  const videoTrack = parseBestDashVideoTrack(playurlResponse);
 
   return {
     aid: identity.aid,
-    audioUrl: proxiedBilibiliAudioUrl(audioTrack.audioUrl, identity.bvid),
+    audioUrl: proxiedBilibiliMediaUrl(audioTrack.audioUrl, identity.bvid),
     backupUrls: audioTrack.backupUrls.map((backupUrl) =>
-      proxiedBilibiliAudioUrl(backupUrl, identity.bvid),
+      proxiedBilibiliMediaUrl(backupUrl, identity.bvid),
     ),
     bandwidth: audioTrack.bandwidth,
     bvid: identity.bvid,
@@ -1070,10 +1131,22 @@ async function resolveBilibiliDirectAudioForDevApi(
     expiresAt: undefined,
     mimeType: audioTrack.mimeType,
     title: identity.title,
+    videoBackupUrls:
+      videoTrack?.backupUrls.map((backupUrl) =>
+        proxiedBilibiliMediaUrl(backupUrl, identity.bvid),
+      ) ?? [],
+    videoBandwidth: videoTrack?.bandwidth,
+    videoCodecs: videoTrack?.codecs,
+    videoHeight: videoTrack?.height,
+    videoMimeType: videoTrack?.mimeType,
+    videoUrl: videoTrack
+      ? proxiedBilibiliMediaUrl(videoTrack.videoUrl, identity.bvid)
+      : undefined,
+    videoWidth: videoTrack?.width,
   };
 }
 
-function isTrustedBilibiliAudioHost(hostname: string): boolean {
+function isTrustedBilibiliMediaHost(hostname: string): boolean {
   const normalizedHost = hostname.toLowerCase();
   const trustedRootDomains = [
     "bilibili.com",
@@ -1095,25 +1168,25 @@ function isTrustedBilibiliAudioHost(hostname: string): boolean {
   );
 }
 
-function parseTrustedAudioProxyUrl(url: URL): URL {
-  const rawAudioUrl = url.searchParams.get("url")?.trim() ?? "";
-  if (!rawAudioUrl) {
-    throw new Error("B 站音频代理 URL 不能为空");
+function parseTrustedMediaProxyUrl(url: URL): URL {
+  const rawMediaUrl = url.searchParams.get("url")?.trim() ?? "";
+  if (!rawMediaUrl) {
+    throw new Error("B 站媒体代理 URL 不能为空");
   }
 
-  const audioUrl = new URL(rawAudioUrl);
-  if (!["http:", "https:"].includes(audioUrl.protocol)) {
-    throw new Error("B 站音频代理 URL 协议不支持");
+  const mediaUrl = new URL(rawMediaUrl);
+  if (!["http:", "https:"].includes(mediaUrl.protocol)) {
+    throw new Error("B 站媒体代理 URL 协议不支持");
   }
 
-  if (!isTrustedBilibiliAudioHost(audioUrl.hostname)) {
-    throw new Error("B 站音频代理 URL 域名不受信任");
+  if (!isTrustedBilibiliMediaHost(mediaUrl.hostname)) {
+    throw new Error("B 站媒体代理 URL 域名不受信任");
   }
 
-  return audioUrl;
+  return mediaUrl;
 }
 
-function copyAudioProxyResponseHeaders(
+function copyMediaProxyResponseHeaders(
   upstreamResponse: Response,
   response: ServerResponse,
 ) {
@@ -1133,13 +1206,13 @@ function copyAudioProxyResponseHeaders(
   });
 }
 
-async function proxyBilibiliAudioForDevApi(
+async function proxyBilibiliMediaForDevApi(
   request: IncomingMessage,
   response: ServerResponse,
   url: URL,
 ) {
   await ensureBilibiliWebAuthSessionLoaded();
-  const audioUrl = parseTrustedAudioProxyUrl(url);
+  const mediaUrl = parseTrustedMediaProxyUrl(url);
   const cookieStore = createCookieStoreFromSession(
     getActiveBilibiliWebAuthSession(),
   );
@@ -1159,10 +1232,10 @@ async function proxyBilibiliAudioForDevApi(
     headers.Range = range;
   }
 
-  const upstreamResponse = await fetch(audioUrl, { headers });
+  const upstreamResponse = await fetch(mediaUrl, { headers });
   response.statusCode = upstreamResponse.status;
   response.statusMessage = upstreamResponse.statusText;
-  copyAudioProxyResponseHeaders(upstreamResponse, response);
+  copyMediaProxyResponseHeaders(upstreamResponse, response);
   if (!upstreamResponse.body) {
     response.end();
     return;
@@ -1764,8 +1837,11 @@ function handleBilibiliDirectAudioWebApiRequest(
     return;
   }
 
-  if (requestUrl.pathname === "/api/bilibili/audio-proxy") {
-    void proxyBilibiliAudioForDevApi(request, response, requestUrl).catch(
+  if (
+    requestUrl.pathname === "/api/bilibili/media-proxy" ||
+    requestUrl.pathname === "/api/bilibili/audio-proxy"
+  ) {
+    void proxyBilibiliMediaForDevApi(request, response, requestUrl).catch(
       (error: unknown) => {
         if (response.headersSent) {
           response.destroy(error instanceof Error ? error : undefined);
@@ -1774,7 +1850,7 @@ function handleBilibiliDirectAudioWebApiRequest(
 
         writeJsonResponse(response, 502, {
           message:
-            error instanceof Error ? error.message : "代理 B 站音频失败",
+            error instanceof Error ? error.message : "代理 B 站媒体失败",
         });
       },
     );
