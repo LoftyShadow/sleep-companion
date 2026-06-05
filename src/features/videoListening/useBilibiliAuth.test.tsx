@@ -17,7 +17,15 @@ function createAuthClient(
       account: undefined,
       isLoggedIn: false,
     }),
+    importCookies: vi.fn().mockResolvedValue({
+      account: {
+        mid: "123456",
+        name: "测试账号",
+      },
+      message: "Cookie 导入成功",
+    }),
     logout: vi.fn().mockResolvedValue(undefined),
+    openWebLogin: vi.fn().mockResolvedValue(undefined),
     pollLoginQr: vi.fn().mockResolvedValue({
       account: {
         avatarUrl: "https://i0.hdslb.com/avatar.jpg",
@@ -26,6 +34,13 @@ function createAuthClient(
       },
       message: "登录成功",
       state: "success",
+    }),
+    syncWebLogin: vi.fn().mockResolvedValue({
+      account: {
+        mid: "123456",
+        name: "测试账号",
+      },
+      message: "网页登录已同步",
     }),
     ...overrides,
   };
@@ -79,6 +94,51 @@ describe("useBilibiliAuth", () => {
     expect(result.current.account?.name).toBe("测试账号");
     expect(result.current.qr).toBeNull();
     vi.useRealTimers();
+  });
+
+  it("opens web login and syncs account cookies", async () => {
+    const authClient = createAuthClient();
+    const { result } = renderHook(() => useBilibiliAuth(authClient));
+
+    await waitFor(() => {
+      expect(result.current.isLoadingStatus).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.openWebLogin();
+    });
+    expect(authClient.openWebLogin).toHaveBeenCalled();
+    expect(result.current.statusMessage).toBe("请在打开的 B 站官方页面完成登录");
+
+    await act(async () => {
+      await result.current.syncWebLogin();
+    });
+
+    expect(authClient.syncWebLogin).toHaveBeenCalled();
+    expect(result.current.loginState).toBe("success");
+    expect(result.current.account?.name).toBe("测试账号");
+    expect(result.current.statusMessage).toBe("网页登录已同步");
+  });
+
+  it("imports cookie text and stores only account summary in state", async () => {
+    const authClient = createAuthClient();
+    const { result } = renderHook(() => useBilibiliAuth(authClient));
+
+    await waitFor(() => {
+      expect(result.current.isLoadingStatus).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.importCookies("SESSDATA=sess-secret");
+    });
+
+    expect(authClient.importCookies).toHaveBeenCalledWith("SESSDATA=sess-secret");
+    expect(result.current.loginState).toBe("success");
+    expect(result.current.account).toEqual({
+      mid: "123456",
+      name: "测试账号",
+    });
+    expect(JSON.stringify(result.current)).not.toContain("sess-secret");
   });
 
   it("logs out and clears account state", async () => {

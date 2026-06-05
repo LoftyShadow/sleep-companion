@@ -12,15 +12,21 @@ const LOGIN_POLL_INTERVAL_MS = 2_000;
 export interface UseBilibiliAuthState {
   account: BilibiliAuthAccount | null;
   errorMessage: string | null;
+  importCookies: (cookieText: string) => Promise<boolean>;
+  isImportingCookies: boolean;
   isLoadingStatus: boolean;
   isLoggedIn: boolean;
   isLoggingOut: boolean;
+  isOpeningWebLogin: boolean;
   isRequestingQr: boolean;
+  isSyncingWebLogin: boolean;
   loginState: BilibiliLoginPollState | "idle";
+  openWebLogin: () => Promise<void>;
   qr: BilibiliLoginQr | null;
   statusMessage: string;
   createLoginQr: () => Promise<void>;
   logout: () => Promise<void>;
+  syncWebLogin: () => Promise<boolean>;
 }
 
 function getErrorMessage(error: unknown, fallbackMessage: string): string {
@@ -58,9 +64,12 @@ export function useBilibiliAuth(
 ): UseBilibiliAuthState {
   const [account, setAccount] = useState<BilibiliAuthAccount | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isImportingCookies, setIsImportingCookies] = useState(false);
   const [isLoadingStatus, setIsLoadingStatus] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isOpeningWebLogin, setIsOpeningWebLogin] = useState(false);
   const [isRequestingQr, setIsRequestingQr] = useState(false);
+  const [isSyncingWebLogin, setIsSyncingWebLogin] = useState(false);
   const [loginState, setLoginState] =
     useState<UseBilibiliAuthState["loginState"]>("idle");
   const [qr, setQr] = useState<BilibiliLoginQr | null>(null);
@@ -190,6 +199,99 @@ export function useBilibiliAuth(
     }
   }, [authClient, clearPollTimer, pollLoginQr]);
 
+  const openWebLogin = useCallback(async () => {
+    requestIdRef.current += 1;
+    clearPollTimer();
+    setIsOpeningWebLogin(true);
+    setErrorMessage(null);
+    setLoginState("idle");
+    setStatusMessage("正在打开 B 站网页登录");
+
+    try {
+      await authClient.openWebLogin();
+      setQr(null);
+      setStatusMessage("请在打开的 B 站官方页面完成登录");
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, "打开 B 站网页登录失败"));
+      setStatusMessage("B 站网页登录不可用");
+    } finally {
+      setIsOpeningWebLogin(false);
+    }
+  }, [authClient, clearPollTimer]);
+
+  const syncWebLogin = useCallback(async () => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    clearPollTimer();
+    setIsSyncingWebLogin(true);
+    setErrorMessage(null);
+    setStatusMessage("正在同步 B 站网页登录");
+
+    try {
+      const result = await authClient.syncWebLogin();
+      if (requestIdRef.current !== requestId) {
+        return false;
+      }
+
+      setAccount(result.account ?? null);
+      setLoginState("success");
+      setQr(null);
+      setStatusMessage(result.message);
+      return true;
+    } catch (error) {
+      if (requestIdRef.current !== requestId) {
+        return false;
+      }
+
+      setLoginState("error");
+      setErrorMessage(getErrorMessage(error, "同步 B 站网页登录失败"));
+      setStatusMessage("B 站网页登录同步失败");
+      return false;
+    } finally {
+      if (requestIdRef.current === requestId) {
+        setIsSyncingWebLogin(false);
+      }
+    }
+  }, [authClient, clearPollTimer]);
+
+  const importCookies = useCallback(
+    async (cookieText: string) => {
+      const requestId = requestIdRef.current + 1;
+      requestIdRef.current = requestId;
+      clearPollTimer();
+      setIsImportingCookies(true);
+      setErrorMessage(null);
+      setStatusMessage("正在导入 B 站 Cookie");
+
+      try {
+        const result = await authClient.importCookies(cookieText);
+        if (requestIdRef.current !== requestId) {
+          return false;
+        }
+
+        setAccount(result.account ?? null);
+        setLoginState("success");
+        setQr(null);
+        setStatusMessage(result.message);
+        return true;
+      } catch (error) {
+        if (requestIdRef.current !== requestId) {
+          return false;
+        }
+
+        setLoginState("error");
+        setErrorMessage(getErrorMessage(error, "导入 B 站 Cookie 失败"));
+        setStatusMessage("B 站 Cookie 导入失败");
+        return false;
+      } finally {
+        if (requestIdRef.current === requestId) {
+          setIsImportingCookies(false);
+        }
+      }
+    },
+    [authClient, clearPollTimer],
+  );
+
   const logout = useCallback(async () => {
     requestIdRef.current += 1;
     clearPollTimer();
@@ -215,13 +317,19 @@ export function useBilibiliAuth(
     account,
     createLoginQr,
     errorMessage,
+    importCookies,
+    isImportingCookies,
     isLoadingStatus,
     isLoggedIn: Boolean(account),
     isLoggingOut,
+    isOpeningWebLogin,
     isRequestingQr,
+    isSyncingWebLogin,
     loginState,
     logout,
+    openWebLogin,
     qr,
     statusMessage,
+    syncWebLogin,
   };
 }

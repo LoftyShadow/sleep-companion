@@ -69,8 +69,11 @@ describe("AppWorkspace integration", () => {
         account: undefined,
         isLoggedIn: false,
       }),
+      importCookies: vi.fn(),
       logout: vi.fn(),
+      openWebLogin: vi.fn(),
       pollLoginQr: vi.fn(),
+      syncWebLogin: vi.fn(),
     };
   }
 

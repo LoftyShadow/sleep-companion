@@ -17,8 +17,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             bilibili_auth::create_bilibili_login_qr,
             bilibili_auth::get_bilibili_auth_status,
+            bilibili_auth::import_bilibili_login_cookies,
             bilibili_auth::logout_bilibili,
+            bilibili_auth::open_bilibili_web_login,
             bilibili_auth::poll_bilibili_login_qr,
+            bilibili_auth::sync_bilibili_web_login_cookies,
             bilibili_direct_audio::resolve_bilibili_direct_audio,
             bilibili_metadata::fetch_bilibili_creator_videos,
             bilibili_metadata::fetch_bilibili_metadata,

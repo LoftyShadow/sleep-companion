@@ -3,6 +3,7 @@ import {
   createBilibiliAuthClient,
   createBilibiliWebAuthClient,
   normalizeBilibiliAuthStatus,
+  normalizeBilibiliCookieLoginResult,
   normalizeBilibiliLoginPollResult,
   normalizeBilibiliLoginQr,
 } from "./bilibiliAuth";
@@ -60,6 +61,26 @@ describe("bilibiliAuth", () => {
     });
   });
 
+  it("normalizes cookie login result without exposing credentials", () => {
+    const result = normalizeBilibiliCookieLoginResult({
+      account: {
+        mid: " 123456 ",
+        name: " 测试账号 ",
+      },
+      message: " Cookie 导入成功 ",
+    });
+
+    expect(result).toEqual({
+      account: {
+        avatarUrl: undefined,
+        mid: "123456",
+        name: "测试账号",
+      },
+      message: "Cookie 导入成功",
+    });
+    expect(JSON.stringify(result)).not.toContain("sess-secret");
+  });
+
   it("rejects invalid auth response shapes", () => {
     expect(() => normalizeBilibiliAuthStatus({ isLoggedIn: "yes" })).toThrow(
       "B 站登录状态响应格式不正确",
@@ -85,6 +106,24 @@ describe("bilibiliAuth", () => {
       if (command === "poll_bilibili_login_qr") {
         return Promise.resolve({ state: "pending" });
       }
+      if (command === "import_bilibili_login_cookies") {
+        return Promise.resolve({
+          account: {
+            mid: "123456",
+            name: "测试账号",
+          },
+          message: "Cookie 导入成功",
+        });
+      }
+      if (command === "sync_bilibili_web_login_cookies") {
+        return Promise.resolve({
+          account: {
+            mid: "123456",
+            name: "测试账号",
+          },
+          message: "网页登录已同步",
+        });
+      }
       return Promise.resolve(null);
     });
     const client = createBilibiliAuthClient(invoke);
@@ -106,12 +145,35 @@ describe("bilibiliAuth", () => {
       message: undefined,
       state: "pending",
     });
+    await expect(client.importCookies("SESSDATA=sess-secret")).resolves.toEqual(
+      {
+        account: {
+          avatarUrl: undefined,
+          mid: "123456",
+          name: "测试账号",
+        },
+        message: "Cookie 导入成功",
+      },
+    );
+    await client.openWebLogin();
+    await expect(client.syncWebLogin()).resolves.toEqual({
+      account: {
+        avatarUrl: undefined,
+        mid: "123456",
+        name: "测试账号",
+      },
+      message: "网页登录已同步",
+    });
     await client.logout();
 
     expect(invoke).toHaveBeenCalledWith("poll_bilibili_login_qr", {
       qrcodeKey: "qr-key",
     });
-    expect(JSON.stringify(invoke.mock.calls)).not.toContain("SESSDATA");
+    expect(invoke).toHaveBeenCalledWith("import_bilibili_login_cookies", {
+      cookieText: "SESSDATA=sess-secret",
+    });
+    expect(invoke).toHaveBeenCalledWith("open_bilibili_web_login");
+    expect(invoke).toHaveBeenCalledWith("sync_bilibili_web_login_cookies");
   });
 
   it("uses the Web auth API outside Tauri", async () => {
@@ -165,6 +227,21 @@ describe("bilibiliAuth", () => {
           ),
         });
       }
+      if (url.pathname === "/api/bilibili/auth/cookie-import") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: vi.fn().mockResolvedValue(
+            JSON.stringify({
+              account: {
+                mid: "123456",
+                name: "测试账号",
+              },
+              message: "Cookie 导入成功",
+            }),
+          ),
+        });
+      }
 
       return Promise.resolve({
         ok: true,
@@ -196,6 +273,16 @@ describe("bilibiliAuth", () => {
       message: "登录成功",
       state: "success",
     });
+    await expect(client.importCookies("SESSDATA=sess-secret")).resolves.toEqual(
+      {
+        account: {
+          avatarUrl: undefined,
+          mid: "123456",
+          name: "测试账号",
+        },
+        message: "Cookie 导入成功",
+      },
+    );
     await client.logout();
 
     const requestedUrls = fetchMock.mock.calls.map(([input]) => input);
@@ -204,12 +291,16 @@ describe("bilibiliAuth", () => {
       "/api/bilibili/auth/status",
       "/api/bilibili/auth/login-qr",
       "/api/bilibili/auth/login-poll",
+      "/api/bilibili/auth/cookie-import",
       "/api/bilibili/auth/logout",
     ]);
     expect(fetchMock.mock.calls[2]?.[1]).toMatchObject({
       body: JSON.stringify({ qrcodeKey: "qr-key" }),
       method: "POST",
     });
-    expect(JSON.stringify(fetchMock.mock.calls)).not.toContain("SESSDATA");
+    expect(fetchMock.mock.calls[3]?.[1]).toMatchObject({
+      body: JSON.stringify({ cookieText: "SESSDATA=sess-secret" }),
+      method: "POST",
+    });
   });
 });

@@ -52,6 +52,32 @@ function formatPlayCount(playCount?: number): string {
   return `${playCount} 播放`;
 }
 
+function RefreshIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="bilibili-refresh-icon"
+      fill="none"
+      viewBox="0 0 20 20"
+    >
+      <path
+        d="M15.4 6.1A6.4 6.4 0 1 0 16 12"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+      <path
+        d="M15.6 2.9v3.4h-3.4"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
 export function BilibiliCreatorPanel({
   authClient,
   fileSystem,
@@ -94,16 +120,6 @@ export function BilibiliCreatorPanel({
             {statusMessage}
           </p>
         </div>
-        <button
-          className="secondary-control-button bilibili-refresh-button"
-          type="button"
-          disabled={!selectedMid || isRefreshingVideos}
-          onClick={() => {
-            void refreshCreatorVideos();
-          }}
-        >
-          {isRefreshingVideos ? "刷新中" : "刷新视频"}
-        </button>
       </div>
 
       {errorMessage ? (
@@ -148,63 +164,90 @@ export function BilibiliCreatorPanel({
       </div>
 
       <div className="bilibili-creator-content">
-        <div className="bilibili-creator-list" aria-label="已保存 UP 主">
-          {creators.length > 0 ? (
-            creators.map((creator) => (
-              <div
-                className={
-                  creator.mid === selectedMid
-                    ? "bilibili-creator-item is-active"
-                    : "bilibili-creator-item"
-                }
-                key={creator.mid}
-              >
-                <button
-                  className="bilibili-creator-select"
-                  type="button"
-                  aria-pressed={creator.mid === selectedMid}
-                  onClick={() => {
-                    selectCreator(creator.mid);
-                  }}
+        <section className="bilibili-creator-roster" aria-label="已保存 UP 主">
+          <div className="bilibili-creator-column-header">
+            <span>已保存 UP 主</span>
+            <strong>{creators.length}</strong>
+          </div>
+          <div className="bilibili-creator-list">
+            {creators.length > 0 ? (
+              creators.map((creator) => (
+                <article
+                  className={
+                    creator.mid === selectedMid
+                      ? "bilibili-creator-item is-active"
+                      : "bilibili-creator-item"
+                  }
+                  key={creator.mid}
                 >
-                  <span className="bilibili-creator-avatar" aria-hidden="true">
-                    {creator.avatarUrl ? (
-                      <img
-                        alt=""
-                        referrerPolicy="no-referrer"
-                        src={creator.avatarUrl}
-                      />
-                    ) : (
-                      creator.name.slice(0, 1)
-                    )}
-                  </span>
-                  <span className="bilibili-creator-name">{creator.name}</span>
-                  <span className="bilibili-creator-mid">mid {creator.mid}</span>
-                </button>
-                <button
-                  className="secondary-control-button bilibili-delete-button"
-                  type="button"
-                  aria-label={`删除 ${creator.name}`}
-                  onClick={() => {
-                    void deleteCreator(creator.mid);
-                  }}
-                >
-                  删除
-                </button>
-              </div>
-            ))
-          ) : (
-            <p className="bilibili-empty-state">
-              {isLoadingCreators ? "正在读取本地列表" : "保存 UP 主后刷新最新视频"}
-            </p>
-          )}
-        </div>
+                  <button
+                    className="bilibili-creator-select"
+                    type="button"
+                    aria-pressed={creator.mid === selectedMid}
+                    onClick={() => {
+                      selectCreator(creator.mid);
+                    }}
+                  >
+                    <span className="bilibili-creator-avatar" aria-hidden="true">
+                      {creator.avatarUrl ? (
+                        <img
+                          alt=""
+                          referrerPolicy="no-referrer"
+                          src={creator.avatarUrl}
+                        />
+                      ) : (
+                        creator.name.slice(0, 1)
+                      )}
+                    </span>
+                    <span className="bilibili-creator-name">{creator.name}</span>
+                    <span className="bilibili-creator-mid">
+                      mid {creator.mid}
+                    </span>
+                  </button>
+                  <div className="bilibili-creator-actions">
+                    {creator.mid === selectedMid ? (
+                      <button
+                        className="custom-audio-button bilibili-refresh-button"
+                        type="button"
+                        aria-label={`刷新 ${creator.name} 视频`}
+                        disabled={isRefreshingVideos}
+                        onClick={() => {
+                          void refreshCreatorVideos(creator.mid);
+                        }}
+                      >
+                        <RefreshIcon />
+                        <span>{isRefreshingVideos ? "刷新中" : "刷新视频"}</span>
+                      </button>
+                    ) : null}
+                    <button
+                      className="secondary-control-button bilibili-delete-button"
+                      type="button"
+                      aria-label={`删除 ${creator.name}`}
+                      onClick={() => {
+                        void deleteCreator(creator.mid);
+                      }}
+                    >
+                      删除
+                    </button>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <p className="bilibili-empty-state">
+                {isLoadingCreators ? "正在读取本地列表" : "保存 UP 主后刷新最新视频"}
+              </p>
+            )}
+          </div>
+        </section>
 
-        <div className="bilibili-video-list" aria-label="最新视频">
+        <section className="bilibili-video-list" aria-label="最新视频">
           {activeCreator ? (
             <div className="bilibili-video-list-header">
-              <strong>{activeCreator.name}</strong>
-              <span>{videos.length > 0 ? `${videos.length} 个公开视频` : "等待刷新"}</span>
+              <div className="bilibili-video-list-title">
+                <span>最新公开视频</span>
+                <strong>{activeCreator.name}</strong>
+              </div>
+              <span>{videos.length > 0 ? `${videos.length} 个视频` : "等待刷新"}</span>
             </div>
           ) : null}
 
@@ -250,7 +293,7 @@ export function BilibiliCreatorPanel({
                 : "先保存或选择一个 UP 主"}
             </p>
           )}
-        </div>
+        </section>
       </div>
     </section>
   );

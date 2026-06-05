@@ -37,11 +37,19 @@ export interface BilibiliLoginPollResult {
   state: BilibiliLoginPollState;
 }
 
+export interface BilibiliCookieLoginResult {
+  account?: BilibiliAuthAccount;
+  message: string;
+}
+
 export interface BilibiliAuthClient {
   createLoginQr: () => Promise<BilibiliLoginQr>;
   getStatus: () => Promise<BilibiliAuthStatus>;
+  importCookies: (cookieText: string) => Promise<BilibiliCookieLoginResult>;
   logout: () => Promise<void>;
+  openWebLogin: () => Promise<void>;
   pollLoginQr: (qrcodeKey: string) => Promise<BilibiliLoginPollResult>;
+  syncWebLogin: () => Promise<BilibiliCookieLoginResult>;
 }
 
 const DEFAULT_WEB_AUTH_API_BASE_URL = "";
@@ -141,6 +149,28 @@ export function normalizeBilibiliLoginPollResult(
   };
 }
 
+export function normalizeBilibiliCookieLoginResult(
+  response: unknown,
+): BilibiliCookieLoginResult {
+  const result = asRecord(response);
+  if (!result || typeof result.message !== "string") {
+    throw new Error("B 站 Cookie 登录响应格式不正确");
+  }
+
+  const account =
+    result.account === undefined || result.account === null
+      ? undefined
+      : result.account;
+  if (account !== undefined && !isBilibiliAuthAccount(account)) {
+    throw new Error("B 站登录账号响应格式不正确");
+  }
+
+  return {
+    account: account ? normalizeBilibiliAuthAccount(account) : undefined,
+    message: result.message.trim() || "B 站登录成功",
+  };
+}
+
 function isBilibiliLoginPollState(
   value: string,
 ): value is BilibiliLoginPollState {
@@ -203,12 +233,25 @@ export function createBilibiliAuthClient(
         await invoke("get_bilibili_auth_status"),
       );
     },
+    async importCookies(cookieText) {
+      return normalizeBilibiliCookieLoginResult(
+        await invoke("import_bilibili_login_cookies", { cookieText }),
+      );
+    },
     async logout() {
       await invoke("logout_bilibili");
+    },
+    async openWebLogin() {
+      await invoke("open_bilibili_web_login");
     },
     async pollLoginQr(qrcodeKey) {
       return normalizeBilibiliLoginPollResult(
         await invoke("poll_bilibili_login_qr", { qrcodeKey }),
+      );
+    },
+    async syncWebLogin() {
+      return normalizeBilibiliCookieLoginResult(
+        await invoke("sync_bilibili_web_login_cookies"),
       );
     },
   };
@@ -230,11 +273,31 @@ export function createBilibiliWebAuthClient(
 
       return normalizeBilibiliAuthStatus(await parseWebAuthResponse(response));
     },
+    async importCookies(cookieText) {
+      const response = await fetch(
+        bilibiliAuthApiUrl(baseUrl, "cookie-import"),
+        {
+          body: JSON.stringify({ cookieText }),
+          headers: {
+            "Content-Type": "application/json",
+          },
+          method: "POST",
+        },
+      );
+
+      return normalizeBilibiliCookieLoginResult(
+        await parseWebAuthResponse(response),
+      );
+    },
     async logout() {
       const response = await fetch(bilibiliAuthApiUrl(baseUrl, "logout"), {
         method: "POST",
       });
       await parseWebAuthResponse(response);
+    },
+    openWebLogin() {
+      window.open("https://passport.bilibili.com/login", "_blank", "noopener");
+      return Promise.resolve();
     },
     async pollLoginQr(qrcodeKey) {
       const response = await fetch(bilibiliAuthApiUrl(baseUrl, "login-poll"), {
@@ -247,6 +310,11 @@ export function createBilibiliWebAuthClient(
 
       return normalizeBilibiliLoginPollResult(
         await parseWebAuthResponse(response),
+      );
+    },
+    syncWebLogin() {
+      return Promise.reject(
+        new Error("当前 Web 环境不能自动同步 B 站网页登录"),
       );
     },
   };

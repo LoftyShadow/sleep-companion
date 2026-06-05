@@ -8,6 +8,10 @@ use reqwest::header::{COOKIE, SET_COOKIE};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::time::Duration;
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+
+const BILIBILI_WEB_LOGIN_WINDOW_LABEL: &str = "bilibili-web-login";
+const BILIBILI_WEB_LOGIN_URL: &str = "https://passport.bilibili.com/login";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,6 +38,13 @@ pub struct BilibiliLoginPollResult {
     account: Option<BilibiliAuthAccount>,
     message: Option<String>,
     state: BilibiliLoginPollState,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BilibiliCookieLoginResult {
+    account: Option<BilibiliAuthAccount>,
+    message: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -153,6 +164,100 @@ fn parse_set_cookie_lines<'a>(
     parsed
 }
 
+fn parse_cookie_pair(cookie_pair: &str) -> Option<(String, String)> {
+    let (raw_name, raw_value) = cookie_pair.split_once('=')?;
+    let name = raw_name.trim();
+    let value = raw_value.trim();
+    if name.is_empty() || value.is_empty() {
+        return None;
+    }
+
+    Some((name.to_string(), value.to_string()))
+}
+
+fn parse_cookie_header_text(text: &str) -> ParsedBilibiliCookies {
+    let mut parsed = ParsedBilibiliCookies::default();
+
+    for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        let cookie_text = line
+            .strip_prefix("Cookie:")
+            .or_else(|| line.strip_prefix("cookie:"))
+            .unwrap_or(line)
+            .trim();
+
+        for cookie_pair in cookie_text.split(';') {
+            if let Some((name, value)) = parse_cookie_pair(cookie_pair) {
+                parsed.cookies.insert(name, value);
+            }
+        }
+    }
+
+    parsed
+}
+
+fn parse_cookie_text(text: &str, now: i64) -> ParsedBilibiliCookies {
+    let trimmed_text = text.trim();
+    if trimmed_text.is_empty() {
+        return ParsedBilibiliCookies::default();
+    }
+
+    let set_cookie_lines = trimmed_text
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .filter_map(|line| {
+            line.strip_prefix("Set-Cookie:")
+                .or_else(|| line.strip_prefix("set-cookie:"))
+                .map(str::trim)
+        })
+        .collect::<Vec<_>>();
+    if !set_cookie_lines.is_empty() {
+        return parse_set_cookie_lines(set_cookie_lines, now);
+    }
+
+    let has_cookie_attributes = trimmed_text
+        .split(';')
+        .any(|attr| parse_max_age(attr).is_some())
+        || trimmed_text
+            .split(';')
+            .any(|attr| attr.trim().eq_ignore_ascii_case("httponly"));
+    if has_cookie_attributes {
+        return parse_set_cookie_lines(trimmed_text.lines().map(str::trim), now);
+    }
+
+    parse_cookie_header_text(trimmed_text)
+}
+
+fn parse_webview_cookies(
+    cookies: Vec<tauri::webview::Cookie<'static>>,
+    now: i64,
+) -> ParsedBilibiliCookies {
+    let mut parsed = ParsedBilibiliCookies::default();
+
+    for cookie in cookies {
+        let name = cookie.name().trim();
+        let value = cookie.value().trim();
+        if name.is_empty() || value.is_empty() {
+            continue;
+        }
+
+        if name == "SESSDATA" {
+            parsed.sess_data_expires_at = cookie.expires_datetime().map(|expires_at| {
+                let unix_timestamp = expires_at.unix_timestamp();
+                if unix_timestamp > 0 {
+                    unix_timestamp
+                } else {
+                    now
+                }
+            });
+        }
+
+        parsed.cookies.insert(name.to_string(), value.to_string());
+    }
+
+    parsed
+}
+
 fn response_set_cookie_lines(response: &reqwest::Response) -> Vec<String> {
     response
         .headers()
@@ -199,6 +304,23 @@ fn create_session_from_cookies(
     session.expires_at = parsed_cookies.sess_data_expires_at;
     session.mid = session.dede_user_id.clone();
     session.sid = cookie_value(&parsed_cookies.cookies, "sid");
+
+    Ok(session)
+}
+
+async fn save_validated_session_from_cookies(
+    app: &tauri::AppHandle,
+    client: &reqwest::Client,
+    parsed_cookies: ParsedBilibiliCookies,
+    now: i64,
+) -> Result<StoredBilibiliSession, String> {
+    let mut session = create_session_from_cookies(parsed_cookies, now)?;
+    let account = fetch_nav_account(client, &session)
+        .await
+        .ok_or_else(|| "B 站登录态验证失败，请确认已登录或 Cookie 未过期".to_string())?;
+
+    session.apply_account(account);
+    save_bilibili_session(app, &session)?;
 
     Ok(session)
 }
@@ -329,17 +451,113 @@ pub async fn poll_bilibili_login_qr(
 
     let now = now_unix_seconds_or_zero();
     let parsed_cookies = parse_set_cookie_lines(set_cookie_lines.iter().map(String::as_str), now);
-    let mut session = create_session_from_cookies(parsed_cookies, now)?;
-    if let Some(account) = fetch_nav_account(&client, &session).await {
-        session.apply_account(account);
-    }
-
-    save_bilibili_session(&app, &session)?;
+    let session = save_validated_session_from_cookies(&app, &client, parsed_cookies, now).await?;
 
     Ok(BilibiliLoginPollResult {
         account: session.account(),
         message: Some("登录成功".to_string()),
         state,
+    })
+}
+
+fn is_allowed_bilibili_login_host(host: &str) -> bool {
+    host == "bilibili.com"
+        || host.ends_with(".bilibili.com")
+        || host == "biligame.com"
+        || host.ends_with(".biligame.com")
+        || host == "geetest.com"
+        || host.ends_with(".geetest.com")
+        || host == "geevisit.com"
+        || host.ends_with(".geevisit.com")
+        || host == "gtimg.com"
+        || host.ends_with(".gtimg.com")
+        || host == "qq.com"
+        || host.ends_with(".qq.com")
+}
+
+#[tauri::command]
+pub async fn open_bilibili_web_login(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(BILIBILI_WEB_LOGIN_WINDOW_LABEL) {
+        window
+            .show()
+            .map_err(|error| format!("显示 B 站网页登录窗口失败：{error}"))?;
+        window
+            .set_focus()
+            .map_err(|error| format!("聚焦 B 站网页登录窗口失败：{error}"))?;
+        return Ok(());
+    }
+
+    let login_url = BILIBILI_WEB_LOGIN_URL
+        .parse()
+        .map_err(|error| format!("解析 B 站网页登录地址失败：{error}"))?;
+
+    WebviewWindowBuilder::new(
+        &app,
+        BILIBILI_WEB_LOGIN_WINDOW_LABEL,
+        WebviewUrl::External(login_url),
+    )
+    .title("B 站网页登录")
+    .inner_size(520.0, 720.0)
+    .min_inner_size(420.0, 560.0)
+    .resizable(true)
+    .center()
+    .focused(true)
+    .on_navigation(|url| {
+        url.scheme() == "https"
+            && url
+                .host_str()
+                .map(is_allowed_bilibili_login_host)
+                .unwrap_or(false)
+    })
+    .build()
+    .map_err(|error| format!("打开 B 站网页登录窗口失败：{error}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn sync_bilibili_web_login_cookies(
+    app: tauri::AppHandle,
+) -> Result<BilibiliCookieLoginResult, String> {
+    let window = app
+        .get_webview_window(BILIBILI_WEB_LOGIN_WINDOW_LABEL)
+        .ok_or_else(|| "请先打开 B 站网页登录窗口并完成登录".to_string())?;
+    let cookie_url = "https://www.bilibili.com/"
+        .parse()
+        .map_err(|error| format!("解析 B 站 Cookie 地址失败：{error}"))?;
+    let cookies = window
+        .cookies_for_url(cookie_url)
+        .map_err(|error| format!("读取 B 站网页登录 Cookie 失败：{error}"))?;
+
+    let now = now_unix_seconds_or_zero();
+    let parsed_cookies = parse_webview_cookies(cookies, now);
+    let client = create_bilibili_client()?;
+    let session = save_validated_session_from_cookies(&app, &client, parsed_cookies, now).await?;
+
+    Ok(BilibiliCookieLoginResult {
+        account: session.account(),
+        message: "网页登录已同步".to_string(),
+    })
+}
+
+#[tauri::command]
+pub async fn import_bilibili_login_cookies(
+    app: tauri::AppHandle,
+    cookie_text: String,
+) -> Result<BilibiliCookieLoginResult, String> {
+    let normalized_cookie_text = cookie_text.trim();
+    if normalized_cookie_text.is_empty() {
+        return Err("B 站 Cookie 不能为空".to_string());
+    }
+
+    let now = now_unix_seconds_or_zero();
+    let parsed_cookies = parse_cookie_text(normalized_cookie_text, now);
+    let client = create_bilibili_client()?;
+    let session = save_validated_session_from_cookies(&app, &client, parsed_cookies, now).await?;
+
+    Ok(BilibiliCookieLoginResult {
+        account: session.account(),
+        message: "Cookie 导入成功".to_string(),
     })
 }
 
@@ -404,6 +622,45 @@ mod tests {
         assert_eq!(session.bili_jct.as_deref(), Some("csrf-secret"));
         assert_eq!(session.mid.as_deref(), Some("123456"));
         assert_eq!(session.dede_user_id.as_deref(), Some("123456"));
+    }
+
+    #[test]
+    fn parses_cookie_header_text() {
+        let parsed = parse_cookie_text(
+            "Cookie: SESSDATA=sess-secret; bili_jct=csrf-secret; DedeUserID=123456",
+            1_000,
+        );
+
+        assert_eq!(
+            parsed.cookies.get("SESSDATA").map(String::as_str),
+            Some("sess-secret")
+        );
+        assert_eq!(
+            parsed.cookies.get("bili_jct").map(String::as_str),
+            Some("csrf-secret")
+        );
+        assert_eq!(
+            parsed.cookies.get("DedeUserID").map(String::as_str),
+            Some("123456")
+        );
+    }
+
+    #[test]
+    fn parses_prefixed_set_cookie_text() {
+        let parsed = parse_cookie_text(
+            "Set-Cookie: SESSDATA=sess-secret; Path=/; Max-Age=100\nSet-Cookie: bili_jct=csrf-secret; Path=/",
+            1_000,
+        );
+
+        assert_eq!(
+            parsed.cookies.get("SESSDATA").map(String::as_str),
+            Some("sess-secret")
+        );
+        assert_eq!(
+            parsed.cookies.get("bili_jct").map(String::as_str),
+            Some("csrf-secret")
+        );
+        assert_eq!(parsed.sess_data_expires_at, Some(1_100));
     }
 
     #[test]
