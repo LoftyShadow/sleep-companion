@@ -259,10 +259,124 @@
   min-width: 98px;
 }
 
+.video-source-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.video-quality-control {
+  display: grid;
+  grid-template-columns: auto minmax(118px, auto);
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 860;
+}
+
+.video-quality-control select {
+  min-height: 38px;
+  max-width: 178px;
+  padding: 7px 28px 7px 9px;
+  border: 1px solid rgba(63, 111, 90, 0.18);
+  border-radius: 8px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.78);
+  font-weight: 850;
+}
+
 .video-source-toggle:disabled {
   cursor: not-allowed;
   opacity: 0.58;
   transform: none;
+}
+
+.video-progress-shell {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(237, 247, 241, 0.46)),
+    rgba(255, 255, 255, 0.5);
+  box-shadow:
+    0 12px 26px rgba(20, 33, 28, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.48);
+}
+
+.video-progress-time-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--primary-strong);
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+}
+
+.video-progress-range-shell {
+  position: relative;
+  display: grid;
+  min-width: 0;
+}
+
+.video-progress-range {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-height: 28px;
+  accent-color: var(--teal);
+}
+
+.video-progress-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.video-progress-markers {
+  position: absolute;
+  inset: 11px 7px auto;
+  height: 6px;
+  pointer-events: none;
+}
+
+.video-progress-markers span {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(183, 104, 62, 0.72);
+  transform: translateX(-1px);
+}
+
+.video-chapter-control {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 860;
+}
+
+.video-chapter-control select {
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 28px 7px 9px;
+  border: 1px solid rgba(63, 111, 90, 0.18);
+  border-radius: 8px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.78);
+  font-weight: 850;
 }
 
 .video-player-frame-shell {
@@ -953,6 +1067,10 @@
   }
 
   .video-direct-source-list {
+    grid-template-columns: 1fr;
+  }
+
+  .video-chapter-control {
     grid-template-columns: 1fr;
   }
 }

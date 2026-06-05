@@ -34,6 +34,14 @@ function playbackErrorMessage(error: unknown): string {
     : "直连音频播放失败，请稍后重试";
 }
 
+function finiteMediaSeconds(value: number): number | null {
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function normalizePlaybackSeconds(seconds: number): number {
+  return Math.max(0, seconds);
+}
+
 export function useBilibiliDirectAudioPlayer({
   defaultVolume = DEFAULT_DIRECT_AUDIO_VOLUME,
   loader,
@@ -46,6 +54,8 @@ export function useBilibiliDirectAudioPlayer({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTimeSeconds, setCurrentTimeSeconds] = useState(0);
+  const [durationSeconds, setDurationSeconds] = useState(0);
   const [volume, setVolumeState] = useState(() => clampVolume(defaultVolume));
 
   const applyVolume = useCallback((nextVolume: number) => {
@@ -75,6 +85,8 @@ export function useBilibiliDirectAudioPlayer({
     requestIdRef.current += 1;
     clearAudioElement();
     setAudioSource(null);
+    setCurrentTimeSeconds(0);
+    setDurationSeconds(0);
     setErrorMessage(null);
     setIsLoading(false);
     setIsPlaying(false);
@@ -88,6 +100,8 @@ export function useBilibiliDirectAudioPlayer({
       requestIdRef.current = requestId;
       clearAudioElement();
       setAudioSource(null);
+      setCurrentTimeSeconds(0);
+      setDurationSeconds(0);
       setErrorMessage(null);
       setIsLoading(true);
       setIsPlaying(false);
@@ -99,6 +113,8 @@ export function useBilibiliDirectAudioPlayer({
         }
 
         setAudioSource(nextAudioSource);
+        setCurrentTimeSeconds(0);
+        setDurationSeconds(nextAudioSource.durationSeconds ?? 0);
         const audio = audioRef.current;
         if (!audio) {
           setIsPlaying(false);
@@ -129,6 +145,8 @@ export function useBilibiliDirectAudioPlayer({
         }
 
         setAudioSource(null);
+        setCurrentTimeSeconds(0);
+        setDurationSeconds(0);
         setErrorMessage(loadErrorMessage(error));
         setIsPlaying(false);
 
@@ -140,6 +158,36 @@ export function useBilibiliDirectAudioPlayer({
       }
     },
     [clearAudioElement, loader],
+  );
+
+  const seekTo = useCallback(
+    (seconds: number) => {
+      if (!audioSource) {
+        setErrorMessage("请先载入 B 站视频链接");
+        return;
+      }
+
+      const audio = audioRef.current;
+      if (!audio) {
+        setErrorMessage("直连音频播放器尚未准备好");
+        return;
+      }
+
+      const normalizedSeconds = normalizePlaybackSeconds(seconds);
+      const targetSeconds =
+        durationSeconds > 0
+          ? Math.min(normalizedSeconds, durationSeconds)
+          : normalizedSeconds;
+
+      try {
+        audio.currentTime = targetSeconds;
+        setCurrentTimeSeconds(targetSeconds);
+        setErrorMessage(null);
+      } catch {
+        setErrorMessage("当前直连音频暂不能跳转进度");
+      }
+    },
+    [audioSource, durationSeconds],
   );
 
   const toggle = useCallback(async () => {
@@ -187,6 +235,15 @@ export function useBilibiliDirectAudioPlayer({
     const handleEnded = () => {
       setIsPlaying(false);
     };
+    const updateCurrentTime = () => {
+      setCurrentTimeSeconds(finiteMediaSeconds(audio.currentTime) ?? 0);
+    };
+    const updateDuration = () => {
+      const mediaDuration = finiteMediaSeconds(audio.duration);
+      setDurationSeconds((currentDuration) =>
+        mediaDuration ?? audioSource?.durationSeconds ?? currentDuration,
+      );
+    };
     const handleError = () => {
       if (audio.currentSrc) {
         setErrorMessage("直连音频播放失败，请重新载入");
@@ -197,15 +254,21 @@ export function useBilibiliDirectAudioPlayer({
     audio.addEventListener("play", handlePlay);
     audio.addEventListener("pause", handlePause);
     audio.addEventListener("ended", handleEnded);
+    audio.addEventListener("durationchange", updateDuration);
     audio.addEventListener("error", handleError);
+    audio.addEventListener("loadedmetadata", updateDuration);
+    audio.addEventListener("timeupdate", updateCurrentTime);
 
     return () => {
       audio.removeEventListener("play", handlePlay);
       audio.removeEventListener("pause", handlePause);
       audio.removeEventListener("ended", handleEnded);
+      audio.removeEventListener("durationchange", updateDuration);
       audio.removeEventListener("error", handleError);
+      audio.removeEventListener("loadedmetadata", updateDuration);
+      audio.removeEventListener("timeupdate", updateCurrentTime);
     };
-  }, []);
+  }, [audioSource]);
 
   useEffect(() => {
     volumeRef.current = volume;
@@ -217,10 +280,13 @@ export function useBilibiliDirectAudioPlayer({
   return {
     audioRef,
     audioSource,
+    currentTimeSeconds,
+    durationSeconds,
     errorMessage,
     isLoading,
     isPlaying,
     load,
+    seekTo,
     setVolume: applyVolume,
     stop,
     toggle,

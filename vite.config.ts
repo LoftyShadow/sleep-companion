@@ -64,9 +64,11 @@ interface BilibiliDirectAudioSourcePayload {
   backupUrls: string[];
   bandwidth?: number;
   bvid: string;
+  chapters: BilibiliDirectAudioChapterPayload[];
   cid: string;
   codecs?: string;
   coverUrl?: string;
+  durationSeconds?: number;
   expiresAt?: number;
   mimeType?: string;
   title: string;
@@ -75,8 +77,28 @@ interface BilibiliDirectAudioSourcePayload {
   videoCodecs?: string;
   videoHeight?: number;
   videoMimeType?: string;
+  videoTracks?: BilibiliDirectVideoTrackPayload[];
   videoUrl?: string;
   videoWidth?: number;
+}
+
+interface BilibiliDirectAudioChapterPayload {
+  content: string;
+  fromSeconds: number;
+  imageUrl?: string;
+  toSeconds?: number;
+}
+
+interface BilibiliDirectVideoTrackPayload {
+  backupUrls: string[];
+  bandwidth?: number;
+  codecs?: string;
+  height?: number;
+  id: string;
+  label: string;
+  mimeType?: string;
+  url: string;
+  width?: number;
 }
 
 interface BilibiliVideoIdentityPayload {
@@ -84,6 +106,7 @@ interface BilibiliVideoIdentityPayload {
   bvid: string;
   cid: string;
   coverUrl?: string;
+  durationSeconds?: number;
   title: string;
 }
 
@@ -104,6 +127,8 @@ interface BilibiliDashVideoTrackPayload {
   videoUrl: string;
   width?: number;
 }
+
+const BILIBILI_PREVIEW_MAX_VIDEO_HEIGHT = 1080;
 
 interface BilibiliAuthAccountPayload {
   avatarUrl?: string;
@@ -946,8 +971,48 @@ function parseBilibiliVideoIdentity(
     bvid,
     cid,
     coverUrl: normalizeImageUrl(data?.pic),
+    durationSeconds: parseDurationSeconds(data?.duration),
     title,
   };
+}
+
+function parseBilibiliDirectAudioChapters(
+  responseValue: unknown,
+): BilibiliDirectAudioChapterPayload[] {
+  const response = ensureBilibiliSuccess(responseValue);
+  const data = asRecord(response.data);
+  const viewPoints = Array.isArray(data?.view_points)
+    ? data.view_points
+    : [];
+
+  return viewPoints
+    .map(asRecord)
+    .filter((viewPoint): viewPoint is Record<string, unknown> =>
+      Boolean(viewPoint),
+    )
+    .map((viewPoint): BilibiliDirectAudioChapterPayload | null => {
+      const content = readString(viewPoint.content);
+      const fromSeconds = parseDurationSeconds(viewPoint.from);
+      if (!content || fromSeconds === undefined) {
+        return null;
+      }
+
+      const toSeconds = parseDurationSeconds(viewPoint.to);
+
+      return {
+        content,
+        fromSeconds,
+        imageUrl: normalizeImageUrl(
+          viewPoint.imgUrl ?? viewPoint.img_url ?? viewPoint.imageUrl,
+        ),
+        toSeconds,
+      };
+    })
+    .filter(
+      (chapter): chapter is BilibiliDirectAudioChapterPayload =>
+        chapter !== null,
+    )
+    .sort((left, right) => left.fromSeconds - right.fromSeconds);
 }
 
 function readDashMediaUrl(track: Record<string, unknown>): string | undefined {
@@ -1010,21 +1075,95 @@ function parseBestDashAudioTrack(
   return bestTrack;
 }
 
-function videoTrackScore(track: BilibiliDashVideoTrackPayload): number {
-  const codecPriority = track.codecs?.startsWith("avc1") ? 1_000_000_000 : 0;
-
-  return codecPriority + (track.bandwidth ?? 0);
+function isBilibiliDashAvcVideoTrack(
+  track: BilibiliDashVideoTrackPayload,
+): boolean {
+  return track.codecs?.trim().toLowerCase().startsWith("avc1") ?? false;
 }
 
-function parseBestDashVideoTrack(
+function isBilibiliDashMp4VideoTrack(
+  track: BilibiliDashVideoTrackPayload,
+): boolean {
+  return track.mimeType?.trim().toLowerCase() === "video/mp4";
+}
+
+function bilibiliDashVideoCompatibilityRank(
+  track: BilibiliDashVideoTrackPayload,
+): number {
+  const isAvc = isBilibiliDashAvcVideoTrack(track);
+  const isMp4 = isBilibiliDashMp4VideoTrack(track);
+  if (isAvc && isMp4) {
+    return 0;
+  }
+
+  if (isAvc) {
+    return 1;
+  }
+
+  if (isMp4) {
+    return 2;
+  }
+
+  return 3;
+}
+
+function bilibiliDashVideoHeightBucket(
+  track: BilibiliDashVideoTrackPayload,
+): number {
+  if (!track.height) {
+    return 2;
+  }
+
+  return track.height <= BILIBILI_PREVIEW_MAX_VIDEO_HEIGHT ? 0 : 1;
+}
+
+function bilibiliDashVideoHeightScore(
+  track: BilibiliDashVideoTrackPayload,
+): number {
+  if (!track.height) {
+    return 0;
+  }
+
+  return track.height <= BILIBILI_PREVIEW_MAX_VIDEO_HEIGHT
+    ? track.height
+    : -track.height;
+}
+
+function compareBilibiliDashVideoTrack(
+  left: BilibiliDashVideoTrackPayload,
+  right: BilibiliDashVideoTrackPayload,
+): number {
+  const compatibilityDelta =
+    bilibiliDashVideoCompatibilityRank(left) -
+    bilibiliDashVideoCompatibilityRank(right);
+  if (compatibilityDelta !== 0) {
+    return compatibilityDelta;
+  }
+
+  const heightBucketDelta =
+    bilibiliDashVideoHeightBucket(left) - bilibiliDashVideoHeightBucket(right);
+  if (heightBucketDelta !== 0) {
+    return heightBucketDelta;
+  }
+
+  const heightScoreDelta =
+    bilibiliDashVideoHeightScore(right) - bilibiliDashVideoHeightScore(left);
+  if (heightScoreDelta !== 0) {
+    return heightScoreDelta;
+  }
+
+  return (right.bandwidth ?? 0) - (left.bandwidth ?? 0);
+}
+
+function parseDashVideoTracks(
   responseValue: unknown,
-): BilibiliDashVideoTrackPayload | undefined {
+): BilibiliDashVideoTrackPayload[] {
   const response = ensureBilibiliSuccess(responseValue);
   const data = asRecord(response.data);
   const dash = asRecord(data?.dash);
   const videoValues = Array.isArray(dash?.video) ? dash.video : null;
   if (!videoValues) {
-    return undefined;
+    return [];
   }
 
   return videoValues
@@ -1050,7 +1189,62 @@ function parseBestDashVideoTrack(
     .filter(
       (track): track is BilibiliDashVideoTrackPayload => track !== null,
     )
-    .sort((left, right) => videoTrackScore(right) - videoTrackScore(left))[0];
+    .sort(compareBilibiliDashVideoTrack);
+}
+
+function formatBilibiliVideoTrackCodec(
+  track: BilibiliDashVideoTrackPayload,
+): string | undefined {
+  const normalizedCodecs = track.codecs?.trim().toLowerCase();
+  if (!normalizedCodecs) {
+    return undefined;
+  }
+
+  if (normalizedCodecs.startsWith("avc1")) {
+    return "AVC";
+  }
+
+  if (normalizedCodecs.startsWith("hvc1") || normalizedCodecs.startsWith("hev1")) {
+    return "HEVC";
+  }
+
+  if (normalizedCodecs.startsWith("av01")) {
+    return "AV1";
+  }
+
+  return track.codecs;
+}
+
+function formatBilibiliVideoTrackLabel(
+  track: BilibiliDashVideoTrackPayload,
+): string {
+  const labelParts = [
+    track.height ? `${track.height}p` : "未知画质",
+    formatBilibiliVideoTrackCodec(track),
+    track.bandwidth ? `${Math.round(track.bandwidth / 1000)} kbps` : undefined,
+  ].filter((labelPart): labelPart is string => Boolean(labelPart));
+
+  return labelParts.join(" · ");
+}
+
+function createBilibiliDirectVideoTrackPayload(
+  track: BilibiliDashVideoTrackPayload,
+  index: number,
+  bvid: string,
+): BilibiliDirectVideoTrackPayload {
+  return {
+    backupUrls: track.backupUrls.map((backupUrl) =>
+      proxiedBilibiliMediaUrl(backupUrl, bvid),
+    ),
+    bandwidth: track.bandwidth,
+    codecs: track.codecs,
+    height: track.height,
+    id: `track-${index + 1}`,
+    label: formatBilibiliVideoTrackLabel(track),
+    mimeType: track.mimeType,
+    url: proxiedBilibiliMediaUrl(track.videoUrl, bvid),
+    width: track.width,
+  };
 }
 
 function directAudioPlayurl(
@@ -1072,6 +1266,23 @@ function directAudioPlayurl(
   );
 
   return `https://api.bilibili.com/x/player/wbi/playurl?${query}`;
+}
+
+function directAudioPlayerInfoUrl(
+  identity: BilibiliVideoIdentityPayload,
+  imgKey: string,
+  subKey: string,
+): string {
+  const query = buildSignedWbiQuery(
+    {
+      bvid: identity.bvid,
+      cid: identity.cid,
+    },
+    imgKey,
+    subKey,
+  );
+
+  return `https://api.bilibili.com/x/player/wbi/v2?${query}`;
 }
 
 function proxiedBilibiliMediaUrl(mediaUrl: string, bvid: string): string {
@@ -1114,8 +1325,22 @@ async function resolveBilibiliDirectAudioForDevApi(
       Origin: "https://www.bilibili.com",
     },
   );
+  const chapters = await fetchBilibiliJson(
+    directAudioPlayerInfoUrl(identity, imgKey, subKey),
+    cookieStore,
+    `https://www.bilibili.com/video/${identity.bvid}`,
+    {
+      Origin: "https://www.bilibili.com",
+    },
+  )
+    .then(parseBilibiliDirectAudioChapters)
+    .catch((): BilibiliDirectAudioChapterPayload[] => []);
   const audioTrack = parseBestDashAudioTrack(playurlResponse);
-  const videoTrack = parseBestDashVideoTrack(playurlResponse);
+  const videoTracks = parseDashVideoTracks(playurlResponse);
+  const directVideoTracks = videoTracks.map((track, index) =>
+    createBilibiliDirectVideoTrackPayload(track, index, identity.bvid),
+  );
+  const videoTrack = directVideoTracks[0];
 
   return {
     aid: identity.aid,
@@ -1125,23 +1350,21 @@ async function resolveBilibiliDirectAudioForDevApi(
     ),
     bandwidth: audioTrack.bandwidth,
     bvid: identity.bvid,
+    chapters,
     cid: identity.cid,
     codecs: audioTrack.codecs,
     coverUrl: identity.coverUrl,
+    durationSeconds: identity.durationSeconds,
     expiresAt: undefined,
     mimeType: audioTrack.mimeType,
     title: identity.title,
-    videoBackupUrls:
-      videoTrack?.backupUrls.map((backupUrl) =>
-        proxiedBilibiliMediaUrl(backupUrl, identity.bvid),
-      ) ?? [],
+    videoBackupUrls: videoTrack?.backupUrls ?? [],
     videoBandwidth: videoTrack?.bandwidth,
     videoCodecs: videoTrack?.codecs,
     videoHeight: videoTrack?.height,
     videoMimeType: videoTrack?.mimeType,
-    videoUrl: videoTrack
-      ? proxiedBilibiliMediaUrl(videoTrack.videoUrl, identity.bvid)
-      : undefined,
+    videoTracks: directVideoTracks,
+    videoUrl: videoTrack?.url,
     videoWidth: videoTrack?.width,
   };
 }

@@ -34,6 +34,7 @@ export function createFavoriteVideoInputFromDirectSource(
     aid: source.aid,
     bvid: source.bvid,
     coverUrl: source.coverUrl,
+    durationSeconds: source.durationSeconds,
     source: "direct",
     title: source.title,
   };

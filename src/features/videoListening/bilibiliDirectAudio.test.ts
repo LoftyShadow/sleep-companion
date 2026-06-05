@@ -10,9 +10,23 @@ const TEST_DIRECT_AUDIO_SOURCE = {
   backupUrls: [],
   bandwidth: 128000,
   bvid: "BV1xx411c7mD",
+  chapters: [
+    {
+      content: "第二段",
+      fromSeconds: 120,
+      imageUrl: "https://i0.hdslb.com/chapter-2.jpg",
+      toSeconds: 180,
+    },
+    {
+      content: "第一段",
+      fromSeconds: 0,
+      toSeconds: 120,
+    },
+  ],
   cid: "110002",
   codecs: "mp4a.40.2",
   coverUrl: "https://i0.hdslb.com/video.jpg",
+  durationSeconds: 180,
   mimeType: "audio/mp4",
   title: "测试视频",
   videoBackupUrls: [],
@@ -20,6 +34,19 @@ const TEST_DIRECT_AUDIO_SOURCE = {
   videoCodecs: "avc1.64001F",
   videoHeight: 720,
   videoMimeType: "video/mp4",
+  videoTracks: [
+    {
+      backupUrls: [],
+      bandwidth: 800000,
+      codecs: "avc1.64001F",
+      height: 720,
+      id: "track-1",
+      label: "720p · AVC · 800 kbps",
+      mimeType: "video/mp4",
+      url: "/api/bilibili/media-proxy?url=https%3A%2F%2Fexample.com%2Fv.m4s",
+      width: 1280,
+    },
+  ],
   videoUrl: "/api/bilibili/media-proxy?url=https%3A%2F%2Fexample.com%2Fv.m4s",
   videoWidth: 1280,
 };
@@ -35,7 +62,23 @@ describe("bilibiliDirectAudio", () => {
 
     await expect(
       loadDirectAudio({ kind: "bvid", value: "BV1xx411c7mD" }),
-    ).resolves.toEqual(TEST_DIRECT_AUDIO_SOURCE);
+    ).resolves.toEqual({
+      ...TEST_DIRECT_AUDIO_SOURCE,
+      chapters: [
+        {
+          content: "第一段",
+          fromSeconds: 0,
+          imageUrl: undefined,
+          toSeconds: 120,
+        },
+        {
+          content: "第二段",
+          fromSeconds: 120,
+          imageUrl: "https://i0.hdslb.com/chapter-2.jpg",
+          toSeconds: 180,
+        },
+      ],
+    });
     expect(invoke).toHaveBeenCalledWith("resolve_bilibili_direct_audio", {
       reference: {
         kind: "bvid",
@@ -67,7 +110,23 @@ describe("bilibiliDirectAudio", () => {
 
     await expect(
       loadDirectAudio({ kind: "aid", value: "170001" }),
-    ).resolves.toEqual(TEST_DIRECT_AUDIO_SOURCE);
+    ).resolves.toEqual({
+      ...TEST_DIRECT_AUDIO_SOURCE,
+      chapters: [
+        {
+          content: "第一段",
+          fromSeconds: 0,
+          imageUrl: undefined,
+          toSeconds: 120,
+        },
+        {
+          content: "第二段",
+          fromSeconds: 120,
+          imageUrl: "https://i0.hdslb.com/chapter-2.jpg",
+          toSeconds: 180,
+        },
+      ],
+    });
     expect(fetch).toHaveBeenCalledWith(
       "/api/bilibili/direct-audio?kind=aid&value=170001",
       {

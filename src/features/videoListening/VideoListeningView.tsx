@@ -169,10 +169,13 @@ export function VideoListeningView({
   const {
     audioRef,
     audioSource,
+    currentTimeSeconds: directAudioCurrentTimeSeconds,
+    durationSeconds: directAudioDurationSeconds,
     errorMessage: directAudioErrorMessage,
     isLoading: isDirectAudioLoading,
     isPlaying: isDirectAudioPlaying,
     load: loadDirectAudio,
+    seekTo: seekDirectAudio,
     setVolume: setDirectAudioVolume,
     stop: stopDirectAudio,
     toggle: toggleDirectAudio,
@@ -282,7 +285,8 @@ export function VideoListeningView({
     setCurrentFavoriteVideo({
       ...directFavoriteInput,
       coverUrl: directFavoriteInput.coverUrl ?? favoriteHint?.coverUrl,
-      durationSeconds: favoriteHint?.durationSeconds,
+      durationSeconds:
+        directFavoriteInput.durationSeconds ?? favoriteHint?.durationSeconds,
       playCount: favoriteHint?.playCount,
       publishedAt: favoriteHint?.publishedAt,
       source: favoriteHint?.source ?? directFavoriteInput.source,
@@ -560,8 +564,11 @@ export function VideoListeningView({
         <BilibiliVideoPlaybackPanel
           audioRef={audioRef}
           audioSource={audioSource}
+          currentTimeSeconds={directAudioCurrentTimeSeconds}
+          durationSeconds={directAudioDurationSeconds}
           isAudioPlaying={isDirectAudioPlaying}
           isLoading={isDirectAudioLoading}
+          onSeek={seekDirectAudio}
         />
 
         <BilibiliFavoriteVideoPanel

@@ -17,9 +17,22 @@ const TEST_BILIBILI_DIRECT_AUDIO_SOURCE = {
   backupUrls: [],
   bandwidth: 128000,
   bvid: "BV1xx411c7mD",
+  chapters: [
+    {
+      content: "开场",
+      fromSeconds: 0,
+      toSeconds: 60,
+    },
+    {
+      content: "雨声段落",
+      fromSeconds: 60,
+      toSeconds: 120,
+    },
+  ],
   cid: "110002",
   codecs: "mp4a.40.2",
   coverUrl: "https://i0.hdslb.com/video-cover.jpg",
+  durationSeconds: 120,
   mimeType: "audio/mp4",
   title: "视频测试标题",
   videoBackupUrls: [],
@@ -27,6 +40,19 @@ const TEST_BILIBILI_DIRECT_AUDIO_SOURCE = {
   videoCodecs: "avc1.64001F",
   videoHeight: 720,
   videoMimeType: "video/mp4",
+  videoTracks: [
+    {
+      backupUrls: [],
+      bandwidth: 800000,
+      codecs: "avc1.64001F",
+      height: 720,
+      id: "track-1",
+      label: "720p · AVC · 800 kbps",
+      mimeType: "video/mp4",
+      url: "/api/bilibili/media-proxy?url=https%3A%2F%2Fexample.com%2Fv.m4s",
+      width: 1280,
+    },
+  ],
   videoUrl: "/api/bilibili/media-proxy?url=https%3A%2F%2Fexample.com%2Fv.m4s",
   videoWidth: 1280,
 };
@@ -432,6 +458,8 @@ describe("AppWorkspace integration", () => {
       "src",
       TEST_BILIBILI_DIRECT_AUDIO_SOURCE.audioUrl,
     );
+    expect(screen.getByText("02:00")).toBeInTheDocument();
+    expect(screen.getByLabelText("视频章节")).toHaveValue("0");
     expect(screen.queryByTitle(/B 站视频播放器/u)).not.toBeInTheDocument();
   });
 
