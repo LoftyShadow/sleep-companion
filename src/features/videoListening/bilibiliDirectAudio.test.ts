@@ -99,6 +99,81 @@ describe("bilibiliDirectAudio", () => {
     ).rejects.toThrow("B 站直连音频响应格式不正确");
   });
 
+  it("accepts null optional fields returned by Tauri IPC", async () => {
+    const invoke = vi.fn().mockResolvedValue({
+      ...TEST_DIRECT_AUDIO_SOURCE,
+      bandwidth: null,
+      codecs: null,
+      coverUrl: null,
+      durationSeconds: null,
+      expiresAt: null,
+      mimeType: null,
+      videoBandwidth: null,
+      videoCodecs: null,
+      videoHeight: null,
+      videoMimeType: null,
+      videoUrl: null,
+      videoWidth: null,
+      chapters: [
+        {
+          content: "第一段",
+          fromSeconds: 0,
+          imageUrl: null,
+          toSeconds: null,
+        },
+      ],
+      videoTracks: [
+        {
+          backupUrls: [],
+          bandwidth: null,
+          codecs: null,
+          height: null,
+          id: "track-1",
+          label: "默认画质",
+          mimeType: null,
+          url: "/api/bilibili/media-proxy?url=https%3A%2F%2Fexample.com%2Fv.m4s",
+          width: null,
+        },
+      ],
+    });
+    const loadDirectAudio = createBilibiliDirectAudioLoader(invoke);
+
+    await expect(
+      loadDirectAudio({ kind: "bvid", value: "BV1xx411c7mD" }),
+    ).resolves.toMatchObject({
+      bandwidth: undefined,
+      chapters: [
+        {
+          content: "第一段",
+          fromSeconds: 0,
+          imageUrl: undefined,
+          toSeconds: undefined,
+        },
+      ],
+      codecs: undefined,
+      coverUrl: undefined,
+      durationSeconds: undefined,
+      expiresAt: undefined,
+      mimeType: undefined,
+      videoBandwidth: undefined,
+      videoCodecs: undefined,
+      videoHeight: undefined,
+      videoMimeType: undefined,
+      videoUrl: undefined,
+      videoWidth: undefined,
+      videoTracks: [
+        {
+          bandwidth: undefined,
+          codecs: undefined,
+          height: undefined,
+          id: "track-1",
+          mimeType: undefined,
+          width: undefined,
+        },
+      ],
+    });
+  });
+
   it("resolves direct audio through the Web API", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(TEST_DIRECT_AUDIO_SOURCE), {

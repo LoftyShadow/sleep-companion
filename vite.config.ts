@@ -22,6 +22,27 @@ const DEFAULT_CREATOR_VIDEO_LIMIT = 12;
 const MAX_CREATOR_VIDEO_LIMIT = 12;
 const MAX_CREATOR_DYNAMIC_PAGE_COUNT = 10;
 const BILIBILI_WEB_SESSION_FILE_NAME = "bilibili-web-session.json";
+const VENDOR_CHUNK_RULES: ReadonlyArray<{
+  matchers: readonly string[];
+  name: string;
+}> = [
+  {
+    matchers: ["/react/", "/react-dom/", "/scheduler/"],
+    name: "vendor-react",
+  },
+  {
+    matchers: ["/@zip.js/zip.js/"],
+    name: "vendor-zip",
+  },
+  {
+    matchers: [
+      "/@tauri-apps/api/",
+      "/@tauri-apps/plugin-opener/",
+      "/@tauri-apps/plugin-os/",
+    ],
+    name: "vendor-tauri",
+  },
+] as const;
 const WBI_MIXIN_KEY_ENC_TAB = [
   46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35, 27, 43, 5, 49,
   33, 9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13, 37, 48, 7, 16, 24, 55, 40,
@@ -158,6 +179,16 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object"
     ? (value as Record<string, unknown>)
     : null;
+}
+
+function manualAppChunks(id: string): string | undefined {
+  if (!id.includes("/node_modules/")) {
+    return undefined;
+  }
+
+  return VENDOR_CHUNK_RULES.find((rule) =>
+    rule.matchers.some((matcher) => id.includes(matcher)),
+  )?.name;
 }
 
 function isNodeErrorCode(error: unknown, code: string): boolean {
@@ -2108,6 +2139,13 @@ function bilibiliCreatorDevApiPlugin(): Plugin {
 // https://vite.dev/config/
 export default defineConfig(() => ({
   plugins: [bilibiliCreatorDevApiPlugin(), react(), tailwindcss()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: manualAppChunks,
+      },
+    },
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

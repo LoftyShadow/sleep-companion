@@ -16,6 +16,60 @@ interface BilibiliVideoPlaybackPanelProps {
   onSeek: (seconds: number) => void;
 }
 
+interface SelectedVideoTrackState {
+  sourceKey: string;
+  trackId: string;
+}
+
+interface SelectedVideoSourceState extends SelectedVideoTrackState {
+  index: number;
+}
+
+interface VideoPanelErrorState {
+  message: string;
+  sourceKey: string;
+}
+
+interface VideoPreviewFallbackContext {
+  nextVideoTrackId: string;
+  selectedVideoSourceIndex: number;
+  selectedVideoTrackId: string;
+  sourceCount: number;
+  sourceKey: string;
+}
+
+interface VideoPreviewFallbackHandlers {
+  setExpandedSourceKey: (sourceKey: string | null) => void;
+  setSelectedVideoSource: (source: SelectedVideoSourceState) => void;
+  setSelectedVideoTrack: (track: SelectedVideoTrackState) => void;
+  setVideoError: (error: VideoPanelErrorState | null) => void;
+}
+
+type VideoPreviewFallbackAction =
+  | {
+      index: number;
+      sourceKey: string;
+      trackId: string;
+      type: "source";
+    }
+  | {
+      sourceKey: string;
+      trackId: string;
+      type: "track";
+    }
+  | {
+      sourceKey: string;
+      type: "unavailable";
+    }
+  | {
+      type: "none";
+    };
+
+const VIDEO_PREVIEW_FRAME_TIMEOUT_MS = 5000;
+const HAVE_CURRENT_DATA_READY_STATE = 2;
+const VIDEO_PREVIEW_UNAVAILABLE_MESSAGE =
+  "视频画面暂不可用，音频播放不受影响";
+
 function formatBandwidth(bandwidth?: number): string {
   return bandwidth ? `${Math.round(bandwidth / 1000)} kbps` : "未知";
 }
@@ -85,6 +139,7 @@ function getCollapsedVideoText(
   audioSource: BilibiliDirectAudioSource | null,
   isLoading: boolean,
   hasVideoSource: boolean,
+  isVideoUnavailable: boolean,
 ): string {
   if (isLoading) {
     return "正在解析 B 站直连媒体";
@@ -94,6 +149,10 @@ function getCollapsedVideoText(
     return "载入 BV 或 av 后可展开视频画面";
   }
 
+  if (isVideoUnavailable) {
+    return "已切回音频播放";
+  }
+
   return hasVideoSource ? "视频画面已隐藏" : "当前视频画面不可用";
 }
 
@@ -101,6 +160,7 @@ function getVideoButtonLabel(
   audioSource: BilibiliDirectAudioSource | null,
   hasVideoSource: boolean,
   isExpanded: boolean,
+  isVideoUnavailable: boolean,
 ): string {
   if (!audioSource) {
     return "待载入";
@@ -108,6 +168,10 @@ function getVideoButtonLabel(
 
   if (!hasVideoSource) {
     return "画面不可用";
+  }
+
+  if (isVideoUnavailable) {
+    return "重试视频";
   }
 
   return isExpanded ? "隐藏视频" : "展开视频";
@@ -118,6 +182,7 @@ function getVideoPanelStatus(
   hasVideoSource: boolean,
   isExpanded: boolean,
   isLoading: boolean,
+  isVideoUnavailable: boolean,
 ): string {
   if (isLoading) {
     return "解析中";
@@ -127,7 +192,7 @@ function getVideoPanelStatus(
     return "待载入";
   }
 
-  if (!hasVideoSource) {
+  if (!hasVideoSource || isVideoUnavailable) {
     return "仅音频";
   }
 
@@ -194,6 +259,116 @@ function isInterruptedPlaybackError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
+function getDecodedVideoFrameCount(video: HTMLVideoElement): number | null {
+  const quality = video.getVideoPlaybackQuality?.();
+  if (typeof quality?.totalVideoFrames === "number") {
+    return quality.totalVideoFrames;
+  }
+
+  const webkitDecodedFrameCount = (video as {
+    webkitDecodedFrameCount?: unknown;
+  }).webkitDecodedFrameCount;
+
+  return typeof webkitDecodedFrameCount === "number" &&
+    Number.isFinite(webkitDecodedFrameCount)
+    ? webkitDecodedFrameCount
+    : null;
+}
+
+function hasRenderedVideoFrame(video: HTMLVideoElement): boolean {
+  const decodedFrameCount = getDecodedVideoFrameCount(video);
+  if (decodedFrameCount !== null) {
+    return decodedFrameCount > 0;
+  }
+
+  return (
+    video.readyState >= HAVE_CURRENT_DATA_READY_STATE &&
+    video.videoWidth > 0 &&
+    video.videoHeight > 0
+  );
+}
+
+function getVideoPreviewFallbackAction({
+  nextVideoTrackId,
+  selectedVideoSourceIndex,
+  selectedVideoTrackId,
+  sourceCount,
+  sourceKey,
+}: VideoPreviewFallbackContext): VideoPreviewFallbackAction {
+  if (!sourceKey) {
+    return { type: "none" };
+  }
+
+  if (selectedVideoSourceIndex < sourceCount - 1) {
+    return {
+      index: selectedVideoSourceIndex + 1,
+      sourceKey,
+      trackId: selectedVideoTrackId,
+      type: "source",
+    };
+  }
+
+  if (nextVideoTrackId) {
+    return {
+      sourceKey,
+      trackId: nextVideoTrackId,
+      type: "track",
+    };
+  }
+
+  return {
+    sourceKey,
+    type: "unavailable",
+  };
+}
+
+function applyVideoPreviewFallbackAction(
+  action: VideoPreviewFallbackAction,
+  handlers: VideoPreviewFallbackHandlers,
+) {
+  switch (action.type) {
+    case "source":
+      handlers.setVideoError(null);
+      handlers.setSelectedVideoSource({
+        index: action.index,
+        sourceKey: action.sourceKey,
+        trackId: action.trackId,
+      });
+      break;
+    case "track":
+      handlers.setVideoError(null);
+      handlers.setSelectedVideoTrack({
+        sourceKey: action.sourceKey,
+        trackId: action.trackId,
+      });
+      handlers.setSelectedVideoSource({
+        index: 0,
+        sourceKey: action.sourceKey,
+        trackId: action.trackId,
+      });
+      break;
+    case "unavailable":
+      handlers.setVideoError({
+        message: VIDEO_PREVIEW_UNAVAILABLE_MESSAGE,
+        sourceKey: action.sourceKey,
+      });
+      handlers.setExpandedSourceKey(null);
+      break;
+    case "none":
+      break;
+  }
+}
+
+function handleVideoPreviewFailure(
+  context: VideoPreviewFallbackContext,
+  handlers: VideoPreviewFallbackHandlers,
+) {
+  applyVideoPreviewFallbackAction(
+    getVideoPreviewFallbackAction(context),
+    handlers,
+  );
+}
+
 export function BilibiliVideoPlaybackPanel({
   audioRef,
   audioSource,
@@ -230,10 +405,7 @@ export function BilibiliVideoPlaybackPanel({
     sourceKey: "",
     trackId: "",
   });
-  const [videoError, setVideoError] = useState<{
-    message: string;
-    sourceKey: string;
-  } | null>(
+  const [videoError, setVideoError] = useState<VideoPanelErrorState | null>(
     null,
   );
   const selectedVideoTrackId =
@@ -241,8 +413,15 @@ export function BilibiliVideoPlaybackPanel({
     videoTracks.some((track) => track.id === selectedVideoTrack.trackId)
       ? selectedVideoTrack.trackId
       : (videoTracks[0]?.id ?? "");
+  const currentVideoTrackIndex = videoTracks.findIndex(
+    (track) => track.id === selectedVideoTrackId,
+  );
   const currentVideoTrack =
-    videoTracks.find((track) => track.id === selectedVideoTrackId) ?? null;
+    currentVideoTrackIndex >= 0 ? videoTracks[currentVideoTrackIndex] : null;
+  const nextVideoTrackId =
+    currentVideoTrackIndex >= 0
+      ? (videoTracks[currentVideoTrackIndex + 1]?.id ?? "")
+      : "";
   const videoSourceUrls = getVideoTrackSourceUrls(currentVideoTrack);
   const selectedVideoSourceIndex =
     selectedVideoSource.sourceKey === sourceKey &&
@@ -265,17 +444,22 @@ export function BilibiliVideoPlaybackPanel({
     safeCurrentTimeSeconds,
   );
   const canExpandVideo = videoTracks.length > 0;
+  const isVideoUnavailable = videoError?.sourceKey === sourceKey;
   const isExpanded = Boolean(
-    canExpandVideo && sourceKey && expandedSourceKey === sourceKey,
+    canExpandVideo &&
+      sourceKey &&
+      expandedSourceKey === sourceKey &&
+      !isVideoUnavailable,
   );
   const videoErrorMessage =
-    videoError?.sourceKey === sourceKey ? videoError.message : null;
+    isVideoUnavailable ? videoError.message : null;
   const panelClassName = [
     "video-source-panel",
     "glass-panel",
     audioSource ? "has-source" : "is-idle",
     isExpanded ? "is-expanded" : "is-collapsed",
-  ].join(" ");
+    isVideoUnavailable ? "is-video-unavailable" : "",
+  ].filter(Boolean).join(" ");
 
   useEffect(() => {
     latestPlaybackRef.current = {
@@ -312,6 +496,36 @@ export function BilibiliVideoPlaybackPanel({
       return;
     }
 
+    const previewTimeoutId = window.setTimeout(() => {
+      const latestPlayback = latestPlaybackRef.current;
+      const latestVideo = videoRef.current;
+      if (
+        !latestPlayback.isExpanded ||
+        latestPlayback.sourceKey !== sourceKey ||
+        latestPlayback.videoUrl !== selectedVideoUrl ||
+        !latestVideo ||
+        hasRenderedVideoFrame(latestVideo)
+      ) {
+        return;
+      }
+
+      handleVideoPreviewFailure(
+        {
+          nextVideoTrackId,
+          selectedVideoSourceIndex,
+          selectedVideoTrackId,
+          sourceCount: videoSourceUrls.length,
+          sourceKey,
+        },
+        {
+          setExpandedSourceKey,
+          setSelectedVideoSource,
+          setSelectedVideoTrack,
+          setVideoError,
+        },
+      );
+    }, VIDEO_PREVIEW_FRAME_TIMEOUT_MS);
+
     void video.play().catch((error: unknown) => {
       if (isInterruptedPlaybackError(error)) {
         return;
@@ -326,15 +540,51 @@ export function BilibiliVideoPlaybackPanel({
         return;
       }
 
-      setVideoError({
-        message: "视频画面暂不可用",
-        sourceKey,
-      });
+      handleVideoPreviewFailure(
+        {
+          nextVideoTrackId,
+          selectedVideoSourceIndex,
+          selectedVideoTrackId,
+          sourceCount: videoSourceUrls.length,
+          sourceKey,
+        },
+        {
+          setExpandedSourceKey,
+          setSelectedVideoSource,
+          setSelectedVideoTrack,
+          setVideoError,
+        },
+      );
     });
-  }, [audioRef, isAudioPlaying, isExpanded, selectedVideoUrl, sourceKey]);
+
+    return () => {
+      window.clearTimeout(previewTimeoutId);
+    };
+  }, [
+    audioRef,
+    isAudioPlaying,
+    isExpanded,
+    nextVideoTrackId,
+    selectedVideoSourceIndex,
+    selectedVideoTrackId,
+    selectedVideoUrl,
+    sourceKey,
+    videoSourceUrls.length,
+  ]);
 
   function handleToggleVideo() {
     if (!canExpandVideo || !sourceKey) {
+      return;
+    }
+
+    if (isVideoUnavailable) {
+      setSelectedVideoSource({
+        index: 0,
+        sourceKey,
+        trackId: selectedVideoTrackId,
+      });
+      setVideoError(null);
+      setExpandedSourceKey(sourceKey);
       return;
     }
 
@@ -402,24 +652,21 @@ export function BilibiliVideoPlaybackPanel({
   }
 
   function handleVideoError() {
-    if (!sourceKey) {
-      return;
-    }
-
-    if (selectedVideoSourceIndex < videoSourceUrls.length - 1) {
-      setVideoError(null);
-      setSelectedVideoSource({
-        index: selectedVideoSourceIndex + 1,
+    handleVideoPreviewFailure(
+      {
+        nextVideoTrackId,
+        selectedVideoSourceIndex,
+        selectedVideoTrackId,
+        sourceCount: videoSourceUrls.length,
         sourceKey,
-        trackId: selectedVideoTrackId,
-      });
-      return;
-    }
-
-    setVideoError({
-      message: "视频画面暂不可用",
-      sourceKey,
-    });
+      },
+      {
+        setExpandedSourceKey,
+        setSelectedVideoSource,
+        setSelectedVideoTrack,
+        setVideoError,
+      },
+    );
   }
 
   return (
@@ -433,6 +680,7 @@ export function BilibiliVideoPlaybackPanel({
               canExpandVideo,
               isExpanded,
               isLoading,
+              isVideoUnavailable,
             )}
           </p>
         </div>
@@ -461,7 +709,12 @@ export function BilibiliVideoPlaybackPanel({
             type="button"
             onClick={handleToggleVideo}
           >
-            {getVideoButtonLabel(audioSource, canExpandVideo, isExpanded)}
+            {getVideoButtonLabel(
+              audioSource,
+              canExpandVideo,
+              isExpanded,
+              isVideoUnavailable,
+            )}
           </button>
         </div>
       </div>
@@ -548,7 +801,12 @@ export function BilibiliVideoPlaybackPanel({
         ) : (
           <div className="video-player-collapsed-cover" role="status">
             <span>
-              {getCollapsedVideoText(audioSource, isLoading, canExpandVideo)}
+              {getCollapsedVideoText(
+                audioSource,
+                isLoading,
+                canExpandVideo,
+                isVideoUnavailable,
+              )}
             </span>
           </div>
         )}

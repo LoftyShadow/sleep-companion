@@ -65,6 +65,26 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function isNil(value: unknown): value is null | undefined {
+  return value === null || value === undefined;
+}
+
+function isOptionalString(value: unknown): boolean {
+  return isNil(value) || typeof value === "string";
+}
+
+function isOptionalNumber(value: unknown): boolean {
+  return isNil(value) || typeof value === "number";
+}
+
+function optionalString(value: string | null | undefined): string | undefined {
+  return typeof value === "string" ? value.trim() || undefined : undefined;
+}
+
+function optionalNumber(value: number | null | undefined): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
 function isDirectAudioSource(
   value: unknown,
 ): value is BilibiliDirectAudioSource {
@@ -80,36 +100,31 @@ function isDirectAudioSource(
     source.backupUrls.every((url) => typeof url === "string") &&
     typeof source.bvid === "string" &&
     source.bvid.trim().length > 0 &&
-    (source.chapters === undefined ||
+    (isNil(source.chapters) ||
       (Array.isArray(source.chapters) &&
         source.chapters.every(isDirectAudioChapter))) &&
     typeof source.cid === "string" &&
     source.cid.trim().length > 0 &&
     typeof source.title === "string" &&
     source.title.trim().length > 0 &&
-    (source.bandwidth === undefined || typeof source.bandwidth === "number") &&
-    (source.codecs === undefined || typeof source.codecs === "string") &&
-    (source.coverUrl === undefined || typeof source.coverUrl === "string") &&
-    (source.durationSeconds === undefined ||
-      typeof source.durationSeconds === "number") &&
-    (source.expiresAt === undefined || typeof source.expiresAt === "number") &&
-    (source.mimeType === undefined || typeof source.mimeType === "string") &&
-    (source.videoBackupUrls === undefined ||
+    isOptionalNumber(source.bandwidth) &&
+    isOptionalString(source.codecs) &&
+    isOptionalString(source.coverUrl) &&
+    isOptionalNumber(source.durationSeconds) &&
+    isOptionalNumber(source.expiresAt) &&
+    isOptionalString(source.mimeType) &&
+    (isNil(source.videoBackupUrls) ||
       (Array.isArray(source.videoBackupUrls) &&
         source.videoBackupUrls.every((url) => typeof url === "string"))) &&
-    (source.videoBandwidth === undefined ||
-      typeof source.videoBandwidth === "number") &&
-    (source.videoCodecs === undefined ||
-      typeof source.videoCodecs === "string") &&
-    (source.videoHeight === undefined ||
-      typeof source.videoHeight === "number") &&
-    (source.videoMimeType === undefined ||
-      typeof source.videoMimeType === "string") &&
-    (source.videoTracks === undefined ||
+    isOptionalNumber(source.videoBandwidth) &&
+    isOptionalString(source.videoCodecs) &&
+    isOptionalNumber(source.videoHeight) &&
+    isOptionalString(source.videoMimeType) &&
+    (isNil(source.videoTracks) ||
       (Array.isArray(source.videoTracks) &&
         source.videoTracks.every(isDirectVideoTrack))) &&
-    (source.videoUrl === undefined || typeof source.videoUrl === "string") &&
-    (source.videoWidth === undefined || typeof source.videoWidth === "number")
+    isOptionalString(source.videoUrl) &&
+    isOptionalNumber(source.videoWidth)
   );
 }
 
@@ -124,8 +139,8 @@ function isDirectAudioChapter(
     chapter.content.trim().length > 0 &&
     typeof chapter.fromSeconds === "number" &&
     Number.isFinite(chapter.fromSeconds) &&
-    (chapter.imageUrl === undefined || typeof chapter.imageUrl === "string") &&
-    (chapter.toSeconds === undefined ||
+    isOptionalString(chapter.imageUrl) &&
+    (isNil(chapter.toSeconds) ||
       (typeof chapter.toSeconds === "number" &&
         Number.isFinite(chapter.toSeconds)))
   );
@@ -138,17 +153,17 @@ function isDirectVideoTrack(value: unknown): value is BilibiliDirectVideoTrack {
     Boolean(track) &&
     Array.isArray(track?.backupUrls) &&
     track.backupUrls.every((url) => typeof url === "string") &&
-    (track.bandwidth === undefined || typeof track.bandwidth === "number") &&
-    (track.codecs === undefined || typeof track.codecs === "string") &&
-    (track.height === undefined || typeof track.height === "number") &&
+    isOptionalNumber(track.bandwidth) &&
+    isOptionalString(track.codecs) &&
+    isOptionalNumber(track.height) &&
     typeof track.id === "string" &&
     track.id.trim().length > 0 &&
     typeof track.label === "string" &&
     track.label.trim().length > 0 &&
-    (track.mimeType === undefined || typeof track.mimeType === "string") &&
+    isOptionalString(track.mimeType) &&
     typeof track.url === "string" &&
     track.url.trim().length > 0 &&
-    (track.width === undefined || typeof track.width === "number")
+    isOptionalNumber(track.width)
   );
 }
 
@@ -158,9 +173,9 @@ function normalizeDirectAudioChapter(
   return {
     content: value.content.trim(),
     fromSeconds: Math.max(0, Math.floor(value.fromSeconds)),
-    imageUrl: value.imageUrl?.trim(),
+    imageUrl: optionalString(value.imageUrl),
     toSeconds:
-      value.toSeconds === undefined
+      isNil(value.toSeconds)
         ? undefined
         : Math.max(0, Math.floor(value.toSeconds)),
   };
@@ -173,38 +188,40 @@ function normalizeDirectVideoTrack(
     backupUrls: value.backupUrls
       .map((url) => url.trim())
       .filter((url) => url.length > 0),
-    bandwidth: value.bandwidth,
-    codecs: value.codecs,
-    height: value.height,
+    bandwidth: optionalNumber(value.bandwidth),
+    codecs: optionalString(value.codecs),
+    height: optionalNumber(value.height),
     id: value.id.trim(),
     label: value.label.trim(),
-    mimeType: value.mimeType,
+    mimeType: optionalString(value.mimeType),
     url: value.url.trim(),
-    width: value.width,
+    width: optionalNumber(value.width),
   };
 }
 
 function fallbackDirectVideoTrack(
   value: BilibiliDirectAudioSource,
 ): BilibiliDirectVideoTrack[] {
-  const videoUrl = value.videoUrl?.trim();
+  const videoUrl = optionalString(value.videoUrl);
   if (!videoUrl) {
     return [];
   }
+
+  const videoHeight = optionalNumber(value.videoHeight);
 
   return [
     {
       backupUrls: (value.videoBackupUrls ?? [])
         .map((url) => url.trim())
         .filter((url) => url.length > 0),
-      bandwidth: value.videoBandwidth,
-      codecs: value.videoCodecs,
-      height: value.videoHeight,
+      bandwidth: optionalNumber(value.videoBandwidth),
+      codecs: optionalString(value.videoCodecs),
+      height: videoHeight,
       id: "default",
-      label: value.videoHeight ? `${value.videoHeight}p` : "默认画质",
-      mimeType: value.videoMimeType,
+      label: videoHeight ? `${videoHeight}p` : "默认画质",
+      mimeType: optionalString(value.videoMimeType),
       url: videoUrl,
-      width: value.videoWidth,
+      width: optionalNumber(value.videoWidth),
     },
   ];
 }
@@ -222,35 +239,35 @@ function normalizeDirectAudioSource(
     backupUrls: value.backupUrls
       .map((url) => url.trim())
       .filter((url) => url.length > 0),
-    bandwidth: value.bandwidth,
+    bandwidth: optionalNumber(value.bandwidth),
     bvid: value.bvid.trim(),
     chapters: (value.chapters ?? [])
       .map(normalizeDirectAudioChapter)
       .filter((chapter) => chapter.content.length > 0)
       .sort((left, right) => left.fromSeconds - right.fromSeconds),
     cid: value.cid.trim(),
-    codecs: value.codecs,
-    coverUrl: value.coverUrl,
+    codecs: optionalString(value.codecs),
+    coverUrl: optionalString(value.coverUrl),
     durationSeconds:
-      value.durationSeconds === undefined
+      isNil(value.durationSeconds)
         ? undefined
         : Math.max(0, Math.floor(value.durationSeconds)),
-    expiresAt: value.expiresAt,
-    mimeType: value.mimeType,
+    expiresAt: optionalNumber(value.expiresAt),
+    mimeType: optionalString(value.mimeType),
     title: value.title.trim(),
     videoBackupUrls: (value.videoBackupUrls ?? [])
       .map((url) => url.trim())
       .filter((url) => url.length > 0),
-    videoBandwidth: value.videoBandwidth,
-    videoCodecs: value.videoCodecs,
-    videoHeight: value.videoHeight,
-    videoMimeType: value.videoMimeType,
+    videoBandwidth: optionalNumber(value.videoBandwidth),
+    videoCodecs: optionalString(value.videoCodecs),
+    videoHeight: optionalNumber(value.videoHeight),
+    videoMimeType: optionalString(value.videoMimeType),
     videoTracks:
-      value.videoTracks === undefined
+      isNil(value.videoTracks)
         ? fallbackDirectVideoTrack(value)
         : value.videoTracks.map(normalizeDirectVideoTrack),
-    videoUrl: value.videoUrl?.trim(),
-    videoWidth: value.videoWidth,
+    videoUrl: optionalString(value.videoUrl),
+    videoWidth: optionalNumber(value.videoWidth),
   };
 }
 

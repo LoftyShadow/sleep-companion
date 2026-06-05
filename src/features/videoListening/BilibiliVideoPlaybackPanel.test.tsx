@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { BilibiliVideoPlaybackPanel } from "./BilibiliVideoPlaybackPanel";
@@ -50,6 +50,19 @@ const TEST_DIRECT_AUDIO_SOURCE: BilibiliDirectAudioSource = {
   videoWidth: 1280,
 };
 
+const BACKUP_VIDEO_AUDIO_SOURCE: BilibiliDirectAudioSource = {
+  ...TEST_DIRECT_AUDIO_SOURCE,
+  videoBackupUrls: ["/api/bilibili/media-proxy?url=https%3A%2F%2Fexample.com%2Fbackup.m4s"],
+  videoTracks: [
+    {
+      ...TEST_DIRECT_AUDIO_SOURCE.videoTracks[0],
+      backupUrls: ["/api/bilibili/media-proxy?url=https%3A%2F%2Fexample.com%2Fbackup.m4s"],
+      url: "/api/bilibili/media-proxy?url=https%3A%2F%2Fexample.com%2Fprimary.m4s",
+    },
+  ],
+  videoUrl: "/api/bilibili/media-proxy?url=https%3A%2F%2Fexample.com%2Fprimary.m4s",
+};
+
 function renderVideoPlaybackPanel(
   audioSource: BilibiliDirectAudioSource = TEST_DIRECT_AUDIO_SOURCE,
   options: {
@@ -78,6 +91,14 @@ function renderVideoPlaybackPanel(
 }
 
 describe("BilibiliVideoPlaybackPanel", () => {
+  async function renderExpandedBackupVideoPanel() {
+    const user = userEvent.setup();
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    renderVideoPlaybackPanel(BACKUP_VIDEO_AUDIO_SOURCE);
+
+    await user.click(screen.getByRole("button", { name: "展开视频" }));
+  }
+
   it("does not report interrupted video play attempts as unavailable", async () => {
     const user = userEvent.setup();
     vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(
@@ -104,22 +125,7 @@ describe("BilibiliVideoPlaybackPanel", () => {
   });
 
   it("switches to a backup video source when the current source errors", async () => {
-    const user = userEvent.setup();
-    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
-    renderVideoPlaybackPanel({
-      ...TEST_DIRECT_AUDIO_SOURCE,
-      videoBackupUrls: ["/api/bilibili/media-proxy?url=https%3A%2F%2Fexample.com%2Fbackup.m4s"],
-      videoTracks: [
-        {
-          ...TEST_DIRECT_AUDIO_SOURCE.videoTracks[0],
-          backupUrls: ["/api/bilibili/media-proxy?url=https%3A%2F%2Fexample.com%2Fbackup.m4s"],
-          url: "/api/bilibili/media-proxy?url=https%3A%2F%2Fexample.com%2Fprimary.m4s",
-        },
-      ],
-      videoUrl: "/api/bilibili/media-proxy?url=https%3A%2F%2Fexample.com%2Fprimary.m4s",
-    });
-
-    await user.click(screen.getByRole("button", { name: "展开视频" }));
+    await renderExpandedBackupVideoPanel();
 
     expect(screen.getByLabelText("直连视频播放器")).toHaveAttribute(
       "src",
@@ -135,6 +141,129 @@ describe("BilibiliVideoPlaybackPanel", () => {
       );
     });
     expect(screen.queryByText("视频画面暂不可用")).not.toBeInTheDocument();
+  });
+
+  it("collapses the video frame when every video source errors", async () => {
+    await renderExpandedBackupVideoPanel();
+
+    fireEvent.error(screen.getByLabelText("直连视频播放器"));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("直连视频播放器")).toHaveAttribute(
+        "src",
+        "/api/bilibili/media-proxy?url=https%3A%2F%2Fexample.com%2Fbackup.m4s",
+      );
+    });
+
+    fireEvent.error(screen.getByLabelText("直连视频播放器"));
+
+    await waitFor(() => {
+      expect(
+        screen.queryByLabelText("直连视频播放器"),
+      ).not.toBeInTheDocument();
+    });
+    expect(screen.getByText("已切回音频播放")).toBeInTheDocument();
+    expect(
+      screen.getByText("视频画面暂不可用，音频播放不受影响"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "重试视频" }),
+    ).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("tries the next quality and then collapses when video never renders a frame", () => {
+    vi.useFakeTimers();
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+
+    try {
+      renderVideoPlaybackPanel({
+        ...TEST_DIRECT_AUDIO_SOURCE,
+        videoTracks: [
+          TEST_DIRECT_AUDIO_SOURCE.videoTracks[0],
+          {
+            backupUrls: [],
+            bandwidth: 420000,
+            codecs: "avc1.64001F",
+            height: 480,
+            id: "track-2",
+            label: "480p · AVC · 420 kbps",
+            mimeType: "video/mp4",
+            url: "/api/bilibili/media-proxy?url=https%3A%2F%2Fexample.com%2F480p.m4s",
+            width: 854,
+          },
+        ],
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "展开视频" }));
+
+      expect(screen.getByLabelText("视频画质")).toHaveValue("track-1");
+      expect(screen.getByLabelText("直连视频播放器")).toHaveAttribute(
+        "src",
+        TEST_DIRECT_AUDIO_SOURCE.videoUrl,
+      );
+
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+
+      expect(screen.getByLabelText("视频画质")).toHaveValue("track-2");
+      expect(screen.getByLabelText("直连视频播放器")).toHaveAttribute(
+        "src",
+        "/api/bilibili/media-proxy?url=https%3A%2F%2Fexample.com%2F480p.m4s",
+      );
+
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+
+      expect(
+        screen.queryByLabelText("直连视频播放器"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText("已切回音频播放")).toBeInTheDocument();
+      expect(
+        screen.getByText("视频画面暂不可用，音频播放不受影响"),
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the video frame expanded after rendered video data arrives", () => {
+    vi.useFakeTimers();
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+
+    try {
+      renderVideoPlaybackPanel();
+
+      fireEvent.click(screen.getByRole("button", { name: "展开视频" }));
+      const video = screen.getByLabelText("直连视频播放器");
+
+      Object.defineProperty(video, "videoWidth", {
+        configurable: true,
+        value: 1280,
+      });
+      Object.defineProperty(video, "videoHeight", {
+        configurable: true,
+        value: 720,
+      });
+      Object.defineProperty(video, "readyState", {
+        configurable: true,
+        value: HTMLMediaElement.HAVE_CURRENT_DATA,
+      });
+      fireEvent.loadedData(video);
+
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+
+      expect(screen.getByLabelText("直连视频播放器")).toBeInTheDocument();
+      expect(screen.getByText("画面显示中")).toBeInTheDocument();
+      expect(
+        screen.queryByText("视频画面暂不可用，音频播放不受影响"),
+      ).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("switches the direct video source when selecting another quality", async () => {
