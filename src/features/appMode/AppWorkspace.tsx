@@ -6,6 +6,7 @@ import type { TtsEnginePort } from "../audiobook/TtsEnginePort";
 import { SoundMixerView } from "../mixer/SoundMixerView";
 import type { PlayerPort } from "../player/PlayerPort";
 import { useRuntimePlayer } from "../player/useRuntimePlayer";
+import type { PlaybackControlStatus } from "../playbackControl/playbackControlTypes";
 import { SleepSessionView } from "../sleepSession/SleepSessionView";
 import type {
   RecentSleepSoundConfig,
@@ -24,6 +25,12 @@ import { usePlaybackControlBus } from "./usePlaybackControlBus";
 import { useWorkspaceScrollIndicator } from "./useWorkspaceScrollIndicator";
 import "./AppWorkspace.css";
 import "./AppWorkspace.mobile.css";
+
+const STARTABLE_SLEEP_MODULE_STATUSES = new Set<PlaybackControlStatus>([
+  "idle",
+  "loaded",
+  "paused",
+]);
 
 interface AppWorkspaceProps {
   bilibiliAuthClient?: BilibiliAuthClient;
@@ -107,30 +114,36 @@ export function AppWorkspace({
   const handleOpenSleepSoundConfig = useCallback(() => {
     openAppMode("mixer");
   }, [openAppMode]);
+  const canUseSleepModule = useCallback(
+    (moduleId: Extract<AppMode, "audiobook" | "video">) => {
+      const state = playbackControlStates[moduleId];
+
+      return state.canToggle && state.status !== "unavailable";
+    },
+    [playbackControlStates],
+  );
+  const shouldStartSleepModule = useCallback(
+    (moduleId: Extract<AppMode, "audiobook" | "video">) => {
+      if (!canUseSleepModule(moduleId)) {
+        return false;
+      }
+
+      return STARTABLE_SLEEP_MODULE_STATUSES.has(
+        playbackControlStates[moduleId].status,
+      );
+    },
+    [canUseSleepModule, playbackControlStates],
+  );
   const handleStartSleepModules = useCallback(
     (modules: { audiobook: boolean; video: boolean }) => {
-      if (
-        modules.audiobook &&
-        playbackControlStates.audiobook.canToggle &&
-        playbackControlStates.audiobook.status !== "unavailable"
-      ) {
+      if (modules.audiobook && shouldStartSleepModule("audiobook")) {
         requestModulePlaybackToggle("audiobook");
       }
-      if (
-        modules.video &&
-        playbackControlStates.video.canToggle &&
-        playbackControlStates.video.status !== "unavailable"
-      ) {
+      if (modules.video && shouldStartSleepModule("video")) {
         requestModulePlaybackToggle("video");
       }
     },
-    [
-      playbackControlStates.audiobook.canToggle,
-      playbackControlStates.audiobook.status,
-      playbackControlStates.video.canToggle,
-      playbackControlStates.video.status,
-      requestModulePlaybackToggle,
-    ],
+    [requestModulePlaybackToggle, shouldStartSleepModule],
   );
 
   return (
@@ -201,6 +214,7 @@ export function AppWorkspace({
               remainingSeconds={sleepTimer.remainingSeconds}
               status={sleepTimer.status}
               onCancelTimer={sleepTimer.cancel}
+              onCanUseModule={canUseSleepModule}
               onDurationChange={sleepTimer.setDurationMinutes}
               onOpenSoundConfig={handleOpenSleepSoundConfig}
               onPrepareModule={handlePrepareSleepModule}

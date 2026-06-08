@@ -1,17 +1,19 @@
-import { useState } from "react";
 import type { PlaybackControlState } from "../playbackControl/playbackControlTypes";
 import { SleepTimerControl } from "../sleepTimer/SleepTimerControl";
 import type { SleepTimerStatus } from "../sleepTimer/SleepTimerControl";
 import type { FileSystemPort } from "../storage/FileSystemPort";
-import {
-  DEFAULT_SLEEP_SESSION_MODULE_SELECTION,
-} from "./sleepSessionStore";
-import { useRecentSleepConfigs } from "./useRecentSleepConfigs";
+import { RecentSleepConfigList } from "./RecentSleepConfigList";
 import type {
   RecentSleepSoundConfig,
   SleepSessionModuleSelection,
   SleepSoundConfigItem,
 } from "./sleepSessionTypes";
+import { useRecentSleepConfigs } from "./useRecentSleepConfigs";
+import { useSleepSessionActions } from "./useSleepSessionActions";
+import {
+  formatCurrentConfigSummary,
+  getModuleStatusText,
+} from "./sleepSessionViewModel";
 import "./SleepSessionView.css";
 
 interface SleepSessionViewProps {
@@ -25,64 +27,13 @@ interface SleepSessionViewProps {
   remainingSeconds: number;
   status: SleepTimerStatus;
   onCancelTimer: () => void;
+  onCanUseModule: (moduleId: keyof SleepSessionModuleSelection) => boolean;
   onDurationChange: (durationMinutes: number) => void;
   onOpenSoundConfig: () => void;
   onPrepareModule: (moduleId: "audiobook" | "video") => void;
   onStartModules: (modules: SleepSessionModuleSelection) => void;
   onStartTimer: (durationMinutes?: number) => void;
   onUseConfig: (config: RecentSleepSoundConfig) => void;
-}
-
-function formatConfigMeta(config: RecentSleepSoundConfig): string {
-  const enabledModules = [
-    config.enabledModules.audiobook ? "听书" : null,
-    config.enabledModules.video ? "听视频" : null,
-  ].filter(Boolean);
-  const moduleText =
-    enabledModules.length > 0 ? ` · ${enabledModules.join(" / ")}` : "";
-
-  return `${config.items.length} 个声音 · ${config.durationMinutes} 分钟${moduleText}`;
-}
-
-function formatConfigTime(updatedAt: number): string {
-  return new Intl.DateTimeFormat("zh-CN", {
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "2-digit",
-  }).format(new Date(updatedAt));
-}
-
-function formatCurrentConfigSummary(items: SleepSoundConfigItem[]): string {
-  if (items.length === 0) {
-    return "先到声音页选择声音组合，也可以在这里决定是否纳入听书和听视频。";
-  }
-
-  if (items.length <= 3) {
-    return items.map((item) => item.name).join(" / ");
-  }
-
-  return `${items.slice(0, 3).map((item) => item.name).join(" / ")} 等 ${items.length} 个声音`;
-}
-
-function getModuleStatusText(state: PlaybackControlState): string {
-  if (state.status === "unavailable") {
-    return "未准备";
-  }
-  if (state.status === "playing") {
-    return "播放中";
-  }
-  if (state.status === "loading") {
-    return "准备中";
-  }
-  if (state.status === "paused") {
-    return "已暂停";
-  }
-  if (state.status === "loaded") {
-    return "已载入";
-  }
-
-  return "待机";
 }
 
 export function SleepSessionView({
@@ -93,6 +44,7 @@ export function SleepSessionView({
   remainingSeconds,
   status,
   onCancelTimer,
+  onCanUseModule,
   onDurationChange,
   onOpenSoundConfig,
   onPrepareModule,
@@ -107,78 +59,26 @@ export function SleepSessionView({
     removeRecentConfig,
     saveRecentConfig,
   } = useRecentSleepConfigs(fileSystem);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [enabledModules, setEnabledModules] =
-    useState<SleepSessionModuleSelection>(
-      DEFAULT_SLEEP_SESSION_MODULE_SELECTION,
-    );
-  const hasCurrentConfig = currentConfigItems.length > 0;
-  const canStartSelectedAudiobook =
-    !enabledModules.audiobook ||
-    (moduleStates.audiobook.canToggle &&
-      moduleStates.audiobook.status !== "unavailable");
-  const canStartSelectedVideo =
-    !enabledModules.video ||
-    (moduleStates.video.canToggle && moduleStates.video.status !== "unavailable");
-  const canStartSession =
-    hasCurrentConfig && canStartSelectedAudiobook && canStartSelectedVideo;
+  const {
+    actionMessage,
+    canStartSession,
+    enabledModules,
+    handleModuleChange,
+    handleSaveCurrentConfig,
+    handleStartCurrentSession,
+    handleUseRecentConfig,
+    hasCurrentConfig,
+  } = useSleepSessionActions({
+    currentConfigItems,
+    durationMinutes,
+    onCanUseModule,
+    onDurationChange,
+    onStartModules,
+    onStartTimer,
+    onUseConfig,
+    saveRecentConfig,
+  });
   const currentSummary = formatCurrentConfigSummary(currentConfigItems);
-
-  async function persistCurrentConfig() {
-    return saveRecentConfig({
-      durationMinutes,
-      enabledModules,
-      items: currentConfigItems,
-    });
-  }
-
-  async function handleStartCurrentSession() {
-    if (!canStartSession) {
-      return;
-    }
-
-    const config = await persistCurrentConfig();
-
-    onUseConfig(config);
-    onStartModules(config.enabledModules);
-    onStartTimer(config.durationMinutes);
-    setActionMessage("已使用当前配置开始睡眠");
-  }
-
-  async function handleSaveCurrentConfig() {
-    if (!hasCurrentConfig) {
-      return;
-    }
-
-    await persistCurrentConfig();
-    setActionMessage("已保存到最近配置");
-  }
-
-  async function handleUseRecentConfig(config: RecentSleepSoundConfig) {
-    setEnabledModules(config.enabledModules);
-
-    const nextConfig = await saveRecentConfig({
-      durationMinutes: config.durationMinutes,
-      enabledModules: config.enabledModules,
-      items: config.items,
-    });
-
-    onDurationChange(nextConfig.durationMinutes);
-    onUseConfig(nextConfig);
-    onStartModules(nextConfig.enabledModules);
-    onStartTimer(nextConfig.durationMinutes);
-    setActionMessage("已复用最近配置开始睡眠");
-  }
-
-  function handleModuleChange(
-    moduleId: keyof SleepSessionModuleSelection,
-    isEnabled: boolean,
-  ) {
-    setEnabledModules((modules) => ({
-      ...modules,
-      [moduleId]: isEnabled,
-    }));
-  }
 
   return (
     <div className="sleep-session-view">
@@ -308,57 +208,17 @@ export function SleepSessionView({
         </p>
       ) : null}
 
-      <section className="sleep-session-recent glass-panel" aria-label="最近配置">
-        <div className="section-heading">
-          <div>
-            <p className="app-kicker">最近配置</p>
-            <h2>直接复用</h2>
-          </div>
-          <span className="section-meta">{recentConfigs.length} / 5</span>
-        </div>
-
-        {isLoading ? (
-          <p className="sleep-session-empty" role="status">
-            正在读取最近配置
-          </p>
-        ) : null}
-
-        {!isLoading && recentConfigs.length === 0 ? (
-          <p className="sleep-session-empty">最近还没有保存过睡眠配置。</p>
-        ) : null}
-
-        <div className="sleep-session-config-list">
-          {recentConfigs.map((config) => (
-            <article className="sleep-session-config" key={config.id}>
-              <div className="sleep-session-config__copy">
-                <h3>{config.title}</h3>
-                <p>{formatConfigMeta(config)}</p>
-                <span>{formatConfigTime(config.updatedAt)}</span>
-              </div>
-              <div className="sleep-session-config__actions">
-                <button
-                  className="sleep-session-config-button"
-                  type="button"
-                  onClick={() => {
-                    void handleUseRecentConfig(config);
-                  }}
-                >
-                  复用
-                </button>
-                <button
-                  className="sleep-session-delete-button"
-                  type="button"
-                  onClick={() => {
-                    void removeRecentConfig(config.id);
-                  }}
-                >
-                  删除
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
+      <RecentSleepConfigList
+        configs={recentConfigs}
+        isLoading={isLoading}
+        onCanUseModule={onCanUseModule}
+        onRemoveConfig={(configId) => {
+          void removeRecentConfig(configId);
+        }}
+        onUseConfig={(config) => {
+          void handleUseRecentConfig(config);
+        }}
+      />
     </div>
   );
 }

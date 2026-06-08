@@ -88,8 +88,8 @@
 
 .sleep-session-primary-button:hover:not(:disabled),
 .sleep-session-secondary-button:hover:not(:disabled),
-.sleep-session-config-button:hover,
-.sleep-session-delete-button:hover {
+.sleep-session-config-button:hover:not(:disabled),
+.sleep-session-delete-button:hover:not(:disabled) {
   box-shadow: 0 10px 20px rgba(20, 33, 28, 0.1);
   transform: translateY(-1px);
 }
@@ -110,7 +110,9 @@
 }
 
 .sleep-session-primary-button:disabled,
-.sleep-session-secondary-button:disabled {
+.sleep-session-secondary-button:disabled,
+.sleep-session-config-button:disabled,
+.sleep-session-delete-button:disabled {
   cursor: not-allowed;
   opacity: 0.52;
 }

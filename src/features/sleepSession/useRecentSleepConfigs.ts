@@ -20,6 +20,10 @@ interface UseRecentSleepConfigsResult {
   ) => Promise<RecentSleepSoundConfig>;
 }
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export function useRecentSleepConfigs(
   fileSystem?: FileSystemPort,
 ): UseRecentSleepConfigsResult {
@@ -48,9 +52,7 @@ export function useRecentSleepConfigs(
         }
 
         setRecentConfigs([]);
-        setErrorMessage(
-          error instanceof Error ? error.message : "读取最近配置失败",
-        );
+        setErrorMessage(getErrorMessage(error, "读取最近配置失败"));
       })
       .finally(() => {
         if (isActive) {
@@ -65,23 +67,34 @@ export function useRecentSleepConfigs(
 
   const saveRecentConfig = useCallback(
     async (input: SleepSoundConfigInput) => {
-      const nextConfig = await saveRecentSleepConfig(input, fileSystem);
-      const configs = await listRecentSleepConfigs(fileSystem);
-
-      setRecentConfigs(configs);
       setErrorMessage(null);
 
-      return nextConfig;
+      try {
+        const nextConfig = await saveRecentSleepConfig(input, fileSystem);
+        const configs = await listRecentSleepConfigs(fileSystem);
+
+        setRecentConfigs(configs);
+
+        return nextConfig;
+      } catch (error) {
+        setErrorMessage(getErrorMessage(error, "保存最近配置失败"));
+        throw error;
+      }
     },
     [fileSystem],
   );
 
   const removeRecentConfig = useCallback(
     async (configId: string) => {
-      const configs = await deleteRecentSleepConfig(configId, fileSystem);
-
-      setRecentConfigs(configs);
       setErrorMessage(null);
+
+      try {
+        const configs = await deleteRecentSleepConfig(configId, fileSystem);
+
+        setRecentConfigs(configs);
+      } catch (error) {
+        setErrorMessage(getErrorMessage(error, "删除最近配置失败"));
+      }
     },
     [fileSystem],
   );

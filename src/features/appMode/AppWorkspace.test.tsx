@@ -14,6 +14,7 @@ import {
   mockHtmlMediaPlayback,
 } from "../../test/audioTestDoubles";
 import { createMemoryFileSystem } from "../../test/storageTestDoubles";
+import type { FileSystemPort } from "../storage/FileSystemPort";
 import type { BilibiliAuthClient } from "../videoListening/bilibiliAuth";
 import type { BilibiliDirectAudioLoader } from "../videoListening/bilibiliDirectAudio";
 import { AppWorkspace } from "./AppWorkspace";
@@ -83,6 +84,30 @@ function createLoggedOutBilibiliAuthClient(): BilibiliAuthClient {
 
 function createBilibiliDirectAudioLoaderTestDouble(): BilibiliDirectAudioLoader {
   return vi.fn().mockResolvedValue(TEST_BILIBILI_DIRECT_AUDIO_SOURCE);
+}
+
+function createWriteToggleFileSystem() {
+  const memoryFileSystem = createMemoryFileSystem();
+  let shouldFailWrite = false;
+  const writeText = vi.fn<FileSystemPort["writeText"]>((path, content) => {
+    if (shouldFailWrite) {
+      return Promise.reject(new Error("存储写入失败"));
+    }
+
+    return memoryFileSystem.writeText(path, content);
+  });
+  const fileSystem: FileSystemPort = {
+    ...memoryFileSystem,
+    writeText,
+  };
+
+  return {
+    fileSystem,
+    setShouldFailWrite: (nextValue: boolean) => {
+      shouldFailWrite = nextValue;
+    },
+    writeText,
+  };
 }
 
 async function startAmbientSoundAndAudiobookPlayback(
@@ -275,6 +300,74 @@ describe("AppWorkspace", () => {
     expect(screen.getByText("未载入来源")).toBeInTheDocument();
   });
 
+  it("does not pause an already playing audiobook when starting a sleep session", async () => {
+    const user = userEvent.setup();
+    const { play, player } = createPlayerPortTestDouble();
+    const { engine, handlePause, speak } = createTtsEngineTestDouble();
+    render(
+      <AppWorkspace
+        fileSystem={createMemoryFileSystem()}
+        player={player}
+        ttsEngine={engine}
+      />,
+    );
+
+    await startAmbientSoundAndAudiobookPlayback(user);
+
+    await waitFor(() => {
+      expect(speak).toHaveBeenCalledTimes(1);
+    });
+
+    await user.click(screen.getByRole("button", { name: "睡眠" }));
+    await user.click(screen.getByRole("checkbox", { name: "听书" }));
+    await user.click(screen.getByRole("button", { name: "开始睡眠" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("timer")).toHaveTextContent("剩余 30:00");
+      expect(play).toHaveBeenLastCalledWith(
+        expect.objectContaining({ id: "heavy_rain" }),
+        0.62,
+      );
+    });
+    expect(handlePause).not.toHaveBeenCalled();
+    expect(speak).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not pause an already playing video when starting a sleep session", async () => {
+    const media = mockHtmlMediaPlayback();
+    const user = userEvent.setup();
+    const loadDirectAudio = createBilibiliDirectAudioLoaderTestDouble();
+    render(
+      <AppWorkspace
+        bilibiliDirectAudioLoader={loadDirectAudio}
+        fileSystem={createMemoryFileSystem()}
+        player={createPlayerPortTestDouble().player}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "大雨" }));
+    await user.click(screen.getByRole("button", { name: "听视频" }));
+    await user.type(screen.getByLabelText("视频或直播链接"), "BV1xx411c7mD");
+    await user.click(screen.getByRole("button", { name: "载入" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "视频测试标题" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "展开模块播放控制" }));
+    expect(
+      await screen.findByRole("button", { name: "暂停听视频模块" }),
+    ).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "睡眠" }));
+    await user.click(screen.getByRole("checkbox", { name: "听视频" }));
+    await user.click(screen.getByRole("button", { name: "开始睡眠" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("timer")).toHaveTextContent("剩余 30:00");
+    });
+    expect(media.pause).not.toHaveBeenCalled();
+  });
+
   it("reuses and deletes a recent sleep config", async () => {
     const user = userEvent.setup();
     const { play, player, stopAll } = createPlayerPortTestDouble();
@@ -308,6 +401,81 @@ describe("AppWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "删除" }));
 
     expect(screen.getByText("最近还没有保存过睡眠配置。")).toBeInTheDocument();
+  });
+
+  it("disables a recent sleep config when a selected module is not ready", async () => {
+    const user = userEvent.setup();
+    const { player } = createPlayerPortTestDouble();
+    render(
+      <AppWorkspace
+        fileSystem={createMemoryFileSystem()}
+        player={player}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "大雨" }));
+    await user.click(screen.getByRole("button", { name: "睡眠" }));
+    await user.click(screen.getByRole("checkbox", { name: "听视频" }));
+    await user.click(screen.getByRole("button", { name: "保存配置" }));
+
+    const recentPanel = screen.getByRole("region", { name: "最近配置" });
+    expect(
+      await within(recentPanel).findByRole("heading", { name: "大雨" }),
+    ).toBeInTheDocument();
+    const reuseButton = within(recentPanel).getByRole("button", {
+      name: "复用",
+    });
+
+    expect(reuseButton).toBeDisabled();
+    fireEvent.click(reuseButton);
+    expect(screen.getByRole("timer")).toHaveTextContent("未开启");
+  });
+
+  it("shows recent config save errors without starting a sleep session", async () => {
+    const user = userEvent.setup();
+    const { fileSystem, setShouldFailWrite } = createWriteToggleFileSystem();
+    render(
+      <AppWorkspace
+        fileSystem={fileSystem}
+        player={createPlayerPortTestDouble().player}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "大雨" }));
+    await user.click(screen.getByRole("button", { name: "睡眠" }));
+    setShouldFailWrite(true);
+    await user.click(screen.getByRole("button", { name: "开始睡眠" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("存储写入失败");
+    expect(screen.getByRole("timer")).toHaveTextContent("未开启");
+  });
+
+  it("shows recent config delete errors without removing the visible config", async () => {
+    const user = userEvent.setup();
+    const { fileSystem, setShouldFailWrite } = createWriteToggleFileSystem();
+    render(
+      <AppWorkspace
+        fileSystem={fileSystem}
+        player={createPlayerPortTestDouble().player}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "大雨" }));
+    await user.click(screen.getByRole("button", { name: "睡眠" }));
+    await user.click(screen.getByRole("button", { name: "保存配置" }));
+
+    const recentPanel = screen.getByRole("region", { name: "最近配置" });
+    expect(
+      await within(recentPanel).findByRole("heading", { name: "大雨" }),
+    ).toBeInTheDocument();
+
+    setShouldFailWrite(true);
+    await user.click(within(recentPanel).getByRole("button", { name: "删除" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("存储写入失败");
+    expect(
+      within(recentPanel).getByRole("heading", { name: "大雨" }),
+    ).toBeInTheDocument();
   });
 
   it("uses the floating control to play and pause ambient sounds", async () => {
