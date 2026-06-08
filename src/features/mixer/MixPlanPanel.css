@@ -1,0 +1,196 @@
+.mix-plan-panel {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  padding: 14px;
+  border-color: rgba(255, 255, 255, 0.7);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(242, 249, 245, 0.66)),
+    rgba(255, 255, 255, 0.72);
+  box-shadow: 0 14px 34px rgba(20, 33, 28, 0.08);
+}
+
+.mix-plan-actions {
+  display: grid;
+  gap: 7px;
+}
+
+.mix-plan-actions span,
+.mix-plan-block-heading span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.mix-plan-save-button,
+.mix-plan-delete-button {
+  min-height: 34px;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid rgba(63, 111, 90, 0.18);
+  border-radius: 8px;
+  font-size: 0.76rem;
+  font-weight: 950;
+  transition:
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.mix-plan-save-button {
+  color: white;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0)),
+    linear-gradient(135deg, var(--primary-strong), var(--teal));
+}
+
+.mix-plan-save-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.mix-plan-delete-button {
+  color: #7f302b;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(255, 239, 234, 0.74)),
+    rgba(255, 242, 238, 0.72);
+}
+
+.mix-plan-save-button:hover:not(:disabled),
+.mix-plan-delete-button:hover,
+.mix-plan-button:hover {
+  box-shadow: 0 10px 20px rgba(20, 33, 28, 0.1);
+  transform: translateY(-1px);
+}
+
+.mix-plan-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: start;
+  gap: 12px;
+}
+
+.mix-plan-block,
+.mix-plan-group,
+.mix-plan-group-list,
+.mix-plan-list,
+.mix-plan-custom-list {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.mix-plan-block-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 26px;
+  padding-top: 2px;
+}
+
+.mix-plan-block-heading h3,
+.mix-plan-group h4 {
+  margin: 0;
+  color: var(--primary-strong);
+  font-size: 0.84rem;
+  font-weight: 950;
+}
+
+.mix-plan-group h4 {
+  display: inline-flex;
+  justify-self: start;
+  padding: 3px 7px;
+  border-left: 3px solid var(--copper);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(219, 236, 225, 0.82), rgba(255, 255, 255, 0.58)),
+    rgba(219, 236, 225, 0.68);
+  font-size: 0.76rem;
+}
+
+.mix-plan-list {
+  grid-template-columns: 1fr;
+  gap: 7px;
+}
+
+.mix-plan-button {
+  display: grid;
+  min-height: 70px;
+  align-content: start;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.66);
+  border-radius: 8px;
+  color: var(--ink);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.82), rgba(243, 248, 245, 0.56)),
+    rgba(255, 255, 255, 0.58);
+  text-align: left;
+  box-shadow: 0 8px 22px rgba(20, 33, 28, 0.07);
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.mix-plan-button-active {
+  color: var(--primary-strong);
+  background:
+    linear-gradient(135deg, rgba(219, 236, 225, 0.96), rgba(255, 255, 255, 0.74)),
+    var(--primary-soft);
+  box-shadow:
+    0 14px 28px rgba(63, 111, 90, 0.16),
+    inset 0 0 0 1px rgba(63, 111, 90, 0.22);
+}
+
+.mix-plan-topline {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mix-plan-name {
+  font-size: 0.84rem;
+  font-weight: 950;
+}
+
+.mix-plan-count {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--teal);
+  background: rgba(45, 125, 130, 0.1);
+  font-size: 0.68rem;
+  font-weight: 950;
+}
+
+.mix-plan-description,
+.mix-plan-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.mix-plan-custom-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(62px, auto);
+  align-items: stretch;
+  gap: 8px;
+}
+
+.mix-plan-custom-apply {
+  min-height: 68px;
+}
+
+.mix-plan-empty {
+  min-height: 60px;
+  display: grid;
+  align-items: center;
+  padding: 10px;
+  border: 1px dashed rgba(63, 111, 90, 0.26);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.36);
+}

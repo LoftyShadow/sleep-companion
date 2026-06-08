@@ -1,17 +1,34 @@
 @media (max-width: 680px) {
-  .mixer-mode-panel {
-    min-height: 0;
-    padding: 8px;
+  .mixer-filter-panel {
+    gap: 7px;
   }
 
-  .mode-switch {
-    gap: 4px;
-    padding: 4px;
+  .sound-filter-list {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
   }
 
-  .mode-switch-button {
-    min-height: 36px;
-    padding: 7px 5px;
-    font-size: 0.8rem;
+  .sound-filter-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sound-filter-button {
+    flex: 0 0 auto;
+    min-height: 32px;
+    padding: 6px 8px;
+    scroll-snap-align: start;
+  }
+
+  .sound-filter-button span {
+    font-size: 0.76rem;
+  }
+
+  .sound-filter-button strong {
+    min-width: 24px;
+    padding: 1px 6px;
+    font-size: 0.62rem;
   }
 }

@@ -4,6 +4,7 @@
   min-height: 100dvh;
   margin: 0 auto;
   padding: 22px;
+  overflow-x: hidden;
 }
 
 .has-desktop-title-bar,
@@ -40,6 +41,7 @@
   padding-top: 18px;
   padding-right: max(22px, calc((100vw - 1280px) / 2 + 22px));
   padding-left: max(22px, calc((100vw - 1280px) / 2 + 22px));
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;

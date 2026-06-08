@@ -1,0 +1,213 @@
+.active-mix-panel {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  padding: 16px;
+  border-color: rgba(255, 255, 255, 0.7);
+  background:
+    radial-gradient(circle at 14% 18%, rgba(45, 125, 130, 0.13), transparent 30%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(237, 247, 242, 0.72)),
+    rgba(255, 255, 255, 0.74);
+  box-shadow:
+    0 20px 48px rgba(20, 33, 28, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.active-mix-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(214px, auto);
+  align-items: center;
+  gap: 18px;
+  min-height: 104px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(228, 241, 235, 0.42)),
+    rgba(255, 255, 255, 0.46);
+}
+
+.active-mix-hero-copy {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.active-mix-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.active-mix-title-row h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.42rem;
+  line-height: 1.08;
+}
+
+.active-mix-playback-state {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border: 1px solid rgba(63, 111, 90, 0.16);
+  border-radius: 999px;
+  color: var(--primary-strong);
+  background: rgba(219, 236, 225, 0.62);
+  font-size: 0.72rem;
+  font-weight: 950;
+}
+
+.active-mix-summary {
+  display: -webkit-box;
+  max-width: 760px;
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted-strong);
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.active-mix-hero-actions {
+  display: grid;
+  justify-items: stretch;
+  gap: 9px;
+}
+
+.active-mix-hero-actions .transport-status {
+  justify-self: stretch;
+  text-align: center;
+}
+
+.active-mix-transport-button {
+  min-width: 196px;
+}
+
+.active-mix-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(238px, 1fr));
+  gap: 8px;
+}
+
+.active-mix-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 8px;
+  min-height: 126px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.66);
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.86), rgba(244, 249, 246, 0.62)),
+    rgba(255, 255, 255, 0.58);
+  box-shadow: 0 6px 18px rgba(20, 33, 28, 0.06);
+}
+
+.active-mix-toggle {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+}
+
+.active-mix-thumb {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 8px;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.78), rgba(219, 236, 225, 0.44)),
+    rgba(255, 255, 255, 0.52);
+}
+
+.active-mix-thumb img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  opacity: 0.88;
+}
+
+.active-mix-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.active-mix-name {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.94rem;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.active-mix-state {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.active-mix-toggle[aria-pressed="true"] .active-mix-state {
+  color: var(--primary);
+}
+
+.active-mix-volume {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 900;
+}
+
+.active-mix-volume span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.active-mix-volume strong {
+  color: var(--primary-strong);
+  font-weight: 950;
+}
+
+.active-mix-volume input {
+  width: 100%;
+  min-height: 24px;
+  accent-color: var(--primary);
+}
+
+.active-mix-empty,
+.active-mix-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.active-mix-empty {
+  min-height: 96px;
+  display: grid;
+  align-items: center;
+  padding: 14px;
+  border: 1px dashed rgba(63, 111, 90, 0.26);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.36);
+}

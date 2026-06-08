@@ -1,57 +1,59 @@
-export type SoundLibraryMode = "sleep" | "asmr" | "other";
+export type BaseSoundLibraryFilterId = "all" | "sleep" | "asmr" | "custom";
+export type XmsleepSoundLibraryFilterId = `xmsleep:${string}`;
+export type SoundLibraryFilterId =
+  | BaseSoundLibraryFilterId
+  | XmsleepSoundLibraryFilterId;
 
-export interface SoundLibraryModeConfig {
-  id: SoundLibraryMode;
+export interface BaseSoundLibraryFilterConfig {
+  id: BaseSoundLibraryFilterId;
   label: string;
-  kicker: string;
-  title: string;
-  emptySummary: string;
-  presetKicker: string;
-  presetHeading: string;
-  soundKicker: string;
-  soundHeading: string;
-  transportLabel: string;
+  summary: string;
 }
 
-export const SOUND_LIBRARY_MODES: SoundLibraryModeConfig[] = [
-  {
+export interface SoundLibraryFilterOption {
+  id: SoundLibraryFilterId;
+  label: string;
+  summary: string;
+  count: number;
+}
+
+export const BASE_SOUND_LIBRARY_FILTER_CONFIG = {
+  all: {
+    id: "all",
+    label: "全部",
+    summary: "所有可加入全局混音的声音",
+  },
+  sleep: {
     id: "sleep",
     label: "白噪音",
-    kicker: "XMSLEEP 风格声音调音台",
-    title: "白噪音",
-    emptySummary: "选择预设或点一个声音开始播放",
-    presetKicker: "快捷播放",
-    presetHeading: "一键混音",
-    soundKicker: "单独控制",
-    soundHeading: "声音库",
-    transportLabel: "播放预设",
+    summary: "稳定底噪和自然环境声",
   },
-  {
+  asmr: {
     id: "asmr",
     label: "ASMR",
-    kicker: "真实素材触发控制台",
-    title: "ASMR 控制台",
-    emptySummary: "选择触发组合或点一个近距离声音开始播放",
-    presetKicker: "触发组合",
-    presetHeading: "ASMR 预设",
-    soundKicker: "真实素材",
-    soundHeading: "ASMR 声音",
-    transportLabel: "播放 ASMR",
+    summary: "近距离触发音和细节声音",
   },
-  {
-    id: "other",
-    label: "其他声音",
-    kicker: "XMSLEEP 补充声音库",
-    title: "其他声音",
-    emptySummary: "选择分类或点一个补充声音开始播放",
-    presetKicker: "分类浏览",
-    presetHeading: "声音分类",
-    soundKicker: "补充音源",
-    soundHeading: "其他声音",
-    transportLabel: "播放分类",
+  custom: {
+    id: "custom",
+    label: "自定义音频",
+    summary: "只查看你导入的本地声音",
   },
-];
+} satisfies Record<BaseSoundLibraryFilterId, BaseSoundLibraryFilterConfig>;
 
-export const SOUND_LIBRARY_MODE_CONFIG = Object.fromEntries(
-  SOUND_LIBRARY_MODES.map((mode) => [mode.id, mode]),
-) as Record<SoundLibraryMode, SoundLibraryModeConfig>;
+export function toXmsleepFilterId(
+  categoryId: string,
+): XmsleepSoundLibraryFilterId {
+  return `xmsleep:${categoryId}`;
+}
+
+export function isXmsleepFilterId(
+  filterId: SoundLibraryFilterId,
+): filterId is XmsleepSoundLibraryFilterId {
+  return filterId.startsWith("xmsleep:");
+}
+
+export function getXmsleepCategoryIdFromFilterId(
+  filterId: XmsleepSoundLibraryFilterId,
+) {
+  return filterId.slice("xmsleep:".length);
+}

@@ -104,6 +104,20 @@ describe("AppWorkspace integration", () => {
     return screen.findByLabelText("直连音频播放器");
   }
 
+  async function stageCampfireGlobalMix(
+    user: ReturnType<typeof userEvent.setup>,
+  ) {
+    await user.click(screen.getByRole("button", { name: "篝火" }));
+    await user.click(await screen.findByRole("button", { name: "停止播放" }));
+  }
+
+  async function resumeGlobalMixAndStop(
+    user: ReturnType<typeof userEvent.setup>,
+  ) {
+    await user.click(screen.getByRole("button", { name: "播放全局混音" }));
+    await user.click(await screen.findByRole("button", { name: "停止播放" }));
+  }
+
   it("renders the built-in sound grid", () => {
     render(
       <AppWorkspace
@@ -113,17 +127,17 @@ describe("AppWorkspace integration", () => {
       />,
     );
 
+    expect(screen.getByRole("heading", { name: "当前混音" })).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "白噪音" }),
+      screen.getByRole("heading", { name: "推荐与我的混音" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "一键混音" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "声音库" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "入睡" })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "应用预设雨夜放松" }),
+      screen.getByRole("button", { name: "应用推荐混音雨夜放松" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("4 个组合")).toBeInTheDocument();
+    expect(screen.getByText("8 个方案")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "声音标签" })).toBeInTheDocument();
     expect(screen.getByText("添加自定义音频")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "大雨" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "图书馆" })).toBeInTheDocument();
@@ -144,16 +158,18 @@ describe("AppWorkspace integration", () => {
     fireEvent.change(screen.getByLabelText("篝火音量"), {
       target: { value: "23" },
     });
-    await user.click(screen.getByRole("button", { name: "保存当前配置" }));
+    await user.click(screen.getByRole("button", { name: "保存当前混音" }));
 
-    expect(await screen.findByText("已保存为自定义配置")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "我的配置" })).toBeInTheDocument();
+    expect(await screen.findByText("已保存为全局混音")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "我的混音" })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "应用配置我的配置 1" }),
+      screen.getByRole("button", { name: "应用全局混音我的混音 1" }),
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "大雨" }));
-    await user.click(screen.getByRole("button", { name: "应用配置我的配置 1" }));
+    await user.click(
+      screen.getByRole("button", { name: "应用全局混音我的混音 1" }),
+    );
 
     await waitFor(() => {
       expect(stopAll).toHaveBeenCalledTimes(1);
@@ -165,13 +181,13 @@ describe("AppWorkspace integration", () => {
 
     await user.click(screen.getByRole("button", { name: "删除" }));
 
-    expect(await screen.findByText("已删除自定义配置")).toBeInTheDocument();
+    expect(await screen.findByText("已删除全局混音")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "应用配置我的配置 1" }),
+      screen.queryByRole("button", { name: "应用全局混音我的混音 1" }),
     ).not.toBeInTheDocument();
   });
 
-  it("saves and applies one custom configuration across sound modes", async () => {
+  it("saves and applies one global mix across sound modes", async () => {
     const user = userEvent.setup();
     const { play, player, stopAll } = createPlayerPortTestDouble();
     render(
@@ -184,33 +200,40 @@ describe("AppWorkspace integration", () => {
     });
 
     await user.click(screen.getByRole("button", { name: "ASMR" }));
-    expect(screen.getByRole("heading", { name: "我的配置" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "我的混音" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "气泡声" }));
+    expect(screen.getByRole("heading", { name: "当前混音" })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("气泡声音量"), {
       target: { value: "35" },
     });
+    expect(screen.getByLabelText("当前混音气泡声音量")).toHaveValue("35");
 
-    await user.click(screen.getByRole("button", { name: "其他声音" }));
-    expect(screen.getByRole("heading", { name: "我的配置" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /雨声\s*17/u }));
+    expect(screen.getByRole("heading", { name: "我的混音" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "雨声" }));
     await user.click(
       screen.getByRole("button", { name: "小雨，雨声，XMSLEEP" }),
     );
+    expect(screen.getByRole("heading", { name: "当前混音" })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("小雨，雨声，XMSLEEP音量"), {
       target: { value: "46" },
     });
+    expect(
+      screen.getByLabelText("当前混音小雨，雨声，XMSLEEP音量"),
+    ).toHaveValue("46");
 
     await user.click(screen.getByRole("button", { name: "白噪音" }));
-    expect(screen.getByRole("heading", { name: "我的配置" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "保存当前配置" }));
+    expect(screen.getByRole("heading", { name: "我的混音" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "保存当前混音" }));
 
-    expect(await screen.findByText("已保存为自定义配置")).toBeInTheDocument();
+    expect(await screen.findByText("已保存为全局混音")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "应用配置我的配置 1" }),
+      screen.getByRole("button", { name: "应用全局混音我的混音 1" }),
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "大雨" }));
-    await user.click(screen.getByRole("button", { name: "应用配置我的配置 1" }));
+    await user.click(
+      screen.getByRole("button", { name: "应用全局混音我的混音 1" }),
+    );
 
     await waitFor(() => {
       expect(stopAll).toHaveBeenCalledTimes(1);
@@ -225,12 +248,12 @@ describe("AppWorkspace integration", () => {
     });
   });
 
-  it("uses the unified button to play and stop the default preset", async () => {
+  it("uses the unified button to play and stop the global mix", async () => {
     const user = userEvent.setup();
     const { play, player, stopAll } = createPlayerPortTestDouble();
     render(<AppWorkspace player={player} />);
 
-    await user.click(screen.getByRole("button", { name: "播放预设" }));
+    await user.click(screen.getByRole("button", { name: "播放全局混音" }));
     await user.click(await screen.findByRole("button", { name: "停止播放" }));
 
     expect(play).toHaveBeenCalledTimes(3);
@@ -242,7 +265,9 @@ describe("AppWorkspace integration", () => {
     const { play, player, stopAll } = createPlayerPortTestDouble();
     render(<AppWorkspace player={player} />);
 
-    await user.click(screen.getByRole("button", { name: "应用预设图书馆专注" }));
+    await user.click(
+      screen.getByRole("button", { name: "应用推荐混音图书馆专注" }),
+    );
 
     expect(stopAll).toHaveBeenCalledTimes(1);
     expect(play).toHaveBeenCalledTimes(3);
@@ -273,20 +298,18 @@ describe("AppWorkspace integration", () => {
     expect(screen.getByLabelText("大雨音量")).toHaveValue("73");
   });
 
-  it("switches to the ASMR console and shows real ASMR sounds", async () => {
+  it("filters to ASMR sounds through the unified sound library", async () => {
     const user = userEvent.setup();
     render(<AppWorkspace player={createPlayerPortTestDouble().player} />);
 
     await user.click(screen.getByRole("button", { name: "ASMR" }));
 
+    expect(screen.getByRole("heading", { name: "声音库" })).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "ASMR 控制台" }),
+      screen.getByRole("heading", { name: "推荐与我的混音" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "ASMR 预设" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "应用预设近耳清理" }),
+      screen.getByRole("button", { name: "应用推荐混音近耳清理" }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "轻柔掏耳" }),
@@ -297,35 +320,27 @@ describe("AppWorkspace integration", () => {
     ).toBeInTheDocument();
   });
 
-  it("uses the unified button to play the default ASMR preset in ASMR mode", async () => {
+  it("keeps the unified button global in ASMR mode", async () => {
     const user = userEvent.setup();
     const { play, player, stopAll } = createPlayerPortTestDouble();
     render(<AppWorkspace player={player} />);
 
+    await stageCampfireGlobalMix(user);
     await user.click(screen.getByRole("button", { name: "ASMR" }));
-    await user.click(screen.getByRole("button", { name: "播放 ASMR" }));
-    await user.click(await screen.findByRole("button", { name: "停止播放" }));
+    await resumeGlobalMixAndStop(user);
 
     expect(play.mock.calls.map(([sound]) => sound.id)).toEqual([
-      "asmr_ear_cleaning_soft",
-      "asmr_ear_cleaning_deep",
-      "asmr_paper_rub",
+      "campfire",
+      "campfire",
     ]);
     expect(stopAll).toHaveBeenCalledTimes(2);
   });
 
-  it("switches to other sounds and filters imported sounds by category", async () => {
+  it("filters XMSLEEP sounds by tags in the unified sound library", async () => {
     const user = userEvent.setup();
     render(<AppWorkspace player={createPlayerPortTestDouble().player} />);
 
-    await user.click(screen.getByRole("button", { name: "其他声音" }));
-
-    expect(
-      screen.getByRole("region", { name: "其他声音" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: "声音分类" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "声音标签" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "河流，自然，XMSLEEP" }),
     ).toBeInTheDocument();
@@ -342,10 +357,10 @@ describe("AppWorkspace integration", () => {
       screen.queryByRole("button", { name: "掏耳朵1，物品，XMSLEEP" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "咖啡厅，场所，XMSLEEP" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "咖啡厅，场所，XMSLEEP" }),
+    ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /城市\s*7/u }));
+    await user.click(screen.getByRole("button", { name: "城市" }));
 
     expect(
       screen.getByRole("button", { name: "救护车警笛，城市，XMSLEEP" }),
@@ -353,22 +368,23 @@ describe("AppWorkspace integration", () => {
     expect(
       screen.queryByRole("button", { name: "河流，自然，XMSLEEP" }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "咖啡厅，场所，XMSLEEP" }),
+    ).not.toBeInTheDocument();
   });
 
-  it("uses the unified button to play the current other-sounds category", async () => {
+  it("keeps the unified button global when filtering XMSLEEP sounds", async () => {
     const user = userEvent.setup();
     const { play, player, stopAll } = createPlayerPortTestDouble();
     render(<AppWorkspace player={player} />);
 
-    await user.click(screen.getByRole("button", { name: "其他声音" }));
-    await user.click(screen.getByRole("button", { name: /雨声\s*17/u }));
-    await user.click(screen.getByRole("button", { name: "播放分类" }));
-    await user.click(await screen.findByRole("button", { name: "停止播放" }));
+    await stageCampfireGlobalMix(user);
+    await user.click(screen.getByRole("button", { name: "雨声" }));
+    await resumeGlobalMixAndStop(user);
 
     expect(play.mock.calls.map(([sound]) => sound.id)).toEqual([
-      "xmsleep_light_rain",
-      "xmsleep_rain_on_tent",
-      "xmsleep_rain_on_leaves",
+      "campfire",
+      "campfire",
     ]);
     expect(stopAll).toHaveBeenCalledTimes(2);
   });

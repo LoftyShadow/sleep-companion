@@ -1,37 +1,46 @@
 import {
-  SOUND_LIBRARY_MODES,
-  type SoundLibraryMode,
-  type SoundLibraryModeConfig,
+  type SoundLibraryFilterId,
+  type SoundLibraryFilterOption,
 } from "./soundLibraryModes";
 import "./MixerHeader.css";
 import "./MixerHeader.mobile.css";
 
 interface MixerHeaderProps {
-  activeSoundMode: SoundLibraryMode;
-  modeConfig: SoundLibraryModeConfig;
-  onSoundModeChange: (mode: SoundLibraryMode) => void;
+  activeFilterId: SoundLibraryFilterId;
+  filters: SoundLibraryFilterOption[];
+  onFilterChange: (filterId: SoundLibraryFilterId) => void;
 }
 
 export function MixerHeader({
-  activeSoundMode,
-  modeConfig,
-  onSoundModeChange,
+  activeFilterId,
+  filters,
+  onFilterChange,
 }: MixerHeaderProps) {
+  const activeFilterLabel = filters.find((filter) => filter.id === activeFilterId)
+    ?.label ?? "全部";
+
   return (
-    <header className="mixer-mode-panel glass-panel" aria-label="声音模式">
-      <h1 className="mixer-mode-title">{modeConfig.title}</h1>
-      <div aria-label="声音模式" className="mode-switch" role="group">
-        {SOUND_LIBRARY_MODES.map((mode) => (
+    <header className="mixer-filter-panel" aria-labelledby="sound-filter-heading">
+      <div className="mixer-filter-heading">
+        <h3 className="mixer-filter-title" id="sound-filter-heading">
+          声音标签
+        </h3>
+        <span className="mixer-filter-active">{activeFilterLabel}</span>
+      </div>
+      <div aria-label="声音标签" className="sound-filter-list" role="group">
+        {filters.map((filter) => (
           <button
-            aria-pressed={activeSoundMode === mode.id}
-            className="mode-switch-button"
-            key={mode.id}
+            aria-label={filter.label}
+            aria-pressed={activeFilterId === filter.id}
+            className="sound-filter-button"
+            key={filter.id}
             type="button"
             onClick={() => {
-              onSoundModeChange(mode.id);
+              onFilterChange(filter.id);
             }}
           >
-            {mode.label}
+            <span>{filter.label}</span>
+            <strong aria-hidden="true">{filter.count}</strong>
           </button>
         ))}
       </div>

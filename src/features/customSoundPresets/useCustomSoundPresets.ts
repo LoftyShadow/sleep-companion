@@ -53,7 +53,7 @@ export function useCustomSoundPresets(
 
         setCustomPresets([]);
         setCustomPresetErrorMessage(
-          getErrorMessage(error, "读取自定义配置失败"),
+          getErrorMessage(error, "读取全局混音失败"),
         );
       })
       .finally(() => {
@@ -77,12 +77,12 @@ export function useCustomSoundPresets(
         const presets = await listCustomSoundPresets(fileSystem);
 
         setCustomPresets(presets);
-        setCustomPresetMessage("已保存为自定义配置");
+        setCustomPresetMessage("已保存为全局混音");
 
         return preset;
       } catch (error) {
         setCustomPresetErrorMessage(
-          getErrorMessage(error, "保存自定义配置失败"),
+          getErrorMessage(error, "保存全局混音失败"),
         );
         throw error;
       }
@@ -99,10 +99,10 @@ export function useCustomSoundPresets(
         const presets = await deleteCustomSoundPreset(presetId, fileSystem);
 
         setCustomPresets(presets);
-        setCustomPresetMessage("已删除自定义配置");
+        setCustomPresetMessage("已删除全局混音");
       } catch (error) {
         setCustomPresetErrorMessage(
-          getErrorMessage(error, "删除自定义配置失败"),
+          getErrorMessage(error, "删除全局混音失败"),
         );
       }
     },

@@ -1,38 +1,53 @@
+.sound-mixer-view {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
 .app-layout {
   display: grid;
+  min-width: 0;
+  max-width: 100%;
   gap: 14px;
 }
 
 .mixer-stage {
-  display: grid;
-  grid-template-columns: minmax(260px, 0.44fr) minmax(360px, 0.56fr);
-  align-items: stretch;
-  gap: 12px;
-}
-
-.mixer-stage .mixer-mode-panel,
-.mixer-stage .player-card {
-  min-height: 72px;
+  display: block;
+  min-width: 0;
 }
 
 .mixer-content {
   display: grid;
-  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
   align-items: start;
-  gap: 14px;
-}
-
-.sound-library-sidebar-stack {
-  display: grid;
   min-width: 0;
+  max-width: 100%;
   gap: 14px;
 }
 
 .right-column {
   display: grid;
   min-width: 0;
+  max-width: 100%;
   align-content: start;
-  gap: 16px;
+  gap: 12px;
   overflow: hidden;
-  padding: 18px;
+  padding: 14px;
+  border-color: rgba(255, 255, 255, 0.7);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(242, 249, 245, 0.66)),
+    rgba(255, 255, 255, 0.72);
+}
+
+.right-column > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sound-section-summary {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+  line-height: 1.4;
 }

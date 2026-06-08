@@ -20,7 +20,7 @@ describe("useCustomSoundPresets", () => {
       ]);
     });
 
-    expect(result.current.customPresetMessage).toBe("已保存为自定义配置");
+    expect(result.current.customPresetMessage).toBe("已保存为全局混音");
     expect(result.current.customPresets).toHaveLength(1);
     expect(result.current.customPresets[0].items).toEqual([
       { soundId: "heavy_rain", volume: 0.62 },
@@ -30,7 +30,7 @@ describe("useCustomSoundPresets", () => {
       await result.current.removeCustomPreset(result.current.customPresets[0].id);
     });
 
-    expect(result.current.customPresetMessage).toBe("已删除自定义配置");
+    expect(result.current.customPresetMessage).toBe("已删除全局混音");
     expect(result.current.customPresets).toEqual([]);
   });
 });

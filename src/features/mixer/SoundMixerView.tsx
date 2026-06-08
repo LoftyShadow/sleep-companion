@@ -9,7 +9,7 @@ import {
   type SoundId,
 } from "../sounds/soundCatalog";
 import {
-  DEFAULT_ASMR_PRESET,
+  ALL_PRESET_GROUPS,
   DEFAULT_SOUND_PRESET,
 } from "../sounds/soundPresets";
 import type {
@@ -17,17 +17,14 @@ import type {
   SleepSoundPlaybackRequest,
 } from "../sleepSession/sleepSessionTypes";
 import type { FileSystemPort } from "../storage/FileSystemPort";
+import { ActiveMixPanel } from "./ActiveMixPanel";
 import { CustomAudioPanel } from "./CustomAudioPanel";
-import { CustomPresetPanel } from "./CustomPresetPanel";
+import { MixPlanPanel } from "./MixPlanPanel";
 import { MixerHeader } from "./MixerHeader";
-import { PlayerSummary } from "./PlayerSummary";
 import { SoundGrid } from "./SoundGrid";
-import { SoundLibrarySidebar } from "./SoundLibrarySidebar";
 import { useSoundLibraryState } from "./useSoundLibraryState";
 import "./SoundMixerView.css";
 import "./SoundMixerView.mobile.css";
-
-const ignoreCategoryChange = () => {};
 
 interface SoundMixerViewProps {
   fileSystem?: FileSystemPort;
@@ -65,20 +62,10 @@ export function SoundMixerView({
     removeCustomSound,
   } = useCustomSounds();
   const {
-    activeCategoryId,
-    activeOtherSoundQuickPreset,
-    activeSoundMode,
-    categories,
-    categoryHeadingId,
-    categoryLabel,
-    categorySounds,
-    handleCategoryChange,
-    modeConfig,
-    presetCount,
-    presetGroups,
-    setActiveSoundMode,
-    shouldShowSidebar,
-    soundCountsByCategory,
+    activeFilter,
+    activeFilterId,
+    filters,
+    handleFilterChange,
     sounds,
     visibleSounds,
   } = useSoundLibraryState(customSounds);
@@ -100,20 +87,7 @@ export function SoundMixerView({
     player,
     defaultPreset: DEFAULT_SOUND_PRESET,
   });
-  const activeSummary = useMemo(() => {
-    const activeSoundNames = sounds.reduce<string[]>((names, sound) => {
-      if (playingSoundIds.has(sound.id)) {
-        names.push(sound.name);
-      }
-
-      return names;
-    }, []);
-
-    return activeSoundNames.length > 0 ? activeSoundNames.join(" / ") : "待机";
-  }, [playingSoundIds, sounds]);
-  const transportLabel = isAnySoundPlaying
-    ? "停止播放"
-    : modeConfig.transportLabel;
+  const transportLabel = isAnySoundPlaying ? "停止播放" : "播放全局混音";
   const visibleErrorMessage = errorMessage ?? customSoundErrorMessage;
   const handledGlobalStopRequestIdRef = useRef(globalStopRequestId);
   const handledPlaybackControlRequestIdRef = useRef(0);
@@ -147,15 +121,24 @@ export function SoundMixerView({
     [sleepConfigSnapshot],
   );
   const canSaveCurrentPreset = currentPresetItems.length > 0;
+  const currentMixSoundIds = useMemo(
+    () => (playingSoundIds.size > 0 ? [...playingSoundIds] : resumeSoundIds),
+    [playingSoundIds, resumeSoundIds],
+  );
+  const activeSummary = useMemo(() => {
+    const soundById = new Map(sounds.map((sound) => [sound.id, sound]));
+    const activeSoundNames = currentMixSoundIds.flatMap((soundId) => {
+      const sound = soundById.get(soundId);
+
+      return sound ? [sound.name] : [];
+    });
+
+    return activeSoundNames.length > 0
+      ? activeSoundNames.join(" / ")
+      : "还没有选择声音";
+  }, [currentMixSoundIds, sounds]);
 
   const handleApplyPreset = useCallback(
-    (preset: Parameters<typeof applyPreset>[0]) => {
-      void applyPreset(preset);
-    },
-    [applyPreset],
-  );
-
-  const handleApplyCustomPreset = useCallback(
     (preset: Parameters<typeof applyPreset>[0]) => {
       void applyPreset(preset);
     },
@@ -179,25 +162,8 @@ export function SoundMixerView({
       return;
     }
 
-    if (activeSoundMode === "asmr") {
-      await applyPreset(DEFAULT_ASMR_PRESET);
-      return;
-    }
-
-    if (activeSoundMode === "other") {
-      await applyPreset(activeOtherSoundQuickPreset);
-      return;
-    }
-
     await toggleUnifiedPlayback();
-  }, [
-    activeSoundMode,
-    activeOtherSoundQuickPreset,
-    applyPreset,
-    isAnySoundPlaying,
-    stopAll,
-    toggleUnifiedPlayback,
-  ]);
+  }, [isAnySoundPlaying, stopAll, toggleUnifiedPlayback]);
 
   useEffect(() => {
     if (globalStopRequestId === handledGlobalStopRequestIdRef.current) {
@@ -291,68 +257,35 @@ export function SoundMixerView({
 
       <div className="app-layout">
         <section className="mixer-stage" aria-label="混音总览">
-          <MixerHeader
-            activeSoundMode={activeSoundMode}
-            modeConfig={modeConfig}
-            onSoundModeChange={setActiveSoundMode}
-          />
-
-          <PlayerSummary
+          <ActiveMixPanel
             activeSummary={activeSummary}
             isAnySoundPlaying={isAnySoundPlaying}
-            playingSoundCount={playingSoundIds.size}
+            mixSoundIds={currentMixSoundIds}
+            playingSoundIds={playingSoundIds}
+            sounds={sounds}
             transportLabel={transportLabel}
-            visibleSoundCount={visibleSounds.length}
+            volumes={volumes}
             onUnifiedPlayback={() => {
               void handleUnifiedPlayback();
             }}
+            onSetSoundVolume={handleSetSoundVolume}
+            onToggleSound={handleToggleSound}
           />
         </section>
 
         <div className="mixer-content">
-          <div className="sound-library-sidebar-stack">
-            {shouldShowSidebar ? (
-              <SoundLibrarySidebar
-                activeCategoryId={activeCategoryId}
-                activePresetId={activePresetId}
-                categories={categories}
-                categoryHeadingId={categoryHeadingId}
-                categoryLabel={categoryLabel}
-                modeConfig={modeConfig}
-                presetCount={presetCount}
-                presetGroups={presetGroups}
-                soundCountsByCategory={soundCountsByCategory}
-                totalSoundCount={categorySounds.length}
-                onApplyPreset={handleApplyPreset}
-                onCategoryChange={handleCategoryChange}
-              />
-            ) : (
-              <SoundLibrarySidebar
-                activeCategoryId="all"
-                activePresetId={activePresetId}
-                categories={[]}
-                categoryHeadingId={`${activeSoundMode}-unused-category-heading`}
-                categoryLabel={`${modeConfig.label}声音分类`}
-                modeConfig={modeConfig}
-                presetCount={presetCount}
-                presetGroups={presetGroups}
-                soundCountsByCategory={new Map()}
-                totalSoundCount={0}
-                onApplyPreset={handleApplyPreset}
-                onCategoryChange={ignoreCategoryChange}
-              />
-            )}
-            <CustomPresetPanel
-              canSaveCurrentPreset={canSaveCurrentPreset}
-              customPresetErrorMessage={customPresetErrorMessage}
-              customPresetMessage={customPresetMessage}
-              customPresets={customPresets}
-              isLoadingCustomPresets={isLoadingCustomPresets}
-              onApplyPreset={handleApplyCustomPreset}
-              onRemoveCustomPreset={handleRemoveCustomPreset}
-              onSaveCurrentPreset={handleSaveCurrentPreset}
-            />
-          </div>
+          <MixPlanPanel
+            activePresetId={activePresetId}
+            canSaveCurrentPreset={canSaveCurrentPreset}
+            customPresetErrorMessage={customPresetErrorMessage}
+            customPresetMessage={customPresetMessage}
+            customPresets={customPresets}
+            isLoadingCustomPresets={isLoadingCustomPresets}
+            presetGroups={ALL_PRESET_GROUPS}
+            onApplyPreset={handleApplyPreset}
+            onRemoveCustomPreset={handleRemoveCustomPreset}
+            onSaveCurrentPreset={handleSaveCurrentPreset}
+          />
 
           <section
             className="right-column glass-panel"
@@ -360,11 +293,18 @@ export function SoundMixerView({
           >
             <div className="section-heading sound-section-heading">
               <div>
-                <p className="app-kicker">{modeConfig.soundKicker}</p>
-                <h2 id="sounds-heading">{modeConfig.soundHeading}</h2>
+                <p className="app-kicker">全局声音库</p>
+                <h2 id="sounds-heading">声音库</h2>
+                <p className="sound-section-summary">{activeFilter.summary}</p>
               </div>
               <span className="section-meta">{visibleSounds.length} 个声音</span>
             </div>
+
+            <MixerHeader
+              activeFilterId={activeFilterId}
+              filters={filters}
+              onFilterChange={handleFilterChange}
+            />
 
             <CustomAudioPanel
               customSoundCount={customSounds.length}

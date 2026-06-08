@@ -65,11 +65,11 @@ function createPresetName(
     return normalizedName.slice(0, 32);
   }
 
-  return `我的配置 ${index}`;
+  return `我的混音 ${index}`;
 }
 
 function createPresetDescription(items: readonly SoundPresetItem[]): string {
-  return `${items.length} 个声音的自定义组合。`;
+  return `跨全部声音的 ${items.length} 个声音组合。`;
 }
 
 function isStoredPresetItem(value: unknown): value is SoundPresetItem {
@@ -123,7 +123,7 @@ function normalizeStoredPreset(
     description: preset.description.trim() || createPresetDescription(items),
     id: preset.id,
     items,
-    name: preset.name.trim().slice(0, 32) || "我的配置",
+    name: preset.name.trim().slice(0, 32) || "我的混音",
     updatedAt: preset.updatedAt,
   };
 }
@@ -186,7 +186,7 @@ export async function saveCustomSoundPreset(
 ): Promise<CustomSoundPreset> {
   const items = normalizePresetItems(input.items);
   if (items.length === 0) {
-    throw new Error("自定义配置至少需要一个声音");
+    throw new Error("全局混音至少需要一个声音");
   }
 
   const presets = await loadRawCustomSoundPresets(fs);

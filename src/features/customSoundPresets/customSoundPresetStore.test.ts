@@ -34,8 +34,8 @@ describe("customSoundPresetStore", () => {
     const presets = await listCustomSoundPresets(fileSystem);
 
     expect(presets).toHaveLength(MAX_CUSTOM_SOUND_PRESETS);
-    expect(presets[0].name).toBe(`我的配置 ${MAX_CUSTOM_SOUND_PRESETS + 1}`);
-    expect(presets[presets.length - 1]?.name).toBe("我的配置 2");
+    expect(presets[0].name).toBe(`我的混音 ${MAX_CUSTOM_SOUND_PRESETS + 1}`);
+    expect(presets[presets.length - 1]?.name).toBe("我的混音 2");
   });
 
   it("normalizes duplicate sounds and volume values", async () => {
@@ -74,6 +74,6 @@ describe("customSoundPresetStore", () => {
 
     await expect(
       saveCustomSoundPreset({ items: [] }, fileSystem, 1000),
-    ).rejects.toThrow("自定义配置至少需要一个声音");
+    ).rejects.toThrow("全局混音至少需要一个声音");
   });
 });
