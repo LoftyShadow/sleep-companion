@@ -108,6 +108,7 @@ describe("AppWorkspace integration", () => {
     render(
       <AppWorkspace
         bilibiliAuthClient={createLoggedOutBilibiliAuthClient()}
+        fileSystem={createMemoryFileSystem()}
         player={createPlayerPortTestDouble().player}
       />,
     );
@@ -122,6 +123,7 @@ describe("AppWorkspace integration", () => {
     expect(
       screen.getByRole("button", { name: "应用预设雨夜放松" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("4 个组合")).toBeInTheDocument();
     expect(screen.getByText("添加自定义音频")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "大雨" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "图书馆" })).toBeInTheDocument();
@@ -131,6 +133,96 @@ describe("AppWorkspace integration", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("选文件后自动导入")).toBeInTheDocument();
     expect(screen.getByLabelText("添加自定义音频")).toBeInTheDocument();
+  });
+
+  it("saves, applies and deletes a custom sound preset", async () => {
+    const user = userEvent.setup();
+    const { play, player, stopAll } = createPlayerPortTestDouble();
+    render(<AppWorkspace fileSystem={createMemoryFileSystem()} player={player} />);
+
+    await user.click(screen.getByRole("button", { name: "篝火" }));
+    fireEvent.change(screen.getByLabelText("篝火音量"), {
+      target: { value: "23" },
+    });
+    await user.click(screen.getByRole("button", { name: "保存当前配置" }));
+
+    expect(await screen.findByText("已保存为自定义配置")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "我的配置" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "应用配置我的配置 1" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "大雨" }));
+    await user.click(screen.getByRole("button", { name: "应用配置我的配置 1" }));
+
+    await waitFor(() => {
+      expect(stopAll).toHaveBeenCalledTimes(1);
+      expect(play).toHaveBeenLastCalledWith(
+        expect.objectContaining({ id: "campfire" }),
+        0.23,
+      );
+    });
+
+    await user.click(screen.getByRole("button", { name: "删除" }));
+
+    expect(await screen.findByText("已删除自定义配置")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "应用配置我的配置 1" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("saves and applies one custom configuration across sound modes", async () => {
+    const user = userEvent.setup();
+    const { play, player, stopAll } = createPlayerPortTestDouble();
+    render(
+      <AppWorkspace fileSystem={createMemoryFileSystem()} player={player} />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "篝火" }));
+    fireEvent.change(screen.getByLabelText("篝火音量"), {
+      target: { value: "24" },
+    });
+
+    await user.click(screen.getByRole("button", { name: "ASMR" }));
+    expect(screen.getByRole("heading", { name: "我的配置" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "气泡声" }));
+    fireEvent.change(screen.getByLabelText("气泡声音量"), {
+      target: { value: "35" },
+    });
+
+    await user.click(screen.getByRole("button", { name: "其他声音" }));
+    expect(screen.getByRole("heading", { name: "我的配置" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /雨声\s*17/u }));
+    await user.click(
+      screen.getByRole("button", { name: "小雨，雨声，XMSLEEP" }),
+    );
+    fireEvent.change(screen.getByLabelText("小雨，雨声，XMSLEEP音量"), {
+      target: { value: "46" },
+    });
+
+    await user.click(screen.getByRole("button", { name: "白噪音" }));
+    expect(screen.getByRole("heading", { name: "我的配置" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "保存当前配置" }));
+
+    expect(await screen.findByText("已保存为自定义配置")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "应用配置我的配置 1" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "大雨" }));
+    await user.click(screen.getByRole("button", { name: "应用配置我的配置 1" }));
+
+    await waitFor(() => {
+      expect(stopAll).toHaveBeenCalledTimes(1);
+      expect(play.mock.calls.slice(-3).map(([sound, volume]) => [
+        sound.id,
+        volume,
+      ])).toEqual([
+        ["campfire", 0.24],
+        ["asmr_bubbles", 0.35],
+        ["xmsleep_light_rain", 0.46],
+      ]);
+    });
   });
 
   it("uses the unified button to play and stop the default preset", async () => {

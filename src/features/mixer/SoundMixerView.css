@@ -22,6 +22,12 @@
   gap: 14px;
 }
 
+.sound-library-sidebar-stack {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+}
+
 .right-column {
   display: grid;
   min-width: 0;

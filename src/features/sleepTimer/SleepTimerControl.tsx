@@ -12,7 +12,7 @@ interface SleepTimerControlProps {
   variant?: SleepTimerControlVariant;
   onCancel: () => void;
   onDurationChange: (durationMinutes: number) => void;
-  onStart: () => void;
+  onStart: (durationMinutes?: number) => void;
 }
 
 const TIMER_PRESETS = [15, 30, 45, 60, 90, 120];
@@ -204,7 +204,9 @@ function handleCustomDurationChange(value: string) {
         <button
           className="sleep-timer-button sleep-timer-start-button"
           type="button"
-          onClick={onStart}
+          onClick={() => {
+            onStart();
+          }}
         >
           开始
         </button>

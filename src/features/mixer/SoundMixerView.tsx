@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCustomSoundPresets } from "../customSoundPresets/useCustomSoundPresets";
 import { useCustomSounds } from "../customSounds/useCustomSounds";
 import type { PlayerPort } from "../player/PlayerPort";
 import { useSoundMixer } from "../player/useSoundMixer";
@@ -11,7 +12,13 @@ import {
   DEFAULT_ASMR_PRESET,
   DEFAULT_SOUND_PRESET,
 } from "../sounds/soundPresets";
+import type {
+  SleepSoundConfigItem,
+  SleepSoundPlaybackRequest,
+} from "../sleepSession/sleepSessionTypes";
+import type { FileSystemPort } from "../storage/FileSystemPort";
 import { CustomAudioPanel } from "./CustomAudioPanel";
+import { CustomPresetPanel } from "./CustomPresetPanel";
 import { MixerHeader } from "./MixerHeader";
 import { PlayerSummary } from "./PlayerSummary";
 import { SoundGrid } from "./SoundGrid";
@@ -23,18 +30,32 @@ import "./SoundMixerView.mobile.css";
 const ignoreCategoryChange = () => {};
 
 interface SoundMixerViewProps {
+  fileSystem?: FileSystemPort;
   globalStopRequestId: number;
   playbackControlRequestId?: number;
   player: PlayerPort;
   onPlaybackControlStateChange?: (state: PlaybackControlState) => void;
+  onSleepConfigSnapshotChange?: (items: SleepSoundConfigItem[]) => void;
+  sleepPlaybackRequest?: SleepSoundPlaybackRequest | null;
 }
 
 export function SoundMixerView({
+  fileSystem,
   globalStopRequestId,
   playbackControlRequestId = 0,
   player,
   onPlaybackControlStateChange,
+  onSleepConfigSnapshotChange,
+  sleepPlaybackRequest = null,
 }: SoundMixerViewProps) {
+  const {
+    customPresetErrorMessage,
+    customPresetMessage,
+    customPresets,
+    isLoadingCustomPresets,
+    removeCustomPreset,
+    saveCurrentPreset,
+  } = useCustomSoundPresets(fileSystem);
   const {
     addCustomSoundFiles,
     customSoundErrorMessage,
@@ -68,10 +89,12 @@ export function SoundMixerView({
     activePresetId,
     applyPreset,
     isAnySoundPlaying,
+    playSoundConfig,
     stopAll,
     toggleUnifiedPlayback,
     toggleSound,
     setSoundVolume,
+    resumeSoundIds,
   } = useSoundMixer({
     sounds,
     player,
@@ -94,12 +117,60 @@ export function SoundMixerView({
   const visibleErrorMessage = errorMessage ?? customSoundErrorMessage;
   const handledGlobalStopRequestIdRef = useRef(globalStopRequestId);
   const handledPlaybackControlRequestIdRef = useRef(0);
+  const handledSleepPlaybackRequestIdRef = useRef(0);
+  const sleepConfigSnapshot = useMemo(() => {
+    const fallbackSoundIds = playingSoundIds.size > 0
+      ? [...playingSoundIds]
+      : resumeSoundIds;
+
+    return fallbackSoundIds.flatMap((soundId) => {
+      const sound = sounds.find((candidate) => candidate.id === soundId);
+      if (!sound) {
+        return [];
+      }
+
+      return [
+        {
+          name: sound.name,
+          soundId,
+          volume: volumes[soundId] ?? 0.5,
+        },
+      ];
+    });
+  }, [playingSoundIds, resumeSoundIds, sounds, volumes]);
+  const currentPresetItems = useMemo(
+    () =>
+      sleepConfigSnapshot.map((item) => ({
+        soundId: item.soundId,
+        volume: item.volume,
+      })),
+    [sleepConfigSnapshot],
+  );
+  const canSaveCurrentPreset = currentPresetItems.length > 0;
 
   const handleApplyPreset = useCallback(
     (preset: Parameters<typeof applyPreset>[0]) => {
       void applyPreset(preset);
     },
     [applyPreset],
+  );
+
+  const handleApplyCustomPreset = useCallback(
+    (preset: Parameters<typeof applyPreset>[0]) => {
+      void applyPreset(preset);
+    },
+    [applyPreset],
+  );
+
+  const handleSaveCurrentPreset = useCallback(() => {
+    void saveCurrentPreset(currentPresetItems);
+  }, [currentPresetItems, saveCurrentPreset]);
+
+  const handleRemoveCustomPreset = useCallback(
+    (presetId: Parameters<typeof removeCustomPreset>[0]) => {
+      void removeCustomPreset(presetId);
+    },
+    [removeCustomPreset],
   );
 
   const handleUnifiedPlayback = useCallback(async () => {
@@ -147,6 +218,10 @@ export function SoundMixerView({
   }, [activeSummary, isAnySoundPlaying, onPlaybackControlStateChange]);
 
   useEffect(() => {
+    onSleepConfigSnapshotChange?.(sleepConfigSnapshot);
+  }, [onSleepConfigSnapshotChange, sleepConfigSnapshot]);
+
+  useEffect(() => {
     if (
       playbackControlRequestId === 0 ||
       playbackControlRequestId === handledPlaybackControlRequestIdRef.current
@@ -157,6 +232,18 @@ export function SoundMixerView({
     handledPlaybackControlRequestIdRef.current = playbackControlRequestId;
     void handleUnifiedPlayback();
   }, [handleUnifiedPlayback, playbackControlRequestId]);
+
+  useEffect(() => {
+    if (
+      !sleepPlaybackRequest ||
+      sleepPlaybackRequest.requestId === handledSleepPlaybackRequestIdRef.current
+    ) {
+      return;
+    }
+
+    handledSleepPlaybackRequestIdRef.current = sleepPlaybackRequest.requestId;
+    void playSoundConfig(sleepPlaybackRequest.config.items);
+  }, [playSoundConfig, sleepPlaybackRequest]);
 
   const handleRemoveCustomSound = useCallback(
     async (soundId: SoundId) => {
@@ -223,37 +310,49 @@ export function SoundMixerView({
         </section>
 
         <div className="mixer-content">
-          {shouldShowSidebar ? (
-            <SoundLibrarySidebar
-              activeCategoryId={activeCategoryId}
-              activePresetId={activePresetId}
-              categories={categories}
-              categoryHeadingId={categoryHeadingId}
-              categoryLabel={categoryLabel}
-              modeConfig={modeConfig}
-              presetCount={presetCount}
-              presetGroups={presetGroups}
-              soundCountsByCategory={soundCountsByCategory}
-              totalSoundCount={categorySounds.length}
-              onApplyPreset={handleApplyPreset}
-              onCategoryChange={handleCategoryChange}
+          <div className="sound-library-sidebar-stack">
+            {shouldShowSidebar ? (
+              <SoundLibrarySidebar
+                activeCategoryId={activeCategoryId}
+                activePresetId={activePresetId}
+                categories={categories}
+                categoryHeadingId={categoryHeadingId}
+                categoryLabel={categoryLabel}
+                modeConfig={modeConfig}
+                presetCount={presetCount}
+                presetGroups={presetGroups}
+                soundCountsByCategory={soundCountsByCategory}
+                totalSoundCount={categorySounds.length}
+                onApplyPreset={handleApplyPreset}
+                onCategoryChange={handleCategoryChange}
+              />
+            ) : (
+              <SoundLibrarySidebar
+                activeCategoryId="all"
+                activePresetId={activePresetId}
+                categories={[]}
+                categoryHeadingId={`${activeSoundMode}-unused-category-heading`}
+                categoryLabel={`${modeConfig.label}声音分类`}
+                modeConfig={modeConfig}
+                presetCount={presetCount}
+                presetGroups={presetGroups}
+                soundCountsByCategory={new Map()}
+                totalSoundCount={0}
+                onApplyPreset={handleApplyPreset}
+                onCategoryChange={ignoreCategoryChange}
+              />
+            )}
+            <CustomPresetPanel
+              canSaveCurrentPreset={canSaveCurrentPreset}
+              customPresetErrorMessage={customPresetErrorMessage}
+              customPresetMessage={customPresetMessage}
+              customPresets={customPresets}
+              isLoadingCustomPresets={isLoadingCustomPresets}
+              onApplyPreset={handleApplyCustomPreset}
+              onRemoveCustomPreset={handleRemoveCustomPreset}
+              onSaveCurrentPreset={handleSaveCurrentPreset}
             />
-          ) : (
-            <SoundLibrarySidebar
-              activeCategoryId="all"
-              activePresetId={activePresetId}
-              categories={[]}
-              categoryHeadingId={`${activeSoundMode}-unused-category-heading`}
-              categoryLabel={`${modeConfig.label}声音分类`}
-              modeConfig={modeConfig}
-              presetCount={presetCount}
-              presetGroups={presetGroups}
-              soundCountsByCategory={new Map()}
-              totalSoundCount={0}
-              onApplyPreset={handleApplyPreset}
-              onCategoryChange={ignoreCategoryChange}
-            />
-          )}
+          </div>
 
           <section
             className="right-column glass-panel"

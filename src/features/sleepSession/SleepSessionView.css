@@ -1,0 +1,268 @@
+.sleep-session-view {
+  display: grid;
+  gap: 14px;
+}
+
+.sleep-session-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(128px, auto) minmax(220px, auto);
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
+}
+
+.sleep-session-hero__copy {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.sleep-session-hero__copy .app-kicker {
+  margin: 0;
+}
+
+.sleep-session-hero__copy h1 {
+  margin: 0;
+  color: var(--primary-strong);
+  font-size: clamp(1.55rem, 3vw, 2.35rem);
+  line-height: 1.05;
+}
+
+.sleep-session-hero__copy p {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.94rem;
+  font-weight: 780;
+  line-height: 1.55;
+}
+
+.sleep-session-current {
+  display: grid;
+  min-height: 74px;
+  align-content: center;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid rgba(63, 111, 90, 0.13);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(229, 241, 234, 0.46)),
+    rgba(255, 255, 255, 0.58);
+}
+
+.sleep-session-current span,
+.sleep-session-config__copy span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.sleep-session-current strong {
+  color: var(--primary-strong);
+  font-size: 1.05rem;
+  font-weight: 950;
+}
+
+.sleep-session-actions,
+.sleep-session-config__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.sleep-session-primary-button,
+.sleep-session-secondary-button,
+.sleep-session-config-button,
+.sleep-session-delete-button {
+  min-height: 42px;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid rgba(63, 111, 90, 0.16);
+  border-radius: 8px;
+  font-size: 0.84rem;
+  font-weight: 950;
+  transition:
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.sleep-session-primary-button:hover:not(:disabled),
+.sleep-session-secondary-button:hover:not(:disabled),
+.sleep-session-config-button:hover,
+.sleep-session-delete-button:hover {
+  box-shadow: 0 10px 20px rgba(20, 33, 28, 0.1);
+  transform: translateY(-1px);
+}
+
+.sleep-session-primary-button,
+.sleep-session-config-button {
+  color: white;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0)),
+    linear-gradient(135deg, var(--primary-strong), var(--teal));
+}
+
+.sleep-session-secondary-button {
+  color: var(--primary-strong);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(229, 241, 234, 0.62)),
+    rgba(255, 255, 255, 0.74);
+}
+
+.sleep-session-primary-button:disabled,
+.sleep-session-secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.sleep-session-config-overview,
+.sleep-session-modules,
+.sleep-session-recent {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.sleep-session-config-overview__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(136px, auto);
+  align-items: center;
+  gap: 12px;
+}
+
+.sleep-session-module {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  min-height: 74px;
+  padding: 12px;
+  border: 1px solid rgba(63, 111, 90, 0.12);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.7), rgba(232, 243, 237, 0.36)),
+    rgba(255, 255, 255, 0.58);
+}
+
+.sleep-session-module {
+  grid-template-columns: minmax(118px, auto) minmax(0, 1fr) minmax(86px, auto);
+}
+
+.sleep-session-module__copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.sleep-session-config-overview__body p,
+.sleep-session-module__copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.sleep-session-module__copy strong {
+  color: var(--primary-strong);
+  font-size: 0.86rem;
+  font-weight: 950;
+}
+
+.sleep-session-module-toggle {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 950;
+}
+
+.sleep-session-module-toggle input {
+  width: 18px;
+  aspect-ratio: 1;
+  accent-color: var(--teal);
+}
+
+.sleep-session-config-list {
+  display: grid;
+  gap: 10px;
+}
+
+.sleep-session-config {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(168px, auto);
+  align-items: center;
+  gap: 12px;
+  min-height: 82px;
+  padding: 12px;
+  border: 1px solid rgba(63, 111, 90, 0.12);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.7), rgba(232, 243, 237, 0.36)),
+    rgba(255, 255, 255, 0.58);
+}
+
+.sleep-session-config__copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.sleep-session-config__copy h3 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sleep-session-config__copy p,
+.sleep-session-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.sleep-session-delete-button {
+  color: #7f302b;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.66), rgba(255, 239, 234, 0.68)),
+    rgba(255, 242, 238, 0.72);
+}
+
+@media (max-width: 840px) {
+  .sleep-session-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .sleep-session-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sleep-session-config-overview__body,
+  .sleep-session-module {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .sleep-session-hero,
+  .sleep-session-config-overview,
+  .sleep-session-modules,
+  .sleep-session-recent {
+    padding: 12px;
+  }
+
+  .sleep-session-config {
+    grid-template-columns: 1fr;
+  }
+
+  .sleep-session-config__actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

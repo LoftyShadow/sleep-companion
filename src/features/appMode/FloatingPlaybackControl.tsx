@@ -22,7 +22,7 @@ interface FloatingPlaybackControlProps {
     status: SleepTimerStatus;
     onCancel: () => void;
     onDurationChange: (durationMinutes: number) => void;
-    onStart: () => void;
+    onStart: (durationMinutes?: number) => void;
   };
   onGlobalToggle: () => void;
   onModuleToggle: (moduleId: PlaybackModuleId) => void;

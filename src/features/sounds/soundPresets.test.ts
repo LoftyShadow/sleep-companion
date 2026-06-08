@@ -15,7 +15,22 @@ describe("PRESET_GROUPS", () => {
       "focus",
       "nature",
     ]);
-    expect(BUILT_IN_PRESETS.length).toBeGreaterThanOrEqual(10);
+    expect(
+      PRESET_GROUPS.flatMap((group) => group.presets).map(
+        (preset) => preset.id,
+      ),
+    ).toEqual([
+      "rainy_night",
+      "campfire_rest",
+      "library_focus",
+      "forest_morning",
+    ]);
+    expect(
+      PRESET_GROUPS.reduce(
+        (count, group) => count + group.presets.length,
+        0,
+      ),
+    ).toBe(4);
     expect(DEFAULT_SOUND_PRESET.id).toBe("rainy_night");
   });
 

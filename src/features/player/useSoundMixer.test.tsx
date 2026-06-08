@@ -223,6 +223,34 @@ describe("useSoundMixer", () => {
     );
   });
 
+  it("plays a sleep sound config with stored volumes", async () => {
+    const { play, player, stopAll } = createPlayer();
+    const { result } = renderHook(() =>
+      useSoundMixer({ sounds: BUILT_IN_SOUNDS, player }),
+    );
+
+    await act(async () => {
+      await result.current.playSoundConfig([
+        { soundId: "heavy_rain", volume: 0.31 },
+        { soundId: "missing" as never, volume: 0.9 },
+        { soundId: "thunder", volume: 0.17 },
+      ]);
+    });
+
+    expect(stopAll).toHaveBeenCalledTimes(1);
+    expect(play.mock.calls.map(([sound, volume]) => [sound.id, volume])).toEqual([
+      ["heavy_rain", 0.31],
+      ["thunder", 0.17],
+    ]);
+    expect(result.current.volumes.heavy_rain).toBe(0.31);
+    expect(result.current.volumes.thunder).toBe(0.17);
+    expect([...result.current.playingSoundIds]).toEqual([
+      "heavy_rain",
+      "thunder",
+    ]);
+    expect(result.current.resumeSoundIds).toEqual(["heavy_rain", "thunder"]);
+  });
+
   it("starts every preset sound before waiting for slow play promises", async () => {
     const playRequests: Array<ReturnType<typeof createDeferred<void>>> = [];
     const playerMocks = createPlayer();

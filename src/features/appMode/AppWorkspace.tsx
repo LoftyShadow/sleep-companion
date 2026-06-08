@@ -6,6 +6,12 @@ import type { TtsEnginePort } from "../audiobook/TtsEnginePort";
 import { SoundMixerView } from "../mixer/SoundMixerView";
 import type { PlayerPort } from "../player/PlayerPort";
 import { useRuntimePlayer } from "../player/useRuntimePlayer";
+import { SleepSessionView } from "../sleepSession/SleepSessionView";
+import type {
+  RecentSleepSoundConfig,
+  SleepSoundConfigItem,
+  SleepSoundPlaybackRequest,
+} from "../sleepSession/sleepSessionTypes";
 import { useGlobalSleepTimer } from "../sleepTimer/useGlobalSleepTimer";
 import { VideoListeningView } from "../videoListening/VideoListeningView";
 import type { BilibiliAuthClient } from "../videoListening/bilibiliAuth";
@@ -37,6 +43,11 @@ export function AppWorkspace({
   ttsEngine,
 }: AppWorkspaceProps) {
   const [activeAppMode, setActiveAppMode] = useState<AppMode>("mixer");
+  const [sleepConfigItems, setSleepConfigItems] = useState<
+    SleepSoundConfigItem[]
+  >([]);
+  const [sleepPlaybackRequest, setSleepPlaybackRequest] =
+    useState<SleepSoundPlaybackRequest | null>(null);
   const {
     handleShellScroll,
     resetScrollPosition,
@@ -74,6 +85,53 @@ export function AppWorkspace({
     },
     [markModeOpened, openAppMode],
   );
+  const handleSleepConfigSnapshotChange = useCallback(
+    (items: SleepSoundConfigItem[]) => {
+      setSleepConfigItems(items);
+    },
+    [],
+  );
+  const handleUseSleepConfig = useCallback((config: RecentSleepSoundConfig) => {
+    setSleepPlaybackRequest((currentRequest) => ({
+      config,
+      requestId: (currentRequest?.requestId ?? 0) + 1,
+    }));
+  }, []);
+  const handlePrepareSleepModule = useCallback(
+    (mode: Extract<AppMode, "audiobook" | "video">) => {
+      markModeOpened(mode);
+      openAppMode(mode);
+    },
+    [markModeOpened, openAppMode],
+  );
+  const handleOpenSleepSoundConfig = useCallback(() => {
+    openAppMode("mixer");
+  }, [openAppMode]);
+  const handleStartSleepModules = useCallback(
+    (modules: { audiobook: boolean; video: boolean }) => {
+      if (
+        modules.audiobook &&
+        playbackControlStates.audiobook.canToggle &&
+        playbackControlStates.audiobook.status !== "unavailable"
+      ) {
+        requestModulePlaybackToggle("audiobook");
+      }
+      if (
+        modules.video &&
+        playbackControlStates.video.canToggle &&
+        playbackControlStates.video.status !== "unavailable"
+      ) {
+        requestModulePlaybackToggle("video");
+      }
+    },
+    [
+      playbackControlStates.audiobook.canToggle,
+      playbackControlStates.audiobook.status,
+      playbackControlStates.video.canToggle,
+      playbackControlStates.video.status,
+      requestModulePlaybackToggle,
+    ],
+  );
 
   return (
     <>
@@ -107,12 +165,15 @@ export function AppWorkspace({
         >
           {activePlayer ? (
             <SoundMixerView
+              fileSystem={fileSystem}
               globalStopRequestId={sleepTimer.globalStopRequestId}
               playbackControlRequestId={playbackControlRequestIds.mixer}
               player={activePlayer}
+              sleepPlaybackRequest={sleepPlaybackRequest}
               onPlaybackControlStateChange={
                 handleMixerPlaybackControlStateChange
               }
+              onSleepConfigSnapshotChange={handleSleepConfigSnapshotChange}
             />
           ) : (
             <div className="app-player-loading">
@@ -121,6 +182,33 @@ export function AppWorkspace({
               <p role="status">正在准备播放器</p>
             </div>
           )}
+        </section>
+
+        <section
+          className="app-mode-panel"
+          hidden={activeAppMode !== "sleep"}
+          aria-label="睡眠"
+        >
+          {activeAppMode === "sleep" ? (
+            <SleepSessionView
+              currentConfigItems={sleepConfigItems}
+              durationMinutes={sleepTimer.durationMinutes}
+              fileSystem={fileSystem}
+              moduleStates={{
+                audiobook: playbackControlStates.audiobook,
+                video: playbackControlStates.video,
+              }}
+              remainingSeconds={sleepTimer.remainingSeconds}
+              status={sleepTimer.status}
+              onCancelTimer={sleepTimer.cancel}
+              onDurationChange={sleepTimer.setDurationMinutes}
+              onOpenSoundConfig={handleOpenSleepSoundConfig}
+              onPrepareModule={handlePrepareSleepModule}
+              onStartModules={handleStartSleepModules}
+              onStartTimer={sleepTimer.start}
+              onUseConfig={handleUseSleepConfig}
+            />
+          ) : null}
         </section>
 
         <section

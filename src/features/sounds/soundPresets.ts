@@ -1,28 +1,21 @@
-import type { BuiltInSoundId } from "./soundCatalog";
+import type { SoundId } from "./soundCatalog";
 
 export type SoundPresetId =
   | "rainy_night"
   | "campfire_rest"
-  | "umbrella_sleep"
   | "library_focus"
-  | "rainy_focus"
-  | "office_focus"
-  | "coffee_morning"
   | "forest_morning"
-  | "soft_storm"
-  | "quiet_water"
-  | "snow_field"
-  | "windmill_evening"
   | "asmr_ear_care"
   | "asmr_desktop_taps"
   | "asmr_liquid_close"
   | "asmr_texture_walk"
+  | `custom_preset:${string}`
   | `other_sound_quick_mix_${string}`;
 
 export type SoundPresetGroupId = "sleep" | "focus" | "nature" | "asmr";
 
 export interface SoundPresetItem {
-  soundId: BuiltInSoundId;
+  soundId: SoundId;
   volume: number;
 }
 
@@ -63,15 +56,6 @@ export const PRESET_GROUPS: SoundPresetGroup[] = [
           { soundId: "wind", volume: 0.2 },
         ],
       },
-      {
-        id: "umbrella_sleep",
-        name: "伞下入睡",
-        description: "近处雨声搭配低风声，适合快速放松。",
-        items: [
-          { soundId: "umbrella_rain", volume: 0.56 },
-          { soundId: "wind", volume: 0.16 },
-        ],
-      },
     ],
   },
   {
@@ -88,34 +72,6 @@ export const PRESET_GROUPS: SoundPresetGroup[] = [
           { soundId: "clock", volume: 0.16 },
         ],
       },
-      {
-        id: "rainy_focus",
-        name: "雨中工作",
-        description: "中等雨声搭配图书馆环境声。",
-        items: [
-          { soundId: "heavy_rain", volume: 0.44 },
-          { soundId: "library", volume: 0.28 },
-        ],
-      },
-      {
-        id: "office_focus",
-        name: "办公室白噪",
-        description: "办公室底噪加轻打字声，保持工作节奏。",
-        items: [
-          { soundId: "office", volume: 0.46 },
-          { soundId: "typewriter", volume: 0.18 },
-          { soundId: "clock", volume: 0.12 },
-        ],
-      },
-      {
-        id: "coffee_morning",
-        name: "清晨咖啡",
-        description: "咖啡馆氛围和键盘声，适合轻量任务。",
-        items: [
-          { soundId: "morning_coffee", volume: 0.5 },
-          { soundId: "keyboard", volume: 0.2 },
-        ],
-      },
     ],
   },
   {
@@ -129,43 +85,6 @@ export const PRESET_GROUPS: SoundPresetGroup[] = [
         items: [
           { soundId: "forest_birds", volume: 0.52 },
           { soundId: "wind", volume: 0.18 },
-        ],
-      },
-      {
-        id: "soft_storm",
-        name: "远处雷雨",
-        description: "雨声和低雷声形成包裹感。",
-        items: [
-          { soundId: "heavy_rain", volume: 0.52 },
-          { soundId: "thunder", volume: 0.34 },
-          { soundId: "wind", volume: 0.28 },
-        ],
-      },
-      {
-        id: "quiet_water",
-        name: "安静水面",
-        description: "漂流和划船声组合，形成柔和水面感。",
-        items: [
-          { soundId: "drifting", volume: 0.48 },
-          { soundId: "rowing", volume: 0.26 },
-        ],
-      },
-      {
-        id: "snow_field",
-        name: "雪地散步",
-        description: "雪地脚步声叠加轻风，适合冷静下来。",
-        items: [
-          { soundId: "snow_walking", volume: 0.46 },
-          { soundId: "wind", volume: 0.2 },
-        ],
-      },
-      {
-        id: "windmill_evening",
-        name: "风车傍晚",
-        description: "风车和风声形成稳定的自然背景。",
-        items: [
-          { soundId: "windmill", volume: 0.42 },
-          { soundId: "wind", volume: 0.24 },
         ],
       },
     ],

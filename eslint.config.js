@@ -15,6 +15,10 @@ export default defineConfig([
       "src-tauri/gen/**",
       "src-tauri/target/**",
       "target/**",
+      "vite.config.d.ts",
+      "vite.config.js",
+      "vitest.config.d.ts",
+      "vitest.config.js",
     ],
   },
   {

@@ -6,7 +6,7 @@ interface GlobalSleepTimerState {
   globalStopRequestId: number;
   remainingSeconds: number;
   setDurationMinutes: (durationMinutes: number) => void;
-  start: () => void;
+  start: (durationMinutes?: number) => void;
   cancel: () => void;
   status: SleepTimerStatus;
 }
@@ -21,8 +21,14 @@ export function useGlobalSleepTimer(
   const [status, setStatus] = useState<SleepTimerStatus>("idle");
   const [globalStopRequestId, setGlobalStopRequestId] = useState(0);
 
-  const start = useCallback(() => {
-    setRemainingSeconds(durationMinutes * 60);
+  const start = useCallback((nextDurationMinutes?: number) => {
+    const timerDurationMinutes = nextDurationMinutes ?? durationMinutes;
+
+    if (nextDurationMinutes !== undefined) {
+      setDurationMinutes(nextDurationMinutes);
+    }
+
+    setRemainingSeconds(timerDurationMinutes * 60);
     setStatus("running");
   }, [durationMinutes]);
 

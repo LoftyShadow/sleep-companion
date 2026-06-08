@@ -162,6 +162,154 @@ describe("AppWorkspace", () => {
     expect(stopAll).not.toHaveBeenCalled();
   });
 
+  it("starts a sleep session from the current sound config", async () => {
+    const user = userEvent.setup();
+    const { play, player, stopAll } = createPlayerPortTestDouble();
+    render(
+      <AppWorkspace
+        fileSystem={createMemoryFileSystem()}
+        player={player}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "大雨" }));
+    await user.click(screen.getByRole("button", { name: "睡眠" }));
+
+    const sleepPanel = screen.getByRole("region", { name: "睡眠" });
+    expect(
+      within(sleepPanel).getByRole("heading", { name: "今晚的会话" }),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("region", { name: "当前声音配置" })).getByText(
+        "大雨",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(sleepPanel).getByRole("button", { name: "去声音页配置" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "添加声音" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("大雨 音量")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("自定义"), {
+      target: { value: "45" },
+    });
+    await user.click(screen.getByRole("button", { name: "开始睡眠" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("timer")).toHaveTextContent("剩余 45:00");
+    });
+    expect(stopAll).toHaveBeenCalledTimes(1);
+    expect(play).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: "heavy_rain" }),
+      0.62,
+    );
+  });
+
+  it("keeps detailed sound configuration in the sound mode", async () => {
+    const user = userEvent.setup();
+    const { play, player } = createPlayerPortTestDouble();
+    render(
+      <AppWorkspace
+        fileSystem={createMemoryFileSystem()}
+        player={player}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "睡眠" }));
+    const sleepPanel = screen.getByRole("region", { name: "睡眠" });
+
+    expect(screen.queryByRole("combobox", { name: "添加声音" })).not.toBeInTheDocument();
+    expect(
+      within(sleepPanel).getByRole("button", { name: "去声音页配置" }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      within(sleepPanel).getByRole("button", { name: "去声音页配置" }),
+    );
+
+    expect(screen.getByRole("heading", { name: "白噪音" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "篝火" }));
+    fireEvent.change(screen.getByLabelText("篝火音量"), {
+      target: { value: "23" },
+    });
+    await user.click(screen.getByRole("button", { name: "睡眠" }));
+    await user.click(screen.getByRole("button", { name: "开始睡眠" }));
+
+    await waitFor(() => {
+      expect(play).toHaveBeenLastCalledWith(
+        expect.objectContaining({ id: "campfire" }),
+        0.23,
+      );
+    });
+  });
+
+  it("lets the sleep entry decide whether to include audiobook and video", async () => {
+    const user = userEvent.setup();
+    const { play, player } = createPlayerPortTestDouble();
+    const { engine, speak } = createTtsEngineTestDouble();
+    render(
+      <AppWorkspace
+        fileSystem={createMemoryFileSystem()}
+        player={player}
+        ttsEngine={engine}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "听书" }));
+    await user.type(screen.getByLabelText("书稿文本"), TEST_AUDIOBOOK_TEXT);
+    await user.click(screen.getByRole("button", { name: "睡眠" }));
+    await user.click(screen.getByRole("checkbox", { name: "听书" }));
+    await user.click(screen.getByRole("checkbox", { name: "听视频" }));
+    expect(screen.getByRole("button", { name: "开始睡眠" })).toBeDisabled();
+    await user.click(screen.getByRole("checkbox", { name: "听视频" }));
+    await user.click(screen.getByRole("button", { name: "开始睡眠" }));
+
+    await waitFor(() => {
+      expect(speak).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: FIRST_TEST_AUDIOBOOK_SEGMENT,
+        }),
+      );
+    });
+    expect(play).toHaveBeenCalled();
+    expect(screen.getByText("未载入来源")).toBeInTheDocument();
+  });
+
+  it("reuses and deletes a recent sleep config", async () => {
+    const user = userEvent.setup();
+    const { play, player, stopAll } = createPlayerPortTestDouble();
+    const fileSystem = createMemoryFileSystem();
+    render(<AppWorkspace fileSystem={fileSystem} player={player} />);
+
+    await user.click(screen.getByRole("button", { name: "大雨" }));
+    await user.click(screen.getByRole("button", { name: "睡眠" }));
+    await user.click(screen.getByRole("button", { name: "保存配置" }));
+
+    expect(
+      await within(screen.getByRole("region", { name: "最近配置" })).findByRole(
+        "heading",
+        { name: "大雨" },
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "声音" }));
+    await user.click(screen.getByRole("button", { name: "大雨" }));
+    await user.click(screen.getByRole("button", { name: "睡眠" }));
+    await user.click(screen.getByRole("button", { name: "复用" }));
+
+    await waitFor(() => {
+      expect(stopAll).toHaveBeenCalledTimes(1);
+      expect(play).toHaveBeenLastCalledWith(
+        expect.objectContaining({ id: "heavy_rain" }),
+        0.62,
+      );
+    });
+
+    await user.click(screen.getByRole("button", { name: "删除" }));
+
+    expect(screen.getByText("最近还没有保存过睡眠配置。")).toBeInTheDocument();
+  });
+
   it("uses the floating control to play and pause ambient sounds", async () => {
     const user = userEvent.setup();
     const { play, player, stopAll } = createPlayerPortTestDouble();

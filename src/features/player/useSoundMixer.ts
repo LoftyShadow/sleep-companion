@@ -21,6 +21,11 @@ interface UseSoundMixerOptions {
   defaultPreset?: SoundPreset;
 }
 
+interface SoundMixerConfigItem {
+  soundId: SoundId;
+  volume: number;
+}
+
 const VOLUME_COMMIT_DELAY_MS = 64;
 
 interface PendingVolumeCommit {
@@ -277,23 +282,68 @@ export function useSoundMixer({
       });
       const results = await Promise.allSettled(playRequests);
       const playedSoundIds: SoundId[] = [];
-      let playbackError: Error | null = null;
 
       for (const result of results) {
-        if (result.status === "fulfilled") {
-          playedSoundIds.push(result.value);
-        } else {
-          playbackError ??= toPlaybackError(result.reason);
+        if (result.status === "rejected") {
+          throw toPlaybackError(result.reason);
         }
-      }
 
-      if (playbackError) {
-        throw playbackError;
+        playedSoundIds.push(result.value);
       }
 
       return playedSoundIds;
     },
     [player, soundById],
+  );
+
+  const playSoundConfig = useCallback(
+    async (items: readonly SoundMixerConfigItem[]) => {
+      const nextVolumes = { ...volumesRef.current };
+      const soundIds: SoundId[] = [];
+      const seenSoundIds = new Set<SoundId>();
+
+      for (const item of items) {
+        if (seenSoundIds.has(item.soundId) || !soundById.has(item.soundId)) {
+          continue;
+        }
+
+        seenSoundIds.add(item.soundId);
+        soundIds.push(item.soundId);
+        nextVolumes[item.soundId] = normalizeVolume(item.volume);
+      }
+
+      if (soundIds.length === 0) {
+        setErrorMessage("睡眠配置没有可播放的声音");
+        return;
+      }
+
+      try {
+        setErrorMessage(null);
+        cancelPendingVolumeCommits();
+        logMixerEvent("play-config-request", { soundIds });
+        await player.stopAll();
+        const playedSoundIds = await playSoundIds(soundIds, nextVolumes);
+        replaceVolumes(nextVolumes);
+        replacePlayingSoundIds(new Set(playedSoundIds));
+        replaceResumeSoundIds(playedSoundIds);
+        setActivePresetId(null);
+        logMixerEvent("play-config-success", { soundIds: playedSoundIds });
+      } catch (error) {
+        await player.stopAll().catch(() => undefined);
+        replacePlayingSoundIds(new Set());
+        logMixerError("play-config-failed", error, { soundIds });
+        setErrorMessage(getSoundPlaybackErrorMessage(error));
+      }
+    },
+    [
+      cancelPendingVolumeCommits,
+      player,
+      playSoundIds,
+      replacePlayingSoundIds,
+      replaceResumeSoundIds,
+      replaceVolumes,
+      soundById,
+    ],
   );
 
   const toggleSound = useCallback(
@@ -467,6 +517,8 @@ export function useSoundMixer({
     applyPreset,
     isAnySoundPlaying: playingSoundIds.size > 0,
     playingSoundIds,
+    playSoundConfig,
+    resumeSoundIds,
     volumes,
     errorMessage,
     toggleUnifiedPlayback,
