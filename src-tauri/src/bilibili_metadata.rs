@@ -1,13 +1,13 @@
 use crate::bilibili_common::{
-    apply_cookie_header, normalize_image_url, now_unix_seconds, parse_wbi_keys, read_array,
-    read_non_empty_string, read_number_as_string, read_path, read_u64, signed_wbi_query,
-    store_response_cookies, BilibiliCookieStore, BILIBILI_BROWSER_USER_AGENT,
+    create_bilibili_client, ensure_bilibili_success, fetch_bilibili_json, fetch_bilibili_wbi_keys,
+    normalize_image_url, now_unix_seconds, read_array, read_non_empty_string,
+    read_number_as_string, read_path, read_u64, send_bilibili_request, signed_wbi_query,
+    BilibiliCookieStore,
 };
 use crate::bilibili_session::{load_active_bilibili_session, StoredBilibiliSession};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeSet;
-use std::time::Duration;
 const DEFAULT_DM_IMG_LIST: &str = "[]";
 const DEFAULT_DM_IMG_STR: &str = "V2ViR0wgMS4wIChPcGVuR0wgRVMgMi4wIENocm9taXVtKQ";
 const DEFAULT_DM_COVER_IMG_STR: &str = "QU5HTEUgKEFNRCwgQU1EIFJhZGVvbiA3ODBNIEdyYXBoaWNzIChyYWRlb25zaSBwaG9lbml4IEFDTyksIE9wZW5HTCBFUyAzLjIpR29vZ2xlIEluYy4gKEFNRC";
@@ -160,44 +160,8 @@ fn parse_duration_seconds(value: &Value, path: &[&str]) -> Option<u32> {
     }
 }
 
-fn ensure_bilibili_success(value: &Value) -> Result<(), String> {
-    let code = value
-        .get("code")
-        .and_then(Value::as_i64)
-        .ok_or_else(|| "B 站元信息响应缺少状态码".to_string())?;
-
-    if code == 0 {
-        return Ok(());
-    }
-
-    let message = value
-        .get("message")
-        .or_else(|| value.get("msg"))
-        .and_then(Value::as_str)
-        .filter(|text| !text.trim().is_empty())
-        .unwrap_or("B 站元信息接口返回失败");
-
-    Err(message.to_string())
-}
-
 fn ensure_bilibili_creator_success(value: &Value) -> Result<(), String> {
-    let code = value
-        .get("code")
-        .and_then(Value::as_i64)
-        .ok_or_else(|| "B 站 UP 主视频响应缺少状态码".to_string())?;
-
-    if code == 0 {
-        return Ok(());
-    }
-
-    let message = value
-        .get("message")
-        .or_else(|| value.get("msg"))
-        .and_then(Value::as_str)
-        .filter(|text| !text.trim().is_empty())
-        .unwrap_or("B 站 UP 主视频接口返回失败");
-
-    Err(message.to_string())
+    ensure_bilibili_success(value, "B 站 UP 主视频接口返回失败")
 }
 
 fn validate_creator_mid(mid: &str) -> Result<String, String> {
@@ -252,7 +216,7 @@ fn create_creator_request_context(
 }
 
 fn parse_video_metadata(value: &Value) -> Result<BilibiliMetadata, String> {
-    ensure_bilibili_success(value)?;
+    ensure_bilibili_success(value, "B 站元信息接口返回失败")?;
 
     let title = read_non_empty_string(value, &["data", "title"])
         .ok_or_else(|| "B 站视频元信息缺少标题".to_string())?;
@@ -265,7 +229,7 @@ fn parse_video_metadata(value: &Value) -> Result<BilibiliMetadata, String> {
 }
 
 fn parse_episode_metadata(value: &Value, episode_id: &str) -> Result<BilibiliMetadata, String> {
-    ensure_bilibili_success(value)?;
+    ensure_bilibili_success(value, "B 站元信息接口返回失败")?;
 
     let result = value
         .get("result")
@@ -302,7 +266,7 @@ fn parse_episode_metadata(value: &Value, episode_id: &str) -> Result<BilibiliMet
 }
 
 fn parse_live_metadata(value: &Value, room_id: &str) -> Result<BilibiliMetadata, String> {
-    ensure_bilibili_success(value)?;
+    ensure_bilibili_success(value, "B 站元信息接口返回失败")?;
 
     let title = read_non_empty_string(value, &["data", "title"])
         .map(str::to_string)
@@ -552,32 +516,6 @@ fn parse_metadata(
     }
 }
 
-async fn fetch_wbi_keys(
-    client: &reqwest::Client,
-    cookie_store: &mut BilibiliCookieStore,
-) -> Result<(String, String), String> {
-    let response = apply_cookie_header(
-        client
-            .get("https://api.bilibili.com/x/web-interface/nav")
-            .header("Referer", "https://www.bilibili.com/"),
-        cookie_store,
-    )
-    .send()
-    .await
-    .map_err(|error| format!("请求 B 站 WBI 参数失败：{error}"))?;
-    store_response_cookies(cookie_store, &response);
-    let status = response.status();
-    if !status.is_success() {
-        return Err(format!("请求 B 站 WBI 参数失败：HTTP {status}"));
-    }
-    let value = response
-        .json::<Value>()
-        .await
-        .map_err(|error| format!("解析 B 站 WBI 参数失败：{error}"))?;
-
-    parse_wbi_keys(&value)
-}
-
 fn optional_non_empty(value: Option<String>, fallback: &str) -> String {
     value
         .map(|text| text.trim().to_string())
@@ -700,22 +638,15 @@ async fn prepare_bilibili_creator_session(
     cookie_store: &mut BilibiliCookieStore,
     mid: &str,
 ) -> Result<(), String> {
-    let response = apply_cookie_header(
+    send_bilibili_request(
         client
             .get(format!("https://space.bilibili.com/{mid}/upload/video"))
             .header("Referer", "https://www.bilibili.com/"),
-        cookie_store,
+        Some(cookie_store),
+        "B 站匿名访问会话",
     )
-    .send()
     .await
-    .map_err(|error| format!("建立 B 站匿名访问会话失败：{error}"))?;
-    store_response_cookies(cookie_store, &response);
-    let status = response.status();
-    if status.is_success() {
-        return Ok(());
-    }
-
-    Err(format!("建立 B 站匿名访问会话失败：HTTP {status}"))
+    .map(|_| ())
 }
 
 async fn fetch_bilibili_creator_dynamic_videos_page(
@@ -728,7 +659,7 @@ async fn fetch_bilibili_creator_dynamic_videos_page(
     offset: Option<&str>,
 ) -> Result<BilibiliCreatorDynamicVideosPage, String> {
     let url = creator_dynamic_videos_url(mid, offset, img_key, sub_key, now_unix_seconds()?)?;
-    let response = apply_cookie_header(
+    let value = fetch_bilibili_json(
         client
             .get(url)
             .header("Origin", "https://t.bilibili.com")
@@ -736,20 +667,11 @@ async fn fetch_bilibili_creator_dynamic_videos_page(
                 "Referer",
                 format!("https://space.bilibili.com/{mid}/dynamic"),
             ),
-        cookie_store,
+        Some(cookie_store),
+        "B 站 UP 主动态",
+        "B 站 UP 主动态",
     )
-    .send()
-    .await
-    .map_err(|error| format!("请求 B 站 UP 主动态失败：{error}"))?;
-    store_response_cookies(cookie_store, &response);
-    let status = response.status();
-    if !status.is_success() {
-        return Err(format!("请求 B 站 UP 主动态失败：HTTP {status}"));
-    }
-    let value = response
-        .json::<Value>()
-        .await
-        .map_err(|error| format!("解析 B 站 UP 主动态失败：{error}"))?;
+    .await?;
 
     parse_creator_dynamic_videos_page(mid, limit, &value)
 }
@@ -761,7 +683,7 @@ async fn fetch_bilibili_creator_dynamic_videos(
     context: &mut BilibiliCreatorRequestContext,
 ) -> Result<BilibiliCreatorVideos, String> {
     prepare_bilibili_creator_session(client, &mut context.cookie_store, mid).await?;
-    let (img_key, sub_key) = fetch_wbi_keys(client, &mut context.cookie_store).await?;
+    let (img_key, sub_key) = fetch_bilibili_wbi_keys(client, &mut context.cookie_store).await?;
     let mut creator = None;
     let mut videos = Vec::new();
     let mut seen_bvids = BTreeSet::new();
@@ -826,7 +748,7 @@ async fn fetch_bilibili_creator_space_videos(
     context: &mut BilibiliCreatorRequestContext,
 ) -> Result<BilibiliCreatorVideos, String> {
     prepare_bilibili_creator_session(client, &mut context.cookie_store, mid).await?;
-    let (img_key, sub_key) = fetch_wbi_keys(client, &mut context.cookie_store).await?;
+    let (img_key, sub_key) = fetch_bilibili_wbi_keys(client, &mut context.cookie_store).await?;
     let url = creator_videos_url(
         mid,
         limit,
@@ -835,25 +757,16 @@ async fn fetch_bilibili_creator_space_videos(
         now_unix_seconds()?,
         fingerprint,
     )?;
-    let response = apply_cookie_header(
+    let value = fetch_bilibili_json(
         client.get(url).header(
             "Referer",
             format!("https://space.bilibili.com/{mid}/upload/video"),
         ),
-        &context.cookie_store,
+        Some(&mut context.cookie_store),
+        "B 站 UP 主视频",
+        "B 站 UP 主视频",
     )
-    .send()
-    .await
-    .map_err(|error| format!("请求 B 站 UP 主视频失败：{error}"))?;
-    let status = response.status();
-    if !status.is_success() {
-        return Err(format!("请求 B 站 UP 主视频失败：HTTP {status}"));
-    }
-
-    let value = response
-        .json::<Value>()
-        .await
-        .map_err(|error| format!("解析 B 站 UP 主视频失败：{error}"))?;
+    .await?;
 
     parse_creator_videos(mid, &value)
 }
@@ -889,11 +802,7 @@ async fn fetch_bilibili_creator_videos_with_session(
     let normalized_mid = validate_creator_mid(&mid)?;
     let normalized_limit = validate_creator_video_limit(limit)?;
     let normalized_fingerprint = normalize_browser_fingerprint(fingerprint);
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .user_agent(BILIBILI_BROWSER_USER_AGENT)
-        .build()
-        .map_err(|error| format!("创建 B 站 UP 主视频请求失败：{error}"))?;
+    let client = create_bilibili_client(10, "B 站 UP 主视频")?;
 
     if let Some(session) = session {
         let mut authenticated_context = create_creator_request_context(Some(session));
@@ -945,19 +854,8 @@ pub async fn fetch_bilibili_metadata(
     reference: BilibiliMetadataReference,
 ) -> Result<BilibiliMetadata, String> {
     let url = metadata_url(&reference)?;
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(8))
-        .user_agent(BILIBILI_BROWSER_USER_AGENT)
-        .build()
-        .map_err(|error| format!("创建 B 站元信息请求失败：{error}"))?;
-    let value = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|error| format!("请求 B 站元信息失败：{error}"))?
-        .json::<Value>()
-        .await
-        .map_err(|error| format!("解析 B 站元信息失败：{error}"))?;
+    let client = create_bilibili_client(8, "B 站元信息")?;
+    let value = fetch_bilibili_json(client.get(url), None, "B 站元信息", "B 站元信息").await?;
 
     parse_metadata(&reference, &value)
 }
@@ -977,6 +875,7 @@ pub async fn fetch_bilibili_creator_videos(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bilibili_common::parse_wbi_keys;
 
     #[test]
     fn parses_live_metadata() {

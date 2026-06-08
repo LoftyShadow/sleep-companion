@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createPlayerPortTestDouble,
   createTtsEngineTestDouble,
+  mockHtmlMediaPlayback,
 } from "../../test/audioTestDoubles";
 import { createMinimalEpubFile } from "../../test/epubTestDoubles";
 import { createMemoryFileSystem } from "../../test/storageTestDoubles";
@@ -81,26 +82,6 @@ describe("AppWorkspace integration", () => {
     return vi.fn().mockResolvedValue(TEST_BILIBILI_DIRECT_AUDIO_SOURCE);
   }
 
-  function mockHtmlMediaPlayback() {
-    const play = vi
-      .spyOn(HTMLMediaElement.prototype, "play")
-      .mockImplementation(function mockPlay(this: HTMLMediaElement) {
-        this.dispatchEvent(new Event("play"));
-
-        return Promise.resolve();
-      });
-    const pause = vi
-      .spyOn(HTMLMediaElement.prototype, "pause")
-      .mockImplementation(function mockPause(this: HTMLMediaElement) {
-        this.dispatchEvent(new Event("pause"));
-      });
-    const load = vi
-      .spyOn(HTMLMediaElement.prototype, "load")
-      .mockImplementation(() => {});
-
-    return { load, pause, play };
-  }
-
   function renderVideoWorkspace() {
     const bilibiliDirectAudioLoader = createBilibiliDirectAudioLoaderTestDouble();
     const user = userEvent.setup();
@@ -113,6 +94,14 @@ describe("AppWorkspace integration", () => {
     );
 
     return { bilibiliDirectAudioLoader, user };
+  }
+
+  async function loadDirectAudioVideo(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: "听视频" }));
+    await user.type(screen.getByLabelText("视频或直播链接"), "BV1xx411c7mD");
+    await user.click(screen.getByRole("button", { name: "载入" }));
+
+    return screen.findByLabelText("直连音频播放器");
   }
 
   it("renders the built-in sound grid", () => {
@@ -487,11 +476,7 @@ describe("AppWorkspace integration", () => {
     const media = mockHtmlMediaPlayback();
     const { user } = renderVideoWorkspace();
 
-    await user.click(screen.getByRole("button", { name: "听视频" }));
-    await user.type(screen.getByLabelText("视频或直播链接"), "BV1xx411c7mD");
-    await user.click(screen.getByRole("button", { name: "载入" }));
-
-    const audio = await screen.findByLabelText("直连音频播放器");
+    const audio = await loadDirectAudioVideo(user);
     expect(audio).toHaveAttribute(
       "src",
       TEST_BILIBILI_DIRECT_AUDIO_SOURCE.audioUrl,
@@ -516,11 +501,7 @@ describe("AppWorkspace integration", () => {
     mockHtmlMediaPlayback();
     const { user } = renderVideoWorkspace();
 
-    await user.click(screen.getByRole("button", { name: "听视频" }));
-    await user.type(screen.getByLabelText("视频或直播链接"), "BV1xx411c7mD");
-    await user.click(screen.getByRole("button", { name: "载入" }));
-
-    const audio = await screen.findByLabelText("直连音频播放器");
+    const audio = await loadDirectAudioVideo(user);
     fireEvent.change(screen.getByLabelText("收听音量"), {
       target: { value: "35" },
     });
@@ -533,9 +514,7 @@ describe("AppWorkspace integration", () => {
     mockHtmlMediaPlayback();
     const { user } = renderVideoWorkspace();
 
-    await user.click(screen.getByRole("button", { name: "听视频" }));
-    await user.type(screen.getByLabelText("视频或直播链接"), "BV1xx411c7mD");
-    await user.click(screen.getByRole("button", { name: "载入" }));
+    await loadDirectAudioVideo(user);
 
     expect(screen.getByRole("heading", { name: "视频画面" })).toBeInTheDocument();
     expect(await screen.findByText("BV1xx411c7mD")).toBeInTheDocument();

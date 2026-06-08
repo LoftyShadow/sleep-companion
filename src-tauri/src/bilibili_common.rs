@@ -1,5 +1,6 @@
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const BILIBILI_BROWSER_USER_AGENT: &str =
@@ -210,5 +211,160 @@ pub fn apply_cookie_header(
         request
     } else {
         request.header(reqwest::header::COOKIE, cookie_header(cookie_store))
+    }
+}
+
+pub fn create_bilibili_client(
+    timeout_seconds: u64,
+    context: &str,
+) -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(timeout_seconds))
+        .user_agent(BILIBILI_BROWSER_USER_AGENT)
+        .build()
+        .map_err(|error| format!("创建 {context} 请求失败：{error}"))
+}
+
+pub fn ensure_bilibili_success(value: &Value, fallback_message: &str) -> Result<(), String> {
+    let code = value
+        .get("code")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| "B 站接口响应缺少状态码".to_string())?;
+
+    if code == 0 {
+        return Ok(());
+    }
+
+    let message = value
+        .get("message")
+        .or_else(|| value.get("msg"))
+        .and_then(Value::as_str)
+        .filter(|text| !text.trim().is_empty())
+        .unwrap_or(fallback_message);
+
+    Err(message.to_string())
+}
+
+pub async fn send_bilibili_request(
+    request: reqwest::RequestBuilder,
+    cookie_store: Option<&mut BilibiliCookieStore>,
+    request_context: &str,
+) -> Result<reqwest::Response, String> {
+    let request = if let Some(cookie_store) = cookie_store.as_deref() {
+        apply_cookie_header(request, cookie_store)
+    } else {
+        request
+    };
+    let response = request
+        .send()
+        .await
+        .map_err(|error| format!("请求 {request_context} 失败：{error}"))?;
+    let status = response.status();
+
+    if let Some(cookie_store) = cookie_store {
+        store_response_cookies(cookie_store, &response);
+    }
+
+    if !status.is_success() {
+        return Err(format!("请求 {request_context} 失败：HTTP {status}"));
+    }
+
+    Ok(response)
+}
+
+pub async fn fetch_bilibili_json(
+    request: reqwest::RequestBuilder,
+    cookie_store: Option<&mut BilibiliCookieStore>,
+    request_context: &str,
+    parse_context: &str,
+) -> Result<Value, String> {
+    let response = send_bilibili_request(request, cookie_store, request_context).await?;
+
+    response
+        .json::<Value>()
+        .await
+        .map_err(|error| format!("解析 {parse_context} 失败：{error}"))
+}
+
+pub async fn fetch_bilibili_wbi_keys(
+    client: &reqwest::Client,
+    cookie_store: &mut BilibiliCookieStore,
+) -> Result<(String, String), String> {
+    let value = fetch_bilibili_json(
+        client
+            .get("https://api.bilibili.com/x/web-interface/nav")
+            .header("Referer", "https://www.bilibili.com/"),
+        Some(cookie_store),
+        "B 站 WBI 参数",
+        "B 站 WBI 参数",
+    )
+    .await?;
+
+    parse_wbi_keys(&value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepts_successful_bilibili_response() {
+        let value = serde_json::json!({
+            "code": 0,
+        });
+
+        assert!(ensure_bilibili_success(&value, "B 站接口返回失败").is_ok());
+    }
+
+    #[test]
+    fn uses_bilibili_message_as_error_text() {
+        let value = serde_json::json!({
+            "code": -400,
+            "message": "请求错误",
+        });
+
+        assert_eq!(
+            ensure_bilibili_success(&value, "B 站接口返回失败").unwrap_err(),
+            "请求错误"
+        );
+    }
+
+    #[test]
+    fn uses_bilibili_msg_as_error_text() {
+        let value = serde_json::json!({
+            "code": -101,
+            "msg": "账号未登录",
+        });
+
+        assert_eq!(
+            ensure_bilibili_success(&value, "B 站接口返回失败").unwrap_err(),
+            "账号未登录"
+        );
+    }
+
+    #[test]
+    fn uses_fallback_error_text_when_bilibili_message_is_empty() {
+        let value = serde_json::json!({
+            "code": -1,
+            "message": "",
+            "msg": " ",
+        });
+
+        assert_eq!(
+            ensure_bilibili_success(&value, "B 站接口返回失败").unwrap_err(),
+            "B 站接口返回失败"
+        );
+    }
+
+    #[test]
+    fn rejects_response_without_bilibili_status_code() {
+        let value = serde_json::json!({
+            "message": "请求错误",
+        });
+
+        assert_eq!(
+            ensure_bilibili_success(&value, "B 站接口返回失败").unwrap_err(),
+            "B 站接口响应缺少状态码"
+        );
     }
 }

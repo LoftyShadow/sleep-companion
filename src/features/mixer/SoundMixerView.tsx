@@ -20,6 +20,8 @@ import { useSoundLibraryState } from "./useSoundLibraryState";
 import "./SoundMixerView.css";
 import "./SoundMixerView.mobile.css";
 
+const ignoreCategoryChange = () => {};
+
 interface SoundMixerViewProps {
   globalStopRequestId: number;
   playbackControlRequestId?: number;
@@ -93,6 +95,13 @@ export function SoundMixerView({
   const handledGlobalStopRequestIdRef = useRef(globalStopRequestId);
   const handledPlaybackControlRequestIdRef = useRef(0);
 
+  const handleApplyPreset = useCallback(
+    (preset: Parameters<typeof applyPreset>[0]) => {
+      void applyPreset(preset);
+    },
+    [applyPreset],
+  );
+
   const handleUnifiedPlayback = useCallback(async () => {
     if (isAnySoundPlaying) {
       await stopAll();
@@ -149,17 +158,41 @@ export function SoundMixerView({
     void handleUnifiedPlayback();
   }, [handleUnifiedPlayback, playbackControlRequestId]);
 
-  async function handleRemoveCustomSound(soundId: SoundId) {
-    if (!isCustomSoundId(soundId)) {
-      return;
-    }
+  const handleRemoveCustomSound = useCallback(
+    async (soundId: SoundId) => {
+      if (!isCustomSoundId(soundId)) {
+        return;
+      }
 
-    if (playingSoundIds.has(soundId)) {
-      await toggleSound(soundId);
-    }
+      if (playingSoundIds.has(soundId)) {
+        await toggleSound(soundId);
+      }
 
-    await removeCustomSound(soundId);
-  }
+      await removeCustomSound(soundId);
+    },
+    [playingSoundIds, removeCustomSound, toggleSound],
+  );
+
+  const handleRemoveCustomSoundRequest = useCallback(
+    (soundId: SoundId) => {
+      void handleRemoveCustomSound(soundId);
+    },
+    [handleRemoveCustomSound],
+  );
+
+  const handleSetSoundVolume = useCallback(
+    (soundId: SoundId, volume: number) => {
+      void setSoundVolume(soundId, volume);
+    },
+    [setSoundVolume],
+  );
+
+  const handleToggleSound = useCallback(
+    (soundId: SoundId) => {
+      void toggleSound(soundId);
+    },
+    [toggleSound],
+  );
 
   return (
     <div className="sound-mixer-view">
@@ -202,9 +235,7 @@ export function SoundMixerView({
               presetGroups={presetGroups}
               soundCountsByCategory={soundCountsByCategory}
               totalSoundCount={categorySounds.length}
-              onApplyPreset={(preset) => {
-                void applyPreset(preset);
-              }}
+              onApplyPreset={handleApplyPreset}
               onCategoryChange={handleCategoryChange}
             />
           ) : (
@@ -219,10 +250,8 @@ export function SoundMixerView({
               presetGroups={presetGroups}
               soundCountsByCategory={new Map()}
               totalSoundCount={0}
-              onApplyPreset={(preset) => {
-                void applyPreset(preset);
-              }}
-              onCategoryChange={() => {}}
+              onApplyPreset={handleApplyPreset}
+              onCategoryChange={ignoreCategoryChange}
             />
           )}
 
@@ -251,15 +280,9 @@ export function SoundMixerView({
               playingSoundIds={playingSoundIds}
               sounds={visibleSounds}
               volumes={volumes}
-              onRemoveCustomSound={(soundId) => {
-                void handleRemoveCustomSound(soundId);
-              }}
-              onSetSoundVolume={(soundId, volume) => {
-                void setSoundVolume(soundId, volume);
-              }}
-              onToggleSound={(soundId) => {
-                void toggleSound(soundId);
-              }}
+              onRemoveCustomSound={handleRemoveCustomSoundRequest}
+              onSetSoundVolume={handleSetSoundVolume}
+              onToggleSound={handleToggleSound}
             />
           </section>
         </div>

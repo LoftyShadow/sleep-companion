@@ -1,13 +1,12 @@
 use crate::bilibili_common::{
-    apply_cookie_header, normalize_image_url, now_unix_seconds, parse_wbi_keys,
-    read_non_empty_string, read_number_as_string, read_path, read_u64, signed_wbi_query,
-    store_response_cookies, BilibiliCookieStore, BILIBILI_BROWSER_USER_AGENT,
+    create_bilibili_client, ensure_bilibili_success, fetch_bilibili_json, fetch_bilibili_wbi_keys,
+    normalize_image_url, now_unix_seconds, read_non_empty_string, read_number_as_string, read_path,
+    read_u64, signed_wbi_query, BilibiliCookieStore,
 };
 use crate::bilibili_session::{load_active_bilibili_session, StoredBilibiliSession};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::cmp::Ordering;
-use std::time::Duration;
 
 const BILIBILI_PREVIEW_MAX_VIDEO_HEIGHT: u64 = 1080;
 
@@ -92,26 +91,6 @@ struct BilibiliDashVideoTrack {
     mime_type: Option<String>,
     width: Option<u64>,
     height: Option<u64>,
-}
-
-fn ensure_bilibili_success(value: &Value, fallback_message: &str) -> Result<(), String> {
-    let code = value
-        .get("code")
-        .and_then(Value::as_i64)
-        .ok_or_else(|| "B 站接口响应缺少状态码".to_string())?;
-
-    if code == 0 {
-        return Ok(());
-    }
-
-    let message = value
-        .get("message")
-        .or_else(|| value.get("msg"))
-        .and_then(Value::as_str)
-        .filter(|text| !text.trim().is_empty())
-        .unwrap_or(fallback_message);
-
-    Err(message.to_string())
 }
 
 fn validate_direct_audio_reference(reference: &BilibiliDirectAudioReference) -> Result<(), String> {
@@ -436,47 +415,22 @@ fn create_direct_video_track(
     }
 }
 
-async fn fetch_json(
+async fn fetch_direct_audio_json(
     client: &reqwest::Client,
     url: String,
     cookie_store: &mut BilibiliCookieStore,
     referer: &str,
 ) -> Result<Value, String> {
-    let response = apply_cookie_header(
+    fetch_bilibili_json(
         client
             .get(url)
             .header("Origin", "https://www.bilibili.com")
             .header("Referer", referer),
-        cookie_store,
+        Some(cookie_store),
+        "B 站",
+        "B 站响应",
     )
-    .send()
     .await
-    .map_err(|error| format!("请求 B 站失败：{error}"))?;
-    store_response_cookies(cookie_store, &response);
-    let status = response.status();
-    if !status.is_success() {
-        return Err(format!("请求 B 站失败：HTTP {status}"));
-    }
-
-    response
-        .json::<Value>()
-        .await
-        .map_err(|error| format!("解析 B 站响应失败：{error}"))
-}
-
-async fn fetch_wbi_keys(
-    client: &reqwest::Client,
-    cookie_store: &mut BilibiliCookieStore,
-) -> Result<(String, String), String> {
-    let value = fetch_json(
-        client,
-        "https://api.bilibili.com/x/web-interface/nav".to_string(),
-        cookie_store,
-        "https://www.bilibili.com/",
-    )
-    .await?;
-
-    parse_wbi_keys(&value)
 }
 
 fn direct_audio_playurl(
@@ -527,13 +481,9 @@ async fn resolve_direct_audio_with_session(
     reference: BilibiliDirectAudioReference,
     session: Option<&StoredBilibiliSession>,
 ) -> Result<BilibiliDirectAudioSource, String> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .user_agent(BILIBILI_BROWSER_USER_AGENT)
-        .build()
-        .map_err(|error| format!("创建 B 站直连音频请求失败：{error}"))?;
+    let client = create_bilibili_client(10, "B 站直连音频")?;
     let mut cookie_store = create_cookie_store(session);
-    let view_value = fetch_json(
+    let view_value = fetch_direct_audio_json(
         &client,
         view_url(&reference)?,
         &mut cookie_store,
@@ -541,17 +491,20 @@ async fn resolve_direct_audio_with_session(
     )
     .await?;
     let identity = parse_video_identity(&view_value)?;
-    let (img_key, sub_key) = fetch_wbi_keys(&client, &mut cookie_store).await?;
+    let (img_key, sub_key) = fetch_bilibili_wbi_keys(&client, &mut cookie_store).await?;
     let wts = now_unix_seconds()?;
     let playurl = direct_audio_playurl(&identity, &img_key, &sub_key, wts)?;
     let referer = format!("https://www.bilibili.com/video/{}", identity.bvid);
-    let playurl_value = fetch_json(&client, playurl, &mut cookie_store, &referer).await?;
+    let playurl_value =
+        fetch_direct_audio_json(&client, playurl, &mut cookie_store, &referer).await?;
     let chapters = match direct_audio_player_info_url(&identity, &img_key, &sub_key, wts) {
-        Ok(player_info_url) => fetch_json(&client, player_info_url, &mut cookie_store, &referer)
-            .await
-            .ok()
-            .and_then(|value| parse_direct_audio_chapters(&value).ok())
-            .unwrap_or_default(),
+        Ok(player_info_url) => {
+            fetch_direct_audio_json(&client, player_info_url, &mut cookie_store, &referer)
+                .await
+                .ok()
+                .and_then(|value| parse_direct_audio_chapters(&value).ok())
+                .unwrap_or_default()
+        }
         Err(_) => Vec::new(),
     };
     let audio_track = parse_best_audio_track(&playurl_value)?;

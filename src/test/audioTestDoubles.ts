@@ -92,3 +92,23 @@ export function createTtsEngineTestDouble({
     speak,
   };
 }
+
+export function mockHtmlMediaPlayback() {
+  const play = vi
+    .spyOn(HTMLMediaElement.prototype, "play")
+    .mockImplementation(function mockPlay(this: HTMLMediaElement) {
+      this.dispatchEvent(new Event("play"));
+
+      return Promise.resolve();
+    });
+  const pause = vi
+    .spyOn(HTMLMediaElement.prototype, "pause")
+    .mockImplementation(function mockPause(this: HTMLMediaElement) {
+      this.dispatchEvent(new Event("pause"));
+    });
+  const load = vi
+    .spyOn(HTMLMediaElement.prototype, "load")
+    .mockImplementation(() => {});
+
+  return { load, pause, play };
+}

@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createPlayerPortTestDouble,
   createTtsEngineTestDouble,
+  mockHtmlMediaPlayback,
 } from "../../test/audioTestDoubles";
 import { createMemoryFileSystem } from "../../test/storageTestDoubles";
 import type { BilibiliAuthClient } from "../videoListening/bilibiliAuth";
@@ -84,24 +85,13 @@ function createBilibiliDirectAudioLoaderTestDouble(): BilibiliDirectAudioLoader 
   return vi.fn().mockResolvedValue(TEST_BILIBILI_DIRECT_AUDIO_SOURCE);
 }
 
-function mockHtmlMediaPlayback() {
-  const play = vi
-    .spyOn(HTMLMediaElement.prototype, "play")
-    .mockImplementation(function mockPlay(this: HTMLMediaElement) {
-      this.dispatchEvent(new Event("play"));
-
-      return Promise.resolve();
-    });
-  const pause = vi
-    .spyOn(HTMLMediaElement.prototype, "pause")
-    .mockImplementation(function mockPause(this: HTMLMediaElement) {
-      this.dispatchEvent(new Event("pause"));
-    });
-  const load = vi
-    .spyOn(HTMLMediaElement.prototype, "load")
-    .mockImplementation(() => {});
-
-  return { load, pause, play };
+async function startAmbientSoundAndAudiobookPlayback(
+  user: ReturnType<typeof userEvent.setup>,
+) {
+  await user.click(screen.getByRole("button", { name: "大雨" }));
+  await user.click(screen.getByRole("button", { name: "听书" }));
+  await user.type(screen.getByLabelText("书稿文本"), TEST_AUDIOBOOK_TEXT);
+  await user.click(screen.getByRole("button", { name: "播放" }));
 }
 
 describe("AppWorkspace", () => {
@@ -412,10 +402,7 @@ describe("AppWorkspace", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "大雨" }));
-    await user.click(screen.getByRole("button", { name: "听书" }));
-    await user.type(screen.getByLabelText("书稿文本"), TEST_AUDIOBOOK_TEXT);
-    await user.click(screen.getByRole("button", { name: "播放" }));
+    await startAmbientSoundAndAudiobookPlayback(user);
     await user.click(screen.getByRole("button", { name: "暂停全部" }));
 
     expect(stopAll).toHaveBeenCalledTimes(1);
@@ -555,10 +542,7 @@ describe("AppWorkspace", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "大雨" }));
-    await user.click(screen.getByRole("button", { name: "听书" }));
-    await user.type(screen.getByLabelText("书稿文本"), TEST_AUDIOBOOK_TEXT);
-    await user.click(screen.getByRole("button", { name: "播放" }));
+    await startAmbientSoundAndAudiobookPlayback(user);
     await user.click(screen.getByRole("button", { name: "听视频" }));
     await user.type(screen.getByLabelText("视频或直播链接"), "BV1xx411c7mD");
     await user.click(screen.getByRole("button", { name: "载入" }));

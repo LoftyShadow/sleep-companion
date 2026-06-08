@@ -1,4 +1,4 @@
-use crate::bilibili_common::{non_empty, now_unix_seconds_or_zero, BILIBILI_BROWSER_USER_AGENT};
+use crate::bilibili_common::{create_bilibili_client, non_empty, now_unix_seconds_or_zero};
 use crate::bilibili_session::{
     clear_bilibili_session, load_bilibili_session, save_bilibili_session, BilibiliAuthAccount,
     BilibiliAuthStatus, StoredBilibiliSession,
@@ -7,7 +7,6 @@ use qrcode::{render::svg, QrCode};
 use reqwest::header::{COOKIE, SET_COOKIE};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::time::Duration;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 const BILIBILI_WEB_LOGIN_WINDOW_LABEL: &str = "bilibili-web-login";
@@ -92,14 +91,6 @@ struct NavData {
 struct ParsedBilibiliCookies {
     cookies: BTreeMap<String, String>,
     sess_data_expires_at: Option<i64>,
-}
-
-fn create_bilibili_client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .user_agent(BILIBILI_BROWSER_USER_AGENT)
-        .build()
-        .map_err(|error| format!("创建 B 站登录请求失败：{error}"))
 }
 
 fn create_login_qr_svg(url: &str) -> Result<String, String> {
@@ -363,7 +354,7 @@ async fn fetch_nav_account(
 
 #[tauri::command]
 pub async fn create_bilibili_login_qr() -> Result<BilibiliLoginQr, String> {
-    let client = create_bilibili_client()?;
+    let client = create_bilibili_client(10, "B 站登录")?;
     let response = client
         .get("https://passport.bilibili.com/x/passport-login/web/qrcode/generate")
         .header("Referer", "https://www.bilibili.com/")
@@ -411,7 +402,7 @@ pub async fn poll_bilibili_login_qr(
         return Err("B 站登录二维码 key 不能为空".to_string());
     }
 
-    let client = create_bilibili_client()?;
+    let client = create_bilibili_client(10, "B 站登录")?;
     let response = client
         .get("https://passport.bilibili.com/x/passport-login/web/qrcode/poll")
         .query(&[("qrcode_key", normalized_key)])
@@ -531,7 +522,7 @@ pub async fn sync_bilibili_web_login_cookies(
 
     let now = now_unix_seconds_or_zero();
     let parsed_cookies = parse_webview_cookies(cookies, now);
-    let client = create_bilibili_client()?;
+    let client = create_bilibili_client(10, "B 站登录")?;
     let session = save_validated_session_from_cookies(&app, &client, parsed_cookies, now).await?;
 
     Ok(BilibiliCookieLoginResult {
@@ -552,7 +543,7 @@ pub async fn import_bilibili_login_cookies(
 
     let now = now_unix_seconds_or_zero();
     let parsed_cookies = parse_cookie_text(normalized_cookie_text, now);
-    let client = create_bilibili_client()?;
+    let client = create_bilibili_client(10, "B 站登录")?;
     let session = save_validated_session_from_cookies(&app, &client, parsed_cookies, now).await?;
 
     Ok(BilibiliCookieLoginResult {

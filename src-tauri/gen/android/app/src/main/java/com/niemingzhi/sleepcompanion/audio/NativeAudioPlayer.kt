@@ -16,6 +16,7 @@ class NativeAudioPlayer(private val activity: Activity) {
     )
 
     private val players = mutableMapOf<String, PlayerEntry>()
+    private val resourceIds = mutableMapOf<String, Int>()
 
     @Synchronized
     fun play(soundId: String, resourceName: String, volume: Double) {
@@ -32,12 +33,7 @@ class NativeAudioPlayer(private val activity: Activity) {
             return
         }
 
-        val resourceId = activity.resources.getIdentifier(
-            resourceName,
-            "raw",
-            activity.packageName,
-        )
-        require(resourceId != 0) { "Missing raw resource: $resourceName" }
+        val resourceId = resolveRawResourceId(resourceName)
 
         val mediaPlayer = MediaPlayer.create(activity, resourceId)
             ?: error("Unable to create MediaPlayer for: $resourceName")
@@ -107,5 +103,22 @@ class NativeAudioPlayer(private val activity: Activity) {
         } catch (_: IllegalStateException) {
             false
         }
+    }
+
+    private fun resolveRawResourceId(resourceName: String): Int {
+        val cachedResourceId = resourceIds[resourceName]
+        if (cachedResourceId != null) {
+            return cachedResourceId
+        }
+
+        val resourceId = activity.resources.getIdentifier(
+            resourceName,
+            "raw",
+            activity.packageName,
+        )
+        require(resourceId != 0) { "Missing raw resource: $resourceName" }
+        resourceIds[resourceName] = resourceId
+
+        return resourceId
     }
 }
