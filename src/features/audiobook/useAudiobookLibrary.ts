@@ -168,7 +168,7 @@ export function useAudiobookLibrary(
   const importBookFiles = useCallback(
     async (files: readonly File[]) => {
       if (files.length === 0) {
-        return;
+        return false;
       }
 
       setIsImporting(true);
@@ -184,11 +184,11 @@ export function useAudiobookLibrary(
         }
         const storedBook = latestStoredBook;
         if (!storedBook) {
-          return;
+          return false;
         }
 
         if (!isMountedRef.current) {
-          return;
+          return false;
         }
 
         setActiveBook(storedBook.book);
@@ -202,10 +202,12 @@ export function useAudiobookLibrary(
               ? `已导入 ${storedBook.item.title} · ${storedBook.item.segmentCount} 段`
               : `已导入 ${storedBook.item.title}`,
         );
+        return true;
       } catch (error) {
         if (isMountedRef.current) {
           setErrorMessage(getErrorMessage(error, "导入书稿失败"));
         }
+        return false;
       } finally {
         if (isMountedRef.current) {
           setIsImporting(false);
@@ -219,10 +221,12 @@ export function useAudiobookLibrary(
     async (bookId: AudiobookBookId) => {
       try {
         await openStoredBook(bookId);
+        return true;
       } catch (error) {
         if (isMountedRef.current) {
           setErrorMessage(getErrorMessage(error, "打开书籍失败"));
         }
+        return false;
       }
     },
     [openStoredBook],

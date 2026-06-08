@@ -81,42 +81,64 @@ export function AudiobookLibraryPanel({
   onDeleteBook,
   onOpenBook,
 }: AudiobookLibraryPanelProps) {
+  const primaryStatus = isLoading
+    ? "正在读取书架"
+    : (importMessage ?? "选择一本书继续收听");
+
   return (
     <aside className="audiobook-library glass-panel" aria-label="听书书架">
-      <div className="section-heading sound-section-heading">
-        <div>
+      <div className="audiobook-library-header">
+        <div className="audiobook-library-heading-copy">
           <p className="app-kicker">书架</p>
-          <h2>听书书架</h2>
+          <h1>听书书架</h1>
+          <p>{primaryStatus}</p>
         </div>
-        <span className="section-meta">{items.length} 本</span>
+
+        <div className="audiobook-library-actions">
+          <span className="section-meta">{items.length} 本</span>
+          <label className="custom-audio-button audiobook-library-import-button">
+            <span>{isImporting ? "导入中" : "添加书籍"}</span>
+            <input
+              accept={AUDIOBOOK_FILE_ACCEPT}
+              aria-label="添加听书书籍"
+              className="custom-audio-input"
+              disabled={isImporting}
+              multiple
+              type="file"
+              onChange={(event) => {
+                const files = Array.from(event.currentTarget.files ?? []);
+                event.currentTarget.value = "";
+                onBookFiles(files);
+              }}
+            />
+          </label>
+        </div>
       </div>
 
-      <label className="custom-audio-button audiobook-library-import-button">
-        <span>{isImporting ? "导入中" : "添加书籍"}</span>
-        <input
-          accept={AUDIOBOOK_FILE_ACCEPT}
-          aria-label="添加听书书籍"
-          className="custom-audio-input"
-          disabled={isImporting}
-          multiple
-          type="file"
-          onChange={(event) => {
-            const files = Array.from(event.currentTarget.files ?? []);
-            event.currentTarget.value = "";
-            onBookFiles(files);
-          }}
-        />
-      </label>
-
-      <p className="custom-audio-status" role="status">
-        {isLoading ? "正在读取书架" : (importMessage ?? "选择一本书继续收听")}
+      <p className="custom-audio-status audiobook-library-status" role="status">
+        {primaryStatus}
       </p>
 
-      <div className="audiobook-library-list" aria-label="书籍列表">
+      <div
+        className={
+          items.length === 0
+            ? "audiobook-library-list audiobook-library-list-empty"
+            : "audiobook-library-list"
+        }
+        aria-label="书籍列表"
+      >
         {items.length === 0 ? (
-          <p className="audiobook-library-empty">
-            导入一本书后，会在这里保存进度和封面。
-          </p>
+          <div className="audiobook-library-empty">
+            <div className="audiobook-empty-shelf" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+            <div>
+              <h2>还没有书</h2>
+              <p>导入 txt、Markdown 或 EPUB 后，会在这里保存封面和朗读进度。</p>
+            </div>
+          </div>
         ) : (
           items.map((item) => {
             const isActive = item.id === activeBookId;
@@ -153,6 +175,7 @@ export function AudiobookLibraryPanel({
                 </button>
                 <button
                   className="audiobook-library-delete-button"
+                  aria-label={`删除 ${item.title}`}
                   type="button"
                   onClick={() => {
                     onDeleteBook(item.id);
@@ -160,6 +183,10 @@ export function AudiobookLibraryPanel({
                 >
                   删除
                 </button>
+                <div className="audiobook-library-card-foot" aria-hidden="true">
+                  <span>{getFormatLabel(item.format)}</span>
+                  <span>{getProgressLabel(item)}</span>
+                </div>
               </article>
             );
           })

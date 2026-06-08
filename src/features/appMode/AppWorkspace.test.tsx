@@ -110,15 +110,21 @@ function createWriteToggleFileSystem() {
   };
 }
 
-function setAudiobookDraftText(text = TEST_AUDIOBOOK_TEXT) {
-  fireEvent.change(screen.getByLabelText("书稿文本"), {
-    target: { value: text },
-  });
+async function importAudiobookTextBook(
+  user: ReturnType<typeof userEvent.setup>,
+  text = TEST_AUDIOBOOK_TEXT,
+) {
+  await user.upload(
+    screen.getByLabelText("添加听书书籍"),
+    new File([text], "用户自己的书稿.txt", { type: "text/plain" }),
+  );
 }
 
-async function waitForAudiobookDraftSegments() {
+async function waitForAudiobookSegments() {
   await waitFor(() => {
-    expect(screen.getByText("2 个片段")).toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText("听书概览")).getByText("2 段"),
+    ).toBeInTheDocument();
   });
 }
 
@@ -127,7 +133,7 @@ async function startAmbientSoundAndAudiobookPlayback(
 ) {
   await user.click(screen.getByRole("button", { name: "大雨" }));
   await user.click(screen.getByRole("button", { name: "听书" }));
-  setAudiobookDraftText();
+  await importAudiobookTextBook(user);
   await user.click(screen.getByRole("button", { name: "播放" }));
 }
 
@@ -153,9 +159,9 @@ describe("AppWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "听书" }));
 
     expect(stopAll).not.toHaveBeenCalled();
-    expect(await screen.findByText("系统女声 · zh-CN")).toBeInTheDocument();
 
-    setAudiobookDraftText();
+    await importAudiobookTextBook(user);
+    expect(await screen.findByText("系统女声 · zh-CN")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "播放" }));
 
     expect(play).toHaveBeenCalledWith(
@@ -293,7 +299,7 @@ describe("AppWorkspace", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "听书" }));
-    setAudiobookDraftText();
+    await importAudiobookTextBook(user);
     await user.click(screen.getByRole("button", { name: "睡眠" }));
     await user.click(screen.getByRole("checkbox", { name: "听书" }));
     await user.click(screen.getByRole("checkbox", { name: "听视频" }));
@@ -522,8 +528,11 @@ describe("AppWorkspace", () => {
 
     await user.click(screen.getByRole("button", { name: "展开模块播放控制" }));
     await user.click(screen.getByRole("button", { name: "打开听书模块" }));
-    setAudiobookDraftText();
-    await waitForAudiobookDraftSegments();
+    await importAudiobookTextBook(user);
+    await waitForAudiobookSegments();
+    if (!screen.queryByRole("region", { name: "模块播放控制" })) {
+      await user.click(screen.getByRole("button", { name: "展开模块播放控制" }));
+    }
     await user.click(await screen.findByRole("button", { name: "播放听书模块" }));
 
     await waitFor(() => {

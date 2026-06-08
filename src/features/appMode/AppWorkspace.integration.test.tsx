@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -402,11 +408,13 @@ describe("AppWorkspace integration", () => {
 
     await user.click(screen.getByRole("button", { name: "听书" }));
 
-    expect(screen.getByRole("heading", { name: "听书" })).toBeInTheDocument();
-    expect(await screen.findByText("系统女声 · zh-CN")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "听书书架" })).toBeInTheDocument();
 
-    await user.clear(screen.getByLabelText("书稿文本"));
-    await user.type(screen.getByLabelText("书稿文本"), "第一段。\n\n第二段。");
+    await user.upload(
+      screen.getByLabelText("添加听书书籍"),
+      new File(["第一段。\n\n第二段。"], "朗读测试.txt", { type: "text/plain" }),
+    );
+    expect(await screen.findByText("系统女声 · zh-CN")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "播放" }));
 
     expect(speak).toHaveBeenCalledWith(
@@ -430,11 +438,13 @@ describe("AppWorkspace integration", () => {
 
     await user.click(screen.getByRole("button", { name: "听书" }));
     await user.upload(
-      screen.getByLabelText("导入听书书稿"),
+      screen.getByLabelText("添加听书书籍"),
       await createMinimalEpubFile(),
     );
 
-    expect(await screen.findByText("已导入 测试 EPUB · 5 段")).toBeInTheDocument();
+    expect(
+      await screen.findAllByText("已导入 测试 EPUB · 5 段"),
+    ).not.toHaveLength(0);
     expect(screen.queryByLabelText("书稿文本")).not.toBeInTheDocument();
     expect(screen.getByText("EPUB · 2 章 · 5 个朗读片段")).toBeInTheDocument();
     expect(screen.getByText("正在播放章节")).toBeInTheDocument();
@@ -483,13 +493,21 @@ describe("AppWorkspace integration", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "听书" }));
+    await user.upload(
+      screen.getByLabelText("添加听书书籍"),
+      new File(["预备段落。"], "预备书稿.txt", { type: "text/plain" }),
+    );
+    expect(await screen.findAllByText("已导入 预备书稿")).not.toHaveLength(0);
+
     fireEvent.drop(screen.getByRole("region", { name: "导入书稿" }), {
       dataTransfer: {
         files: [await createMinimalEpubFile()],
       },
     });
 
-    expect(await screen.findByText("已导入 测试 EPUB · 5 段")).toBeInTheDocument();
+    expect(
+      await screen.findAllByText("已导入 测试 EPUB · 5 段"),
+    ).not.toHaveLength(0);
     expect(screen.queryByLabelText("书稿文本")).not.toBeInTheDocument();
     expect(screen.getByText("EPUB · 2 章 · 5 个朗读片段")).toBeInTheDocument();
   });
@@ -508,16 +526,19 @@ describe("AppWorkspace integration", () => {
     });
 
     await user.click(screen.getByRole("button", { name: "听书" }));
-    await user.upload(screen.getByLabelText("导入听书书稿"), [
+    await user.upload(screen.getByLabelText("添加听书书籍"), [
       plainTextBook,
       await createMinimalEpubFile(),
     ]);
 
     expect(
-      await screen.findByText("已导入 2 本，当前打开 测试 EPUB"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("第一本")).toBeInTheDocument();
-    expect(screen.getByText("测试 EPUB")).toBeInTheDocument();
+      await screen.findAllByText("已导入 2 本，当前打开 测试 EPUB"),
+    ).not.toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: "返回书架" }));
+    const bookshelf = screen.getByLabelText("书籍列表");
+
+    expect(within(bookshelf).getByText("第一本")).toBeInTheDocument();
+    expect(within(bookshelf).getByText("测试 EPUB")).toBeInTheDocument();
     expect(screen.getByText("2 本")).toBeInTheDocument();
   });
 

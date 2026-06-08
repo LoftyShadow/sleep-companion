@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AudiobookImportPanel } from "./AudiobookImportPanel";
 import { AudiobookLibraryPanel } from "./AudiobookLibraryPanel";
 import { AudiobookReader } from "./AudiobookReader";
@@ -17,6 +17,8 @@ import type {
   PlaybackControlStatus,
 } from "../playbackControl/playbackControlTypes";
 import "./AudiobookView.css";
+
+type AudiobookViewMode = "library" | "reader";
 
 interface AudiobookViewProps {
   engine: TtsEnginePort;
@@ -90,6 +92,92 @@ function getAudiobookPlaybackControlSummary({
   return readableTitle;
 }
 
+interface CurrentAudiobookControlBarProps {
+  canRead: boolean;
+  chapterCount: number;
+  currentSegmentIndex: number;
+  isBusy: boolean;
+  mode: AudiobookViewMode;
+  primaryActionLabel: string;
+  progressPercent: number;
+  segmentCount: number;
+  status: AudiobookPlaybackStatus;
+  title: string;
+  onBackToLibrary: () => void;
+  onEnterReader: () => void;
+  onNext: () => void;
+  onPrevious: () => void;
+  onPrimaryAction: () => void;
+  onStop: () => void;
+}
+
+function CurrentAudiobookControlBar({
+  canRead,
+  chapterCount,
+  currentSegmentIndex,
+  isBusy,
+  mode,
+  primaryActionLabel,
+  progressPercent,
+  segmentCount,
+  status,
+  title,
+  onBackToLibrary,
+  onEnterReader,
+  onNext,
+  onPrevious,
+  onPrimaryAction,
+  onStop,
+}: CurrentAudiobookControlBarProps) {
+  const actionLabel = mode === "reader" ? "返回书架" : "进入内容";
+
+  return (
+    <section className="audiobook-stage" aria-label="听书控制">
+      <aside className="audiobook-now glass-panel" aria-label="当前朗读">
+        <div className="audiobook-now-header">
+          <button
+            className="secondary-control-button audiobook-view-toggle-button"
+            type="button"
+            onClick={mode === "reader" ? onBackToLibrary : onEnterReader}
+          >
+            {actionLabel}
+          </button>
+
+          <div className="audiobook-now-titlebar">
+            <p className="app-kicker">正在朗读</p>
+            <h1>{title.trim() || "未命名书稿"}</h1>
+          </div>
+
+          <div className="audiobook-metrics" aria-label="听书概览">
+            <span>{chapterCount || 1} 章</span>
+            <span>{segmentCount} 段</span>
+            <span>{progressPercent}% 进度</span>
+          </div>
+        </div>
+
+        <AudiobookStatusPanel
+          currentSegmentIndex={currentSegmentIndex}
+          segmentCount={segmentCount}
+          status={status}
+        />
+
+        <AudiobookTransport
+          canRead={canRead}
+          currentSegmentIndex={currentSegmentIndex}
+          isBusy={isBusy}
+          primaryActionLabel={primaryActionLabel}
+          segmentCount={segmentCount}
+          status={status}
+          onNext={onNext}
+          onPrevious={onPrevious}
+          onPrimaryAction={onPrimaryAction}
+          onStop={onStop}
+        />
+      </aside>
+    </section>
+  );
+}
+
 export function AudiobookView({
   engine,
   fileSystem,
@@ -97,6 +185,7 @@ export function AudiobookView({
   playbackControlRequestId = 0,
   onPlaybackControlStateChange,
 }: AudiobookViewProps) {
+  const [viewMode, setViewMode] = useState<AudiobookViewMode>("library");
   const library = useAudiobookLibrary(fileSystem);
   const book = library.visibleBook;
   const audiobook = useAudiobookPlayer({
@@ -132,6 +221,7 @@ export function AudiobookView({
     book.kind === "plain-text" ? "文本书稿" : "EPUB 书稿";
   const handledGlobalStopRequestIdRef = useRef(globalStopRequestId);
   const handledPlaybackControlRequestIdRef = useRef(0);
+  const isReaderVisible = viewMode === "reader" && library.activeBookId !== null;
   const handlePrimaryAction = useCallback(() => {
     if (audiobookStatus === "playing") {
       if (engine.supportsPause) {
@@ -211,9 +301,32 @@ export function AudiobookView({
     library.updateDraftText(text);
   }
 
+  async function handleImportBookFiles(files: File[]) {
+    const didImport = await library.importBookFiles(files);
+
+    if (didImport) {
+      setViewMode("reader");
+    }
+  }
+
+  async function handleOpenBook(bookId: NonNullable<typeof library.activeBookId>) {
+    if (bookId === library.activeBookId) {
+      setViewMode("reader");
+      return;
+    }
+
+    stopAudiobook();
+
+    const didOpenBook = await library.openBook(bookId);
+    if (didOpenBook) {
+      setViewMode("reader");
+    }
+  }
+
   function handleDeleteBook(bookId: NonNullable<typeof library.activeBookId>) {
     if (bookId === library.activeBookId) {
       stopAudiobook();
+      setViewMode("library");
     }
 
     void library.deleteBook(bookId);
@@ -227,7 +340,42 @@ export function AudiobookView({
         </p>
       ) : null}
 
-      <div className="audiobook-layout">
+      <div
+        className={
+          isReaderVisible
+            ? "audiobook-layout audiobook-layout-reader"
+            : "audiobook-layout audiobook-layout-library"
+        }
+      >
+        {library.activeBookId ? (
+          <CurrentAudiobookControlBar
+            canRead={canRead}
+            chapterCount={audiobook.chapters.length}
+            currentSegmentIndex={audiobook.currentSegmentIndex}
+            isBusy={isBusy}
+            mode={isReaderVisible ? "reader" : "library"}
+            primaryActionLabel={primaryActionLabel}
+            progressPercent={audiobook.progressPercent}
+            segmentCount={audiobook.segments.length}
+            status={audiobook.status}
+            title={book.title}
+            onBackToLibrary={() => {
+              setViewMode("library");
+            }}
+            onEnterReader={() => {
+              setViewMode("reader");
+            }}
+            onNext={() => {
+              void audiobook.playNext();
+            }}
+            onPrevious={() => {
+              void audiobook.playPrevious();
+            }}
+            onPrimaryAction={handlePrimaryAction}
+            onStop={audiobook.stop}
+          />
+        ) : null}
+
         <AudiobookLibraryPanel
           activeBookId={library.activeBookId}
           coverObjectUrls={library.coverObjectUrls}
@@ -236,115 +384,79 @@ export function AudiobookView({
           isLoading={library.isLoading}
           items={library.items}
           onBookFiles={(files) => {
-            void library.importBookFiles(files);
+            void handleImportBookFiles(files);
           }}
           onDeleteBook={handleDeleteBook}
           onOpenBook={(bookId) => {
-            stopAudiobook();
-            void library.openBook(bookId);
+            void handleOpenBook(bookId);
           }}
         />
 
-        <section className="audiobook-stage" aria-label="听书控制">
-          <aside className="audiobook-now glass-panel" aria-label="当前朗读">
-            <h1 className="audiobook-mode-title">听书</h1>
-            <div className="audiobook-now-header">
-              <div className="audiobook-now-titlebar">
-                <h2>朗读面板</h2>
-              </div>
+        {isReaderVisible ? (
+          <>
+            <div className="audiobook-workflow">
+              <aside className="audiobook-setup glass-panel" aria-label="听书设置">
+                <div className="section-heading sound-section-heading">
+                  <div>
+                    <p className="app-kicker">设置</p>
+                    <h2>朗读准备</h2>
+                  </div>
+                  <span className="section-meta">
+                    {book.kind === "plain-text" ? "文本" : "EPUB"}
+                  </span>
+                </div>
 
-              <div className="audiobook-metrics" aria-label="听书概览">
-                <span>{audiobook.segments.length} 个片段</span>
-                <span>{audiobook.chapters.length || 1} 个章节</span>
-                <span>{audiobook.progressPercent}% 进度</span>
-              </div>
+                <AudiobookImportPanel
+                  bookTitle={book.title}
+                  importMessage={null}
+                  isImporting={library.isImporting}
+                  segmentCount={audiobook.segments.length}
+                  onBookFiles={(files) => {
+                    void handleImportBookFiles(files);
+                  }}
+                  onBookTitleChange={handleBookTitleChange}
+                />
+
+                <AudiobookSettingsPanel
+                  isEngineSupported={audiobook.isEngineSupported}
+                  isLoadingVoices={audiobook.isLoadingVoices}
+                  rate={audiobook.rate}
+                  selectedVoiceId={audiobook.selectedVoiceId}
+                  voices={audiobook.voices}
+                  onRateChange={audiobook.setRate}
+                  onVoiceChange={audiobook.selectVoice}
+                />
+              </aside>
+
+              <AudiobookReader
+                bookText={bookText}
+                chapters={audiobook.chapters}
+                currentChapter={audiobook.currentChapter}
+                currentChapterIndex={audiobook.currentChapterIndex}
+                currentSegmentIndex={audiobook.currentSegmentIndex}
+                progressPercent={audiobook.progressPercent}
+                segments={audiobook.segments}
+                sourceKicker={readerSourceKicker}
+                sourceLabel={readerSourceLabel}
+                onBookTextChange={
+                  book.kind === "plain-text" ? handleBookTextChange : undefined
+                }
+                onChapterChange={(chapterIndex) => {
+                  void audiobook.playChapterAt(chapterIndex);
+                }}
+                onNextChapter={() => {
+                  void audiobook.playNextChapter();
+                }}
+                onPlaySegmentAt={(index) => {
+                  void audiobook.playSegmentAt(index);
+                }}
+                onPreviousChapter={() => {
+                  void audiobook.playPreviousChapter();
+                }}
+              />
             </div>
-
-            <AudiobookStatusPanel
-              currentSegmentIndex={audiobook.currentSegmentIndex}
-              segmentCount={audiobook.segments.length}
-              status={audiobook.status}
-            />
-
-            <AudiobookTransport
-              canRead={canRead}
-              currentSegmentIndex={audiobook.currentSegmentIndex}
-              isBusy={isBusy}
-              primaryActionLabel={primaryActionLabel}
-              segmentCount={audiobook.segments.length}
-              status={audiobook.status}
-              onNext={() => {
-                void audiobook.playNext();
-              }}
-              onPrevious={() => {
-                void audiobook.playPrevious();
-              }}
-              onPrimaryAction={handlePrimaryAction}
-              onStop={audiobook.stop}
-            />
-          </aside>
-        </section>
-
-        <div className="audiobook-workflow">
-          <aside className="audiobook-setup glass-panel" aria-label="听书设置">
-            <div className="section-heading sound-section-heading">
-              <div>
-                <h2>朗读准备</h2>
-              </div>
-              <span className="section-meta">
-                {book.kind === "plain-text" ? "文本" : "EPUB"}
-              </span>
-            </div>
-
-            <AudiobookImportPanel
-              bookTitle={book.title}
-              importMessage={null}
-              isImporting={library.isImporting}
-              segmentCount={audiobook.segments.length}
-              onBookFiles={(files) => {
-                void library.importBookFiles(files);
-              }}
-              onBookTitleChange={handleBookTitleChange}
-            />
-
-            <AudiobookSettingsPanel
-              isEngineSupported={audiobook.isEngineSupported}
-              isLoadingVoices={audiobook.isLoadingVoices}
-              rate={audiobook.rate}
-              selectedVoiceId={audiobook.selectedVoiceId}
-              voices={audiobook.voices}
-              onRateChange={audiobook.setRate}
-              onVoiceChange={audiobook.selectVoice}
-            />
-          </aside>
-
-          <AudiobookReader
-            bookText={bookText}
-            chapters={audiobook.chapters}
-            currentChapter={audiobook.currentChapter}
-            currentChapterIndex={audiobook.currentChapterIndex}
-            currentSegmentIndex={audiobook.currentSegmentIndex}
-            progressPercent={audiobook.progressPercent}
-            segments={audiobook.segments}
-            sourceKicker={readerSourceKicker}
-            sourceLabel={readerSourceLabel}
-            onBookTextChange={
-              book.kind === "plain-text" ? handleBookTextChange : undefined
-            }
-            onChapterChange={(chapterIndex) => {
-              void audiobook.playChapterAt(chapterIndex);
-            }}
-            onNextChapter={() => {
-              void audiobook.playNextChapter();
-            }}
-            onPlaySegmentAt={(index) => {
-              void audiobook.playSegmentAt(index);
-            }}
-            onPreviousChapter={() => {
-              void audiobook.playPreviousChapter();
-            }}
-          />
-        </div>
+          </>
+        ) : null}
       </div>
     </div>
   );
