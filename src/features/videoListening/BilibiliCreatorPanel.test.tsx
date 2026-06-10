@@ -198,7 +198,7 @@ describe("BilibiliCreatorPanel", () => {
       screen.getByRole("button", { name: "刷新当前页视频" }),
     ).toBeDisabled();
 
-    await act(async () => {
+    act(() => {
       vi.advanceTimersByTime(CREATOR_VIDEO_SLOW_REQUEST_DELAY_MS);
     });
 
@@ -250,7 +250,7 @@ describe("BilibiliCreatorPanel", () => {
     );
     await flushAsyncWork();
 
-    await act(async () => {
+    act(() => {
       vi.advanceTimersByTime(CREATOR_VIDEO_SLOW_REQUEST_DELAY_MS);
     });
 
@@ -258,7 +258,7 @@ describe("BilibiliCreatorPanel", () => {
       screen.getByText("仍在请求 B 站，第 1 页视频可能需要更久"),
     ).toBeInTheDocument();
 
-    await act(async () => {
+    act(() => {
       failedRequest.reject(new Error("网络超时"));
     });
     await flushAsyncWork();
