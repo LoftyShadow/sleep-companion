@@ -676,6 +676,16 @@
   line-height: 1.36;
 }
 
+.bilibili-creator-status.is-slow {
+  display: inline-grid;
+  padding: 6px 9px;
+  border: 1px solid rgba(0, 161, 214, 0.16);
+  border-radius: 8px;
+  color: var(--bilibili-blue-strong);
+  background: rgba(0, 161, 214, 0.08);
+  font-weight: 900;
+}
+
 .video-source-actions {
   display: flex;
   flex-wrap: wrap;

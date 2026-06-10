@@ -132,6 +132,7 @@ export function BilibiliCreatorPanel({
     isAddingCreator,
     isLoadingCreators,
     isRefreshingVideos,
+    isRefreshingVideosSlow,
     refreshCreatorVideos,
     selectCreator,
     selectedMid,
@@ -175,7 +176,14 @@ export function BilibiliCreatorPanel({
         <div className="bilibili-creator-heading-copy">
           <h2 id="bilibili-creator-heading">UP 主列表</h2>
           {statusMessage ? (
-            <p className="bilibili-creator-status" role="status">
+            <p
+              className={
+                isRefreshingVideosSlow
+                  ? "bilibili-creator-status is-slow"
+                  : "bilibili-creator-status"
+              }
+              role="status"
+            >
               {statusMessage}
             </p>
           ) : null}

@@ -1,9 +1,20 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMemoryFileSystem } from "../../test/storageTestDoubles";
-import type { BilibiliCreatorVideo } from "./bilibiliCreator";
+import type {
+  BilibiliCreatorVideo,
+  BilibiliCreatorVideos,
+} from "./bilibiliCreator";
 import { BilibiliCreatorPanel } from "./BilibiliCreatorPanel";
+import { CREATOR_VIDEO_SLOW_REQUEST_DELAY_MS } from "./useBilibiliCreators";
 
 function createCreatorVideos(count: number): BilibiliCreatorVideo[] {
   return Array.from({ length: count }, (_, index) => ({
@@ -16,7 +27,56 @@ function createCreatorVideos(count: number): BilibiliCreatorVideo[] {
   }));
 }
 
+function createCreatorVideoResponse({
+  page = 1,
+  pageSize = 5,
+  totalCount = 5,
+}: {
+  page?: number;
+  pageSize?: number;
+  totalCount?: number;
+} = {}): BilibiliCreatorVideos {
+  const videos = createCreatorVideos(totalCount);
+
+  return {
+    creator: {
+      avatarUrl: "https://i0.hdslb.com/avatar.jpg",
+      mid: "123456",
+      name: "测试UP",
+    },
+    hasMore: page * pageSize < totalCount,
+    page,
+    pageSize,
+    totalCount,
+    totalPages: Math.max(1, Math.ceil(totalCount / pageSize)),
+    videos: videos.slice((page - 1) * pageSize, page * pageSize),
+  };
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+
+  return { promise, reject, resolve };
+}
+
+async function flushAsyncWork() {
+  for (let index = 0; index < 3; index += 1) {
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
+}
+
 describe("BilibiliCreatorPanel", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("paginates returned creator videos five per page", async () => {
     const user = userEvent.setup();
     const videos = createCreatorVideos(18);
@@ -107,6 +167,115 @@ describe("BilibiliCreatorPanel", () => {
     });
     expect(videosLoader).toHaveBeenLastCalledWith("123456", {
       page: 2,
+      pageSize: 5,
+    });
+  });
+
+  it("shows slow request feedback and clears it after videos load", async () => {
+    vi.useFakeTimers();
+    const request = createDeferred<BilibiliCreatorVideos>();
+    const videosLoader = vi.fn().mockReturnValue(request.promise);
+    render(
+      <BilibiliCreatorPanel
+        fileSystem={createMemoryFileSystem()}
+        videosLoader={videosLoader}
+        onVideoSelect={vi.fn()}
+      />,
+    );
+
+    await flushAsyncWork();
+    fireEvent.change(screen.getByLabelText("UP 主主页或 mid"), {
+      target: { value: "https://space.bilibili.com/123456" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await flushAsyncWork();
+
+    expect(videosLoader).toHaveBeenCalledWith("123456", {
+      page: 1,
+      pageSize: 5,
+    });
+    expect(
+      screen.getByRole("button", { name: "刷新当前页视频" }),
+    ).toBeDisabled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(CREATOR_VIDEO_SLOW_REQUEST_DELAY_MS);
+    });
+
+    expect(
+      screen.getByText("仍在请求 B 站，第 1 页视频可能需要更久"),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      request.resolve(createCreatorVideoResponse());
+      await request.promise;
+    });
+    await flushAsyncWork();
+
+    expect(screen.queryByText(/仍在请求 B 站/u)).not.toBeInTheDocument();
+    expect(screen.getByText("公开视频 1")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "刷新当前页视频" }),
+    ).toBeEnabled();
+  });
+
+  it("reenables refresh after a failed slow request and allows retry", async () => {
+    vi.useFakeTimers();
+    const failedRequest = createDeferred<BilibiliCreatorVideos>();
+    const videosLoader = vi
+      .fn()
+      .mockResolvedValueOnce(createCreatorVideoResponse())
+      .mockReturnValueOnce(failedRequest.promise)
+      .mockResolvedValueOnce(createCreatorVideoResponse());
+    render(
+      <BilibiliCreatorPanel
+        fileSystem={createMemoryFileSystem()}
+        videosLoader={videosLoader}
+        onVideoSelect={vi.fn()}
+      />,
+    );
+
+    await flushAsyncWork();
+    fireEvent.change(screen.getByLabelText("UP 主主页或 mid"), {
+      target: { value: "https://space.bilibili.com/123456" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await flushAsyncWork();
+
+    const latestVideos = screen.getByLabelText("最新视频");
+    expect(screen.getByText("公开视频 1")).toBeInTheDocument();
+
+    fireEvent.click(
+      within(latestVideos).getByRole("button", { name: "刷新当前页视频" }),
+    );
+    await flushAsyncWork();
+
+    await act(async () => {
+      vi.advanceTimersByTime(CREATOR_VIDEO_SLOW_REQUEST_DELAY_MS);
+    });
+
+    expect(
+      screen.getByText("仍在请求 B 站，第 1 页视频可能需要更久"),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      failedRequest.reject(new Error("网络超时"));
+    });
+    await flushAsyncWork();
+
+    expect(screen.getByRole("alert")).toHaveTextContent("网络超时");
+    expect(
+      within(latestVideos).getByRole("button", { name: "刷新当前页视频" }),
+    ).toBeEnabled();
+
+    fireEvent.click(
+      within(latestVideos).getByRole("button", { name: "刷新当前页视频" }),
+    );
+    await flushAsyncWork();
+
+    expect(videosLoader).toHaveBeenCalledTimes(3);
+    expect(videosLoader).toHaveBeenLastCalledWith("123456", {
+      page: 1,
       pageSize: 5,
     });
   });

@@ -17,6 +17,7 @@ import {
 
 export const DEFAULT_CREATOR_VIDEO_PAGE_SIZE =
   DEFAULT_BILIBILI_CREATOR_VIDEO_PAGE_SIZE;
+export const CREATOR_VIDEO_SLOW_REQUEST_DELAY_MS = 5000;
 
 interface CreatorVideoCache {
   fetchedAt: number;
@@ -35,6 +36,7 @@ export interface UseBilibiliCreatorsState {
   isAddingCreator: boolean;
   isLoadingCreators: boolean;
   isRefreshingVideos: boolean;
+  isRefreshingVideosSlow: boolean;
   selectedMid: string | null;
   statusMessage: string;
   videoHasMore: boolean;
@@ -99,6 +101,7 @@ export function useBilibiliCreators({
   const [isLoadingCreators, setIsLoadingCreators] = useState(true);
   const [isAddingCreator, setIsAddingCreator] = useState(false);
   const [isRefreshingVideos, setIsRefreshingVideos] = useState(false);
+  const [isRefreshingVideosSlow, setIsRefreshingVideosSlow] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState("正在读取本地 UP 主列表");
   const requestIdRef = useRef(0);
@@ -171,8 +174,19 @@ export function useBilibiliCreators({
       const requestId = requestIdRef.current + 1;
       requestIdRef.current = requestId;
       setIsRefreshingVideos(true);
+      setIsRefreshingVideosSlow(false);
       setErrorMessage(null);
       setStatusMessage(`正在刷新第 ${normalizedPage} 页视频`);
+      const slowRequestTimer = setTimeout(() => {
+        if (requestIdRef.current !== requestId) {
+          return;
+        }
+
+        setIsRefreshingVideosSlow(true);
+        setStatusMessage(
+          `仍在请求 B 站，第 ${normalizedPage} 页视频可能需要更久`,
+        );
+      }, CREATOR_VIDEO_SLOW_REQUEST_DELAY_MS);
 
       try {
         const response = await videosLoader(mid, {
@@ -221,8 +235,10 @@ export function useBilibiliCreators({
         setErrorMessage(getErrorMessage(error, "刷新 UP 主视频失败"));
         setStatusMessage("刷新 UP 主视频失败");
       } finally {
+        clearTimeout(slowRequestTimer);
         if (requestIdRef.current === requestId) {
           setIsRefreshingVideos(false);
+          setIsRefreshingVideosSlow(false);
         }
       }
     },
@@ -333,6 +349,7 @@ export function useBilibiliCreators({
     isAddingCreator,
     isLoadingCreators,
     isRefreshingVideos,
+    isRefreshingVideosSlow,
     refreshCreatorVideos,
     selectCreator,
     selectedMid,
