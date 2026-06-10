@@ -188,6 +188,7 @@ export function BilibiliLoginPanel({
         <label htmlFor={cookieInputId}>浏览器 Cookie</label>
         <textarea
           id={cookieInputId}
+          name="bilibiliCookieText"
           value={cookieText}
           spellCheck={false}
           autoComplete="off"

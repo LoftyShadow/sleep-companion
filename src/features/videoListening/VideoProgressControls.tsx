@@ -21,6 +21,8 @@ export function VideoProgressControls({
   onPreviewSeek,
   onSeek,
 }: VideoProgressControlsProps) {
+  const progressInputId = "video-progress-range";
+  const chapterSelectId = "video-chapter-select";
   const chapters = audioSource?.chapters ?? [];
   const progressDurationSeconds = getProgressDurationSeconds(
     audioSource,
@@ -74,8 +76,10 @@ export function VideoProgressControls({
           aria-label="播放进度"
           className="video-progress-range"
           disabled={!canSeek}
+          id={progressInputId}
           max={Math.max(1, progressDurationSeconds)}
           min="0"
+          name="videoProgress"
           step="1"
           type="range"
           value={Math.min(
@@ -104,10 +108,12 @@ export function VideoProgressControls({
         ) : null}
       </div>
       {chapters.length > 0 ? (
-        <label className="video-chapter-control">
+        <label className="video-chapter-control" htmlFor={chapterSelectId}>
           <span>章节</span>
           <select
             aria-label="视频章节"
+            id={chapterSelectId}
+            name="videoChapter"
             value={currentChapterIndex >= 0 ? String(currentChapterIndex) : ""}
             onChange={handleChapterChange}
           >

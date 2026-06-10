@@ -32,6 +32,7 @@ export function AudiobookSettingsPanel({
         className="audiobook-select"
         disabled={!isEngineSupported || isLoadingVoices}
         id={voiceSelectId}
+        name="audiobookVoice"
         value={selectedVoiceId ?? ""}
         onChange={(event) => {
           onVoiceChange(event.currentTarget.value || null);
@@ -56,6 +57,7 @@ export function AudiobookSettingsPanel({
         id={rateInputId}
         max="1.8"
         min="0.6"
+        name="audiobookRate"
         step="0.1"
         type="range"
         value={rate}
@@ -66,4 +68,3 @@ export function AudiobookSettingsPanel({
     </section>
   );
 }
-

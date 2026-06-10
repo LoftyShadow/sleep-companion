@@ -20,6 +20,7 @@ export function AudiobookImportPanel({
   onBookTitleChange,
 }: AudiobookImportPanelProps) {
   const titleInputId = useId();
+  const fileInputId = useId();
   const [isDragActive, setIsDragActive] = useState(false);
 
   function hasDraggedFiles(event: DragEvent<HTMLElement>) {
@@ -85,6 +86,7 @@ export function AudiobookImportPanel({
       <input
         className="audiobook-title-input"
         id={titleInputId}
+        name="audiobookTitle"
         type="text"
         value={bookTitle}
         onChange={(event) => {
@@ -92,14 +94,19 @@ export function AudiobookImportPanel({
         }}
       />
 
-      <label className="custom-audio-button audiobook-file-button">
+      <label
+        className="custom-audio-button audiobook-file-button"
+        htmlFor={fileInputId}
+      >
         <span>{isImporting ? "导入中" : "导入书稿"}</span>
         <input
           accept={AUDIOBOOK_FILE_ACCEPT}
           aria-label="导入听书书稿"
           className="custom-audio-input"
           disabled={isImporting}
+          id={fileInputId}
           multiple
+          name="audiobookDraftFiles"
           type="file"
           onChange={(event) => {
             const files = Array.from(event.currentTarget.files ?? []);

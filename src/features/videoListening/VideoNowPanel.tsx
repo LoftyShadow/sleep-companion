@@ -39,6 +39,7 @@ export function VideoNowPanel({
   onTogglePlayback,
 }: VideoNowPanelProps) {
   const canSaveCurrentVideo = Boolean(audioSource);
+  const volumeInputId = "video-listening-volume";
 
   return (
     <section
@@ -69,7 +70,7 @@ export function VideoNowPanel({
           <PlaybackGlyph isPlaying={isDirectAudioPlaying} />
           <span>{videoTransportLabel}</span>
         </button>
-        <label className="video-volume-control">
+        <label className="video-volume-control" htmlFor={volumeInputId}>
           <span className="field-label">
             <span>收听音量</span>
             <strong>{listeningVolume}%</strong>
@@ -78,8 +79,10 @@ export function VideoNowPanel({
             aria-label="收听音量"
             className="video-volume-range"
             disabled={!canUseOuterVolumeControl}
+            id={volumeInputId}
             min="0"
             max="100"
+            name="videoListeningVolume"
             title={
               canUseOuterVolumeControl
                 ? "调整直连音频音量"

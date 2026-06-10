@@ -114,6 +114,7 @@ export function AudiobookReader({
           <textarea
             className="audiobook-textarea"
             id={textInputId}
+            name="audiobookText"
             value={bookText}
             onChange={(event) => {
               onBookTextChange(event.currentTarget.value);

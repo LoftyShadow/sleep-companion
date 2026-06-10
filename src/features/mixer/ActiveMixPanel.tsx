@@ -5,6 +5,10 @@ import type { SoundDefinition, SoundId } from "../sounds/soundCatalog";
 import "./ActiveMixPanel.css";
 import "./ActiveMixPanel.mobile.css";
 
+function getActiveMixControlId(prefix: string, soundId: SoundId) {
+  return `${prefix}-${soundId.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+}
+
 interface ActiveMixPanelProps {
   activeSummary: string;
   isAnySoundPlaying: boolean;
@@ -34,6 +38,7 @@ const ActiveMixItem = memo(function ActiveMixItem({
   onToggleSound,
 }: ActiveMixItemProps) {
   const accessibleName = sound.accessibleName ?? sound.name;
+  const volumeInputId = getActiveMixControlId("active-mix-volume", sound.id);
 
   return (
     <article className="active-mix-item">
@@ -57,14 +62,16 @@ const ActiveMixItem = memo(function ActiveMixItem({
         </span>
       </button>
 
-      <label className="active-mix-volume">
+      <label className="active-mix-volume" htmlFor={volumeInputId}>
         <span>
           音量 <strong>{volumePercent}%</strong>
         </span>
         <input
           aria-label={`当前混音${accessibleName}音量`}
+          id={volumeInputId}
           max="100"
           min="0"
+          name={`activeMixVolume:${sound.id}`}
           type="range"
           value={volumePercent}
           onChange={(event) => {

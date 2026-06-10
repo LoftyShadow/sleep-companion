@@ -196,6 +196,7 @@ export function BilibiliCreatorPanel({
             <input
               className="video-link-input"
               id={inputId}
+              name="bilibiliCreatorInput"
               placeholder="https://space.bilibili.com/123456"
               type="text"
               value={creatorInput}

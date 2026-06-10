@@ -43,6 +43,7 @@ export function VideoLinkPanel({
           <input
             className="video-link-input"
             id={inputId}
+            name="videoLink"
             placeholder="https://www.bilibili.com/video/BV... 或 https://live.bilibili.com/..."
             type="text"
             value={videoInput}

@@ -154,6 +154,18 @@ describe("AppWorkspace integration", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("选文件后自动导入")).toBeInTheDocument();
     expect(screen.getByLabelText("添加自定义音频")).toBeInTheDocument();
+    expect(screen.getByLabelText("添加自定义音频")).toHaveAttribute(
+      "name",
+      "customAudioFiles",
+    );
+    expect(screen.getByLabelText("当前混音大雨音量")).toHaveAttribute(
+      "name",
+      "activeMixVolume:heavy_rain",
+    );
+    expect(screen.getByLabelText("大雨音量")).toHaveAttribute(
+      "name",
+      "soundVolume:heavy_rain",
+    );
   });
 
   it("limits the sound library by default and supports search or full expansion", async () => {

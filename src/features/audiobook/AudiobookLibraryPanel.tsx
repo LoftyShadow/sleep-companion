@@ -4,6 +4,10 @@ import type {
   AudiobookCover,
   AudiobookLibraryItem,
 } from "./audiobookTypes";
+import {
+  getFullAudiobookTitle,
+  getShortAudiobookTitle,
+} from "./audiobookTitle";
 import { AUDIOBOOK_FILE_ACCEPT } from "./bookImport";
 
 type CoverObjectUrls = Partial<Record<AudiobookBookId, string>>;
@@ -81,6 +85,7 @@ export function AudiobookLibraryPanel({
   onDeleteBook,
   onOpenBook,
 }: AudiobookLibraryPanelProps) {
+  const fileInputId = "audiobook-library-file-input";
   const primaryStatus = isLoading
     ? "正在读取书架"
     : (importMessage ?? "选择一本书继续收听");
@@ -96,14 +101,19 @@ export function AudiobookLibraryPanel({
 
         <div className="audiobook-library-actions">
           <span className="section-meta">{items.length} 本</span>
-          <label className="custom-audio-button audiobook-library-import-button">
+          <label
+            className="custom-audio-button audiobook-library-import-button"
+            htmlFor={fileInputId}
+          >
             <span>{isImporting ? "导入中" : "添加书籍"}</span>
             <input
               accept={AUDIOBOOK_FILE_ACCEPT}
               aria-label="添加听书书籍"
               className="custom-audio-input"
               disabled={isImporting}
+              id={fileInputId}
               multiple
+              name="audiobookLibraryFiles"
               type="file"
               onChange={(event) => {
                 const files = Array.from(event.currentTarget.files ?? []);
@@ -142,6 +152,8 @@ export function AudiobookLibraryPanel({
         ) : (
           items.map((item) => {
             const isActive = item.id === activeBookId;
+            const fullTitle = getFullAudiobookTitle(item.title);
+            const shortTitle = getShortAudiobookTitle(item.title);
 
             return (
               <article
@@ -153,6 +165,7 @@ export function AudiobookLibraryPanel({
                 key={item.id}
               >
                 <button
+                  aria-label={`打开 ${shortTitle}`}
                   aria-current={isActive ? "true" : undefined}
                   className="audiobook-library-open-button"
                   type="button"
@@ -162,7 +175,7 @@ export function AudiobookLibraryPanel({
                 >
                   <BookCover item={item} objectUrl={coverObjectUrls[item.id]} />
                   <span className="audiobook-library-item-copy">
-                    <strong>{item.title}</strong>
+                    <strong title={fullTitle}>{shortTitle}</strong>
                     <span>
                       {getFormatLabel(item.format)} · {item.chapterCount || 1} 章 ·{" "}
                       {item.segmentCount} 段
@@ -175,7 +188,8 @@ export function AudiobookLibraryPanel({
                 </button>
                 <button
                   className="audiobook-library-delete-button"
-                  aria-label={`删除 ${item.title}`}
+                  aria-label={`删除 ${shortTitle}`}
+                  title={`删除 ${fullTitle}`}
                   type="button"
                   onClick={() => {
                     onDeleteBook(item.id);

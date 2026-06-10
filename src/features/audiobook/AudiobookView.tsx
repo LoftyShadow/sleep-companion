@@ -10,6 +10,10 @@ import type {
 } from "./audiobookTypes";
 import type { FileSystemPort } from "../storage/FileSystemPort";
 import type { TtsEnginePort } from "./TtsEnginePort";
+import {
+  getFullAudiobookTitle,
+  getShortAudiobookTitle,
+} from "./audiobookTitle";
 import { useAudiobookLibrary } from "./useAudiobookLibrary";
 import { useAudiobookPlayer } from "./useAudiobookPlayer";
 import type {
@@ -79,7 +83,9 @@ function getAudiobookPlaybackControlSummary({
   status: AudiobookPlaybackStatus;
   title: string;
 }): string {
-  const readableTitle = title.trim() || "文本书稿";
+  const readableTitle = getShortAudiobookTitle(title, {
+    fallbackTitle: "文本书稿",
+  });
 
   if (!canRead) {
     return isEngineSupported ? "没有可朗读文本" : "当前环境不支持系统 TTS";
@@ -130,6 +136,8 @@ function CurrentAudiobookControlBar({
   onStop,
 }: CurrentAudiobookControlBarProps) {
   const actionLabel = mode === "reader" ? "返回书架" : "进入内容";
+  const fullTitle = getFullAudiobookTitle(title);
+  const shortTitle = getShortAudiobookTitle(title);
 
   return (
     <section className="audiobook-stage" aria-label="听书控制">
@@ -145,7 +153,7 @@ function CurrentAudiobookControlBar({
 
           <div className="audiobook-now-titlebar">
             <p className="app-kicker">正在朗读</p>
-            <h1>{title.trim() || "未命名书稿"}</h1>
+            <h1 title={fullTitle}>{shortTitle}</h1>
           </div>
 
           <div className="audiobook-metrics" aria-label="听书概览">

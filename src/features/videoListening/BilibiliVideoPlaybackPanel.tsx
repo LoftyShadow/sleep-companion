@@ -60,6 +60,7 @@ export function BilibiliVideoPlaybackPanel({
   onSeek,
 }: BilibiliVideoPlaybackPanelProps) {
   const videoRegionId = useId();
+  const videoQualitySelectId = useId();
   const frameRef = useRef<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [canUseInlineVideoFullscreen, setCanUseInlineVideoFullscreen] =
@@ -153,10 +154,15 @@ export function BilibiliVideoPlaybackPanel({
         </div>
         <div className="video-source-actions">
           {videoTracks.length > 1 ? (
-            <label className="video-quality-control">
+            <label
+              className="video-quality-control"
+              htmlFor={videoQualitySelectId}
+            >
               <span>画质</span>
               <select
                 aria-label="视频画质"
+                id={videoQualitySelectId}
+                name="videoQuality"
                 value={selectedVideoTrackId}
                 onChange={handleQualityChange}
               >

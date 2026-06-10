@@ -14,6 +14,8 @@ export function CustomAudioPanel({
   isImportingCustomSound,
   onAddCustomSoundFiles,
 }: CustomAudioPanelProps) {
+  const fileInputId = "custom-audio-file-input";
+
   return (
     <section className="custom-audio-panel" aria-label="自定义音频导入">
       <div className="custom-audio-copy">
@@ -26,14 +28,16 @@ export function CustomAudioPanel({
       </div>
       <div className="custom-audio-action">
         <span className="custom-audio-upload-note">选文件后自动导入</span>
-        <label className="custom-audio-button">
+        <label className="custom-audio-button" htmlFor={fileInputId}>
           <span>{isImportingCustomSound ? "添加中" : "添加音频"}</span>
           <input
             accept="audio/*,.aac,.flac,.m4a,.mp3,.ogg,.wav,.webm"
             aria-label="添加自定义音频"
             className="custom-audio-input"
             disabled={isImportingCustomSound}
+            id={fileInputId}
             multiple
+            name="customAudioFiles"
             type="file"
             onChange={(event) => {
               const files = Array.from(event.currentTarget.files ?? []);

@@ -30,6 +30,10 @@ async function importBook(user: ReturnType<typeof userEvent.setup>) {
   return file;
 }
 
+function getShortTitle(title: string) {
+  return `${Array.from(title).slice(0, 24).join("")}...`;
+}
+
 describe("AudiobookView", () => {
   it("starts from the bookshelf instead of the reader workspace", () => {
     renderAudiobookView();
@@ -98,5 +102,53 @@ describe("AudiobookView", () => {
         "true",
       );
     });
+  });
+
+  it("shortens long audiobook titles and keeps stable form control names", async () => {
+    const { user } = renderAudiobookView();
+    const longTitle =
+      "这是一部标题非常非常长用来验证听书界面不会被完整书名撑开的测试书稿";
+    const shortTitle = getShortTitle(longTitle);
+    const file = new File(["第一段内容。第二段内容。"], `${longTitle}.txt`, {
+      type: "text/plain",
+    });
+
+    expect(screen.getByLabelText("添加听书书籍")).toHaveAttribute(
+      "name",
+      "audiobookLibraryFiles",
+    );
+
+    await user.upload(screen.getByLabelText("添加听书书籍"), file);
+
+    const currentTitle = await screen.findByRole("heading", {
+      name: shortTitle,
+    });
+    expect(currentTitle).toHaveAttribute("title", longTitle);
+    expect(screen.getByLabelText("导入听书书稿")).toHaveAttribute(
+      "name",
+      "audiobookDraftFiles",
+    );
+    expect(screen.getByLabelText("书名")).toHaveAttribute(
+      "name",
+      "audiobookTitle",
+    );
+    expect(screen.getByRole("combobox", { name: "音色" })).toHaveAttribute(
+      "name",
+      "audiobookVoice",
+    );
+    expect(screen.getByRole("slider", { name: /语速/u })).toHaveAttribute(
+      "name",
+      "audiobookRate",
+    );
+
+    await user.click(screen.getByRole("button", { name: "返回书架" }));
+
+    const shelf = screen.getByLabelText("书籍列表");
+    expect(
+      within(shelf).getByRole("button", { name: `打开 ${shortTitle}` }),
+    ).toBeInTheDocument();
+    expect(
+      within(shelf).getByRole("button", { name: `删除 ${shortTitle}` }),
+    ).toHaveAttribute("title", `删除 ${longTitle}`);
   });
 });

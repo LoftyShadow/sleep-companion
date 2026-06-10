@@ -8,6 +8,10 @@ import { getSoundVolume, type VolumeState } from "../player/soundMixerState";
 import "./SoundGrid.css";
 import "./SoundGrid.mobile.css";
 
+function getSoundControlId(prefix: string, soundId: SoundId) {
+  return `${prefix}-${soundId.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+}
+
 interface SoundGridProps {
   emptyMessage?: string;
   playingSoundIds: Set<SoundId>;
@@ -41,6 +45,8 @@ const SoundCard = memo(function SoundCard({
   onSetSoundVolume,
   onToggleSound,
 }: SoundCardProps) {
+  const volumeInputId = getSoundControlId("sound-volume", sound.id);
+
   return (
     <article
       className={`sound-card${isPlaying ? " sound-card-playing" : ""}${
@@ -76,14 +82,16 @@ const SoundCard = memo(function SoundCard({
         </span>
       </button>
 
-      <label className="volume-control">
+      <label className="volume-control" htmlFor={volumeInputId}>
         <span>
           音量 <strong>{volumePercent}%</strong>
         </span>
         <input
           aria-label={`${accessibleName}音量`}
+          id={volumeInputId}
           max="100"
           min="0"
+          name={`soundVolume:${sound.id}`}
           type="range"
           value={volumePercent}
           onChange={(event) => {
