@@ -68,6 +68,12 @@ export function SleepTimerControl({
   const [customDurationInput, setCustomDurationInput] = useState(
     String(normalizedDurationMinutes),
   );
+  const controlIdPrefix =
+    variant === "compact" ? "compact-sleep-timer" : "sleep-timer";
+  const controlNamePrefix =
+    variant === "compact" ? "compactSleepTimer" : "sleepTimer";
+  const customRangeInputId = `${controlIdPrefix}-custom-range`;
+  const customDurationInputId = `${controlIdPrefix}-custom-duration`;
 
   function handlePresetChange(optionId: string) {
     const presetMinutes = Number(optionId);
@@ -79,7 +85,7 @@ export function SleepTimerControl({
     onDurationChange(presetMinutes);
   }
 
-function handleCustomDurationChange(value: string) {
+  function handleCustomDurationChange(value: string) {
     setCustomDurationInput(value);
     if (!value.trim()) {
       return;
@@ -153,13 +159,18 @@ function handleCustomDurationChange(value: string) {
                 </button>
               ))}
             </div>
-            <label className="sleep-timer-range-label">
+            <label
+              className="sleep-timer-range-label"
+              htmlFor={customRangeInputId}
+            >
               <span>自定义 {normalizedDurationMinutes} 分钟</span>
               <input
                 aria-label="自定义"
                 className="sleep-timer-range-input"
+                id={customRangeInputId}
                 min={MIN_TIMER_MINUTES}
                 max="180"
+                name={`${controlNamePrefix}CustomRange`}
                 step="1"
                 type="range"
                 value={Math.min(180, normalizedDurationMinutes)}
@@ -183,14 +194,19 @@ function handleCustomDurationChange(value: string) {
                 onSelect={handlePresetChange}
               />
             </div>
-            <label className="sleep-timer-custom-label">
+            <label
+              className="sleep-timer-custom-label"
+              htmlFor={customDurationInputId}
+            >
               <span>自定义</span>
               <input
                 aria-label="自定义"
                 className="sleep-timer-custom-input"
+                id={customDurationInputId}
                 inputMode="numeric"
                 min={MIN_TIMER_MINUTES}
                 max={MAX_TIMER_MINUTES}
+                name={`${controlNamePrefix}CustomDuration`}
                 type="number"
                 value={customDurationInput}
                 onBlur={handleCustomDurationBlur}
