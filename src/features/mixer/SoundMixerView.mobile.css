@@ -24,6 +24,19 @@
   .right-column {
     padding: 10px;
   }
+
+  .sound-library-search-row {
+    grid-template-columns: 1fr;
+  }
+
+  .sound-library-controls .secondary-control-button {
+    width: 100%;
+  }
+
+  .sound-library-result-bar {
+    display: grid;
+    align-items: stretch;
+  }
 }
 
 @media (max-width: 420px) {

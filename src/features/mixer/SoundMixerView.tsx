@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useCustomSoundPresets } from "../customSoundPresets/useCustomSoundPresets";
 import { useCustomSounds } from "../customSounds/useCustomSounds";
 import type { PlayerPort } from "../player/PlayerPort";
@@ -6,6 +6,7 @@ import { useSoundMixer } from "../player/useSoundMixer";
 import type { PlaybackControlState } from "../playbackControl/playbackControlTypes";
 import {
   isCustomSoundId,
+  type SoundDefinition,
   type SoundId,
 } from "../sounds/soundCatalog";
 import {
@@ -26,6 +27,50 @@ import { useSoundLibraryState } from "./useSoundLibraryState";
 import "./SoundMixerView.css";
 import "./SoundMixerView.mobile.css";
 
+const DEFAULT_SOUND_LIBRARY_PREVIEW_LIMIT = 24;
+
+interface SoundLibraryStatusTextOptions {
+  isSearchActive: boolean;
+  matchedCount: number;
+  shownCount: number;
+  totalCount: number;
+}
+
+function normalizeSoundSearchText(value: string) {
+  return value.trim().toLocaleLowerCase("zh-CN");
+}
+
+function getSoundLibraryStatusText({
+  isSearchActive,
+  matchedCount,
+  shownCount,
+  totalCount,
+}: SoundLibraryStatusTextOptions) {
+  if (isSearchActive) {
+    return `搜索到 ${matchedCount} / ${totalCount} 个声音`;
+  }
+
+  if (shownCount < matchedCount) {
+    return `优先展示 ${shownCount} / ${matchedCount} 个声音`;
+  }
+
+  return `显示 ${shownCount} 个声音`;
+}
+
+function getSoundSearchText(sound: SoundDefinition) {
+  return [
+    sound.name,
+    sound.accessibleName,
+    sound.id,
+    sound.sourceKind,
+    sound.xmsleepCategoryId,
+    sound.xmsleepSourceId,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLocaleLowerCase("zh-CN");
+}
+
 interface SoundMixerViewProps {
   fileSystem?: FileSystemPort;
   globalStopRequestId: number;
@@ -45,6 +90,11 @@ export function SoundMixerView({
   onSleepConfigSnapshotChange,
   sleepPlaybackRequest = null,
 }: SoundMixerViewProps) {
+  const soundSearchId = useId();
+  const soundSearchHintId = useId();
+  const [isFullSoundLibraryVisible, setIsFullSoundLibraryVisible] =
+    useState(false);
+  const [soundSearchInput, setSoundSearchInput] = useState("");
   const {
     customPresetErrorMessage,
     customPresetMessage,
@@ -69,6 +119,33 @@ export function SoundMixerView({
     sounds,
     visibleSounds,
   } = useSoundLibraryState(customSounds);
+  const soundSearchQuery = useMemo(
+    () => normalizeSoundSearchText(soundSearchInput),
+    [soundSearchInput],
+  );
+  const isSoundSearchActive = soundSearchQuery.length > 0;
+  const matchingVisibleSounds = useMemo(() => {
+    if (!isSoundSearchActive) {
+      return visibleSounds;
+    }
+
+    return visibleSounds.filter((sound) =>
+      getSoundSearchText(sound).includes(soundSearchQuery),
+    );
+  }, [isSoundSearchActive, soundSearchQuery, visibleSounds]);
+  const shouldLimitSoundLibrary =
+    !isSoundSearchActive &&
+    !isFullSoundLibraryVisible &&
+    matchingVisibleSounds.length > DEFAULT_SOUND_LIBRARY_PREVIEW_LIMIT;
+  const librarySounds = shouldLimitSoundLibrary
+    ? matchingVisibleSounds.slice(0, DEFAULT_SOUND_LIBRARY_PREVIEW_LIMIT)
+    : matchingVisibleSounds;
+  const soundLibraryStatusText = getSoundLibraryStatusText({
+    isSearchActive: isSoundSearchActive,
+    matchedCount: matchingVisibleSounds.length,
+    shownCount: librarySounds.length,
+    totalCount: visibleSounds.length,
+  });
   const {
     playingSoundIds,
     volumes,
@@ -297,7 +374,7 @@ export function SoundMixerView({
                 <h2 id="sounds-heading">声音库</h2>
                 <p className="sound-section-summary">{activeFilter.summary}</p>
               </div>
-              <span className="section-meta">{visibleSounds.length} 个声音</span>
+              <span className="section-meta">{soundLibraryStatusText}</span>
             </div>
 
             <MixerHeader
@@ -305,6 +382,54 @@ export function SoundMixerView({
               filters={filters}
               onFilterChange={handleFilterChange}
             />
+
+            <div className="sound-library-controls" role="search">
+              <label className="field-label" htmlFor={soundSearchId}>
+                查找声音
+              </label>
+              <div className="sound-library-search-row">
+                <input
+                  aria-describedby={soundSearchHintId}
+                  className="sound-library-search-input"
+                  id={soundSearchId}
+                  name="soundLibrarySearch"
+                  placeholder="搜索雨声、图书馆、ASMR"
+                  type="search"
+                  value={soundSearchInput}
+                  onChange={(event) => {
+                    setSoundSearchInput(event.currentTarget.value);
+                  }}
+                />
+                {soundSearchInput ? (
+                  <button
+                    className="secondary-control-button sound-library-search-clear"
+                    type="button"
+                    onClick={() => {
+                      setSoundSearchInput("");
+                    }}
+                  >
+                    清空
+                  </button>
+                ) : null}
+              </div>
+              <div className="sound-library-result-bar" id={soundSearchHintId}>
+                <span>{soundLibraryStatusText}</span>
+                {!isSoundSearchActive &&
+                matchingVisibleSounds.length > DEFAULT_SOUND_LIBRARY_PREVIEW_LIMIT ? (
+                  <button
+                    className="secondary-control-button sound-library-expand-button"
+                    type="button"
+                    onClick={() => {
+                      setIsFullSoundLibraryVisible((isVisible) => !isVisible);
+                    }}
+                  >
+                    {isFullSoundLibraryVisible
+                      ? "收起完整库"
+                      : `显示全部 ${matchingVisibleSounds.length} 个声音`}
+                  </button>
+                ) : null}
+              </div>
+            </div>
 
             <CustomAudioPanel
               customSoundCount={customSounds.length}
@@ -316,8 +441,13 @@ export function SoundMixerView({
             />
 
             <SoundGrid
+              emptyMessage={
+                isSoundSearchActive
+                  ? "没有找到匹配的声音"
+                  : "当前分类没有声音"
+              }
               playingSoundIds={playingSoundIds}
-              sounds={visibleSounds}
+              sounds={librarySounds}
               volumes={volumes}
               onRemoveCustomSound={handleRemoveCustomSoundRequest}
               onSetSoundVolume={handleSetSoundVolume}

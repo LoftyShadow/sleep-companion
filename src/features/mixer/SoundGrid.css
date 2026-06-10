@@ -6,6 +6,20 @@
   gap: 10px;
 }
 
+.sound-grid-empty {
+  grid-column: 1 / -1;
+  min-height: 96px;
+  margin: 0;
+  padding: 24px 14px;
+  border: 1px dashed rgba(63, 111, 90, 0.22);
+  border-radius: 8px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.5);
+  font-size: 0.86rem;
+  font-weight: 850;
+  text-align: center;
+}
+
 .sound-card {
   position: relative;
   display: grid;

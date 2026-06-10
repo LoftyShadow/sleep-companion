@@ -9,6 +9,7 @@ import "./SoundGrid.css";
 import "./SoundGrid.mobile.css";
 
 interface SoundGridProps {
+  emptyMessage?: string;
   playingSoundIds: Set<SoundId>;
   sounds: SoundDefinition[];
   volumes: VolumeState;
@@ -111,6 +112,7 @@ const SoundCard = memo(function SoundCard({
 });
 
 export function SoundGrid({
+  emptyMessage = "没有可显示的声音",
   playingSoundIds,
   sounds,
   volumes,
@@ -118,6 +120,14 @@ export function SoundGrid({
   onSetSoundVolume,
   onToggleSound,
 }: SoundGridProps) {
+  if (sounds.length === 0) {
+    return (
+      <section className="sound-grid" aria-label="声音库">
+        <p className="sound-grid-empty">{emptyMessage}</p>
+      </section>
+    );
+  }
+
   return (
     <section className="sound-grid" aria-label="声音库">
       {sounds.map((sound) => {

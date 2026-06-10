@@ -156,6 +156,46 @@ describe("AppWorkspace integration", () => {
     expect(screen.getByLabelText("添加自定义音频")).toBeInTheDocument();
   });
 
+  it("limits the sound library by default and supports search or full expansion", async () => {
+    const user = userEvent.setup();
+    render(
+      <AppWorkspace
+        bilibiliAuthClient={createLoggedOutBilibiliAuthClient()}
+        fileSystem={createMemoryFileSystem()}
+        player={createPlayerPortTestDouble().player}
+      />,
+    );
+
+    expect(
+      screen.getAllByText("优先展示 24 / 119 个声音").length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole("button", { name: "机场，场所，XMSLEEP" }),
+    ).not.toBeInTheDocument();
+
+    const soundSearchInput = screen.getByRole("searchbox", {
+      name: "查找声音",
+    });
+    await user.type(soundSearchInput, "机场");
+
+    expect(screen.getAllByText("搜索到 1 / 119 个声音").length).toBeGreaterThan(
+      0,
+    );
+    expect(
+      screen.getByRole("button", { name: "机场，场所，XMSLEEP" }),
+    ).toBeInTheDocument();
+
+    await user.clear(soundSearchInput);
+    await user.click(
+      screen.getByRole("button", { name: "显示全部 119 个声音" }),
+    );
+
+    expect(screen.getAllByText("显示 119 个声音").length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", { name: "机场，场所，XMSLEEP" }),
+    ).toBeInTheDocument();
+  });
+
   it("saves, applies and deletes a custom sound preset", async () => {
     const user = userEvent.setup();
     const { play, player, stopAll } = createPlayerPortTestDouble();
@@ -349,6 +389,23 @@ describe("AppWorkspace integration", () => {
 
     expect(screen.getByRole("group", { name: "声音标签" })).toBeInTheDocument();
     expect(
+      screen.getAllByText("优先展示 24 / 119 个声音").length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole("button", { name: "河流，自然，XMSLEEP" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "救护车警笛，城市，XMSLEEP" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "咖啡厅，场所，XMSLEEP" }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "显示全部 119 个声音" }),
+    );
+
+    expect(
       screen.getByRole("button", { name: "河流，自然，XMSLEEP" }),
     ).toBeInTheDocument();
     expect(
@@ -363,9 +420,6 @@ describe("AppWorkspace integration", () => {
     expect(
       screen.queryByRole("button", { name: "掏耳朵1，物品，XMSLEEP" }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "咖啡厅，场所，XMSLEEP" }),
-    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "城市" }));
 
