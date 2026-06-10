@@ -501,7 +501,7 @@
   min-height: 52px;
 }
 
-.transport-button {
+.video-listening-view .transport-button {
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr);
   align-items: center;
@@ -520,18 +520,18 @@
     transform 180ms ease;
 }
 
-.transport-button:hover:not(:disabled) {
+.video-listening-view .transport-button:hover:not(:disabled) {
   box-shadow: 0 10px 24px rgba(25, 119, 123, 0.22);
   transform: translateY(-1px);
 }
 
-.transport-button[aria-pressed="true"] {
+.video-listening-view .transport-button[aria-pressed="true"] {
   color: #fff8f6;
   background: #a6463c;
   box-shadow: 0 10px 24px rgba(177, 76, 67, 0.2);
 }
 
-.transport-button:disabled,
+.video-listening-view .transport-button:disabled,
 .video-playback-button:disabled,
 .video-source-toggle:disabled,
 .video-fullscreen-toggle:disabled,
@@ -542,7 +542,7 @@
   transform: none;
 }
 
-.transport-glyph {
+.video-listening-view .transport-glyph {
   display: inline-grid;
   width: 30px;
   height: 30px;
