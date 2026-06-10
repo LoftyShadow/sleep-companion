@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FileSystemPort } from "../storage/FileSystemPort";
 import {
+  DEFAULT_BILIBILI_CREATOR_VIDEO_PAGE_SIZE,
   type BilibiliCreator,
   type BilibiliCreatorVideo,
   type BilibiliCreatorVideosLoader,
@@ -14,10 +15,16 @@ import {
   upsertBilibiliCreator,
 } from "./bilibiliCreatorStore";
 
-const DEFAULT_CREATOR_VIDEO_LIMIT = 12;
+export const DEFAULT_CREATOR_VIDEO_PAGE_SIZE =
+  DEFAULT_BILIBILI_CREATOR_VIDEO_PAGE_SIZE;
 
 interface CreatorVideoCache {
   fetchedAt: number;
+  hasMore?: boolean;
+  page: number;
+  pageSize: number;
+  totalCount?: number;
+  totalPages?: number;
   videos: BilibiliCreatorVideo[];
 }
 
@@ -30,10 +37,15 @@ export interface UseBilibiliCreatorsState {
   isRefreshingVideos: boolean;
   selectedMid: string | null;
   statusMessage: string;
+  videoHasMore: boolean;
+  videoPage: number;
+  videoPageSize: number;
+  videoTotalCount?: number;
+  videoTotalPages: number;
   videos: BilibiliCreatorVideo[];
   addCreator: (input: string) => Promise<void>;
   deleteCreator: (mid: string) => Promise<void>;
-  refreshCreatorVideos: (mid?: string) => Promise<void>;
+  refreshCreatorVideos: (mid?: string, page?: number) => Promise<void>;
   selectCreator: (mid: string) => void;
 }
 
@@ -90,10 +102,23 @@ export function useBilibiliCreators({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState("正在读取本地 UP 主列表");
   const requestIdRef = useRef(0);
+  const autoRefreshTriedMidsRef = useRef<Set<string>>(new Set());
 
   const activeCreator =
     creators.find((creator) => creator.mid === selectedMid) ?? null;
-  const videos = selectedMid ? videoCacheByMid[selectedMid]?.videos ?? [] : [];
+  const selectedVideoCache = selectedMid ? videoCacheByMid[selectedMid] : undefined;
+  const videos = selectedVideoCache?.videos ?? [];
+  const videoPage = selectedVideoCache?.page ?? 1;
+  const videoPageSize =
+    selectedVideoCache?.pageSize ?? DEFAULT_CREATOR_VIDEO_PAGE_SIZE;
+  const videoTotalPages = Math.max(
+    1,
+    selectedVideoCache?.totalPages ??
+      (selectedVideoCache?.hasMore ? selectedVideoCache.page + 1 : videoPage),
+  );
+  const videoHasMore =
+    selectedVideoCache?.hasMore ?? videoPage < videoTotalPages;
+  const videoTotalCount = selectedVideoCache?.totalCount;
 
   useEffect(() => {
     let isMounted = true;
@@ -136,20 +161,24 @@ export function useBilibiliCreators({
   }, [fileSystem]);
 
   const refreshCreatorVideos = useCallback(
-    async (mid = selectedMid ?? undefined) => {
+    async (mid = selectedMid ?? undefined, page = 1) => {
       if (!mid) {
         setErrorMessage("请先选择或添加 UP 主");
         return;
       }
+      const normalizedPage = Math.max(1, Math.floor(page));
 
       const requestId = requestIdRef.current + 1;
       requestIdRef.current = requestId;
       setIsRefreshingVideos(true);
       setErrorMessage(null);
-      setStatusMessage("正在刷新最新视频");
+      setStatusMessage(`正在刷新第 ${normalizedPage} 页视频`);
 
       try {
-        const response = await videosLoader(mid, DEFAULT_CREATOR_VIDEO_LIMIT);
+        const response = await videosLoader(mid, {
+          page: normalizedPage,
+          pageSize: DEFAULT_CREATOR_VIDEO_PAGE_SIZE,
+        });
         if (requestIdRef.current !== requestId) {
           return;
         }
@@ -173,13 +202,16 @@ export function useBilibiliCreators({
           ...currentCache,
           [nextCreator.mid]: {
             fetchedAt: now,
+            hasMore: response.hasMore,
+            page: response.page,
+            pageSize: response.pageSize,
+            totalCount: response.totalCount,
+            totalPages: response.totalPages,
             videos: response.videos,
           },
         }));
         setStatusMessage(
-          response.videos.length > 0
-            ? `已刷新 ${response.videos.length} 个公开视频`
-            : "这个 UP 主暂时没有公开投稿",
+          response.videos.length > 0 ? "" : "这个 UP 主暂时没有公开投稿",
         );
       } catch (error) {
         if (requestIdRef.current !== requestId) {
@@ -196,6 +228,29 @@ export function useBilibiliCreators({
     },
     [fileSystem, selectedMid, videosLoader],
   );
+
+  useEffect(() => {
+    if (
+      !selectedMid ||
+      isLoadingCreators ||
+      isAddingCreator ||
+      isRefreshingVideos ||
+      videoCacheByMid[selectedMid] ||
+      autoRefreshTriedMidsRef.current.has(selectedMid)
+    ) {
+      return;
+    }
+
+    autoRefreshTriedMidsRef.current.add(selectedMid);
+    void refreshCreatorVideos(selectedMid, 1);
+  }, [
+    isAddingCreator,
+    isLoadingCreators,
+    isRefreshingVideos,
+    refreshCreatorVideos,
+    selectedMid,
+    videoCacheByMid,
+  ]);
 
   const addCreator = useCallback(
     async (input: string) => {
@@ -221,7 +276,7 @@ export function useBilibiliCreators({
         setStatusMessage(
           existingCreator ? "这个 UP 主已在列表中" : "已保存 UP 主",
         );
-        await refreshCreatorVideos(creator.mid);
+        await refreshCreatorVideos(creator.mid, 1);
       } catch (error) {
         setErrorMessage(getErrorMessage(error, "保存 UP 主失败"));
         setStatusMessage("保存 UP 主失败");
@@ -282,6 +337,11 @@ export function useBilibiliCreators({
     selectCreator,
     selectedMid,
     statusMessage,
+    videoHasMore,
+    videoPage,
+    videoPageSize,
+    videoTotalCount,
+    videoTotalPages,
     videos,
   };
 }

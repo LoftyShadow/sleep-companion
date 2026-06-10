@@ -7,6 +7,7 @@ function createAuthClient(
   overrides: Partial<BilibiliAuthClient> = {},
 ): BilibiliAuthClient {
   return {
+    canSyncWebLogin: true,
     createLoginQr: vi.fn().mockResolvedValue({
       expiresInSeconds: 180,
       qrSvg: "<svg />",
@@ -118,6 +119,19 @@ describe("useBilibiliAuth", () => {
     expect(result.current.loginState).toBe("success");
     expect(result.current.account?.name).toBe("测试账号");
     expect(result.current.statusMessage).toBe("网页登录已同步");
+  });
+
+  it("exposes whether the runtime can sync external web login cookies", async () => {
+    const authClient = createAuthClient({
+      canSyncWebLogin: false,
+    });
+    const { result } = renderHook(() => useBilibiliAuth(authClient));
+
+    await waitFor(() => {
+      expect(result.current.isLoadingStatus).toBe(false);
+    });
+
+    expect(result.current.canSyncWebLogin).toBe(false);
   });
 
   it("imports cookie text and stores only account summary in state", async () => {

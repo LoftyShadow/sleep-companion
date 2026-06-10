@@ -28,12 +28,22 @@ export interface BilibiliCreatorVideo {
 
 export interface BilibiliCreatorVideos {
   creator: BilibiliCreatorProfile;
+  hasMore?: boolean;
+  page: number;
+  pageSize: number;
+  totalCount?: number;
+  totalPages?: number;
   videos: BilibiliCreatorVideo[];
+}
+
+export interface BilibiliCreatorVideosPageRequest {
+  page?: number;
+  pageSize?: number;
 }
 
 export type BilibiliCreatorVideosLoader = (
   mid: string,
-  limit?: number,
+  request?: BilibiliCreatorVideosPageRequest,
 ) => Promise<BilibiliCreatorVideos>;
 
 export interface BilibiliBrowserFingerprint {
@@ -47,6 +57,7 @@ const BILIBILI_HOST_PATTERN = /(^|\.)bilibili\.com$/iu;
 const SPACE_PATH_MID_PATTERN = /^\/(?:space\/)?(\d+)(?:\/|$)/iu;
 const DIRECT_MID_PATTERN = /^\d+$/u;
 const DEFAULT_WEB_API_BASE_URL = "";
+export const DEFAULT_BILIBILI_CREATOR_VIDEO_PAGE_SIZE = 5;
 
 function isSupportedBilibiliHost(hostname: string): boolean {
   const normalizedHost = hostname.toLowerCase();
@@ -105,6 +116,21 @@ function isBilibiliCreatorVideos(
 
   return (
     isBilibiliCreatorProfile(response.creator) &&
+    typeof response.page === "number" &&
+    Number.isInteger(response.page) &&
+    response.page >= 1 &&
+    typeof response.pageSize === "number" &&
+    Number.isInteger(response.pageSize) &&
+    response.pageSize >= 1 &&
+    (response.totalCount === undefined ||
+      (typeof response.totalCount === "number" &&
+        Number.isInteger(response.totalCount) &&
+        response.totalCount >= 0)) &&
+    (response.totalPages === undefined ||
+      (typeof response.totalPages === "number" &&
+        Number.isInteger(response.totalPages) &&
+        response.totalPages >= 0)) &&
+    (response.hasMore === undefined || typeof response.hasMore === "boolean") &&
     Array.isArray(response.videos) &&
     response.videos.every(isBilibiliCreatorVideo)
   );
@@ -204,12 +230,15 @@ function readWebApiBaseUrl(): string {
 function creatorVideosApiUrl(
   baseUrl: string,
   mid: string,
-  limit?: number,
+  request: BilibiliCreatorVideosPageRequest = {},
 ): string {
   const normalizedBaseUrl = normalizeWebApiBaseUrl(baseUrl);
   const searchParams = new URLSearchParams({ mid });
-  if (limit !== undefined) {
-    searchParams.set("limit", limit.toString());
+  if (request.page !== undefined) {
+    searchParams.set("page", request.page.toString());
+  }
+  if (request.pageSize !== undefined) {
+    searchParams.set("pageSize", request.pageSize.toString());
   }
   const fingerprint = createBilibiliBrowserFingerprint();
   searchParams.set("dmImgList", fingerprint.dmImgList);
@@ -267,11 +296,12 @@ export function createBilibiliCreatorVideosLoader(
     "当前环境不能刷新 B 站 UP 主视频",
   ),
 ): BilibiliCreatorVideosLoader {
-  return async (mid, limit) => {
+  return async (mid, request = {}) => {
     const response = await invoke("fetch_bilibili_creator_videos", {
       fingerprint: createBilibiliBrowserFingerprint(),
-      limit,
       mid,
+      page: request.page,
+      pageSize: request.pageSize,
     });
 
     return normalizeBilibiliCreatorVideos(response);
@@ -281,8 +311,8 @@ export function createBilibiliCreatorVideosLoader(
 export function createBilibiliCreatorWebVideosLoader(
   baseUrl: string = readWebApiBaseUrl(),
 ): BilibiliCreatorVideosLoader {
-  return async (mid, limit) => {
-    const response = await fetch(creatorVideosApiUrl(baseUrl, mid, limit), {
+  return async (mid, request) => {
+    const response = await fetch(creatorVideosApiUrl(baseUrl, mid, request), {
       headers: {
         "Content-Type": "application/json",
       },
@@ -314,6 +344,11 @@ export function normalizeBilibiliCreatorVideos(
       mid: response.creator.mid.trim(),
       name: response.creator.name.trim(),
     },
+    hasMore: response.hasMore,
+    page: response.page,
+    pageSize: response.pageSize,
+    totalCount: response.totalCount,
+    totalPages: response.totalPages,
     videos: response.videos.map((video) => ({
       aid: video.aid,
       bvid: video.bvid.trim(),

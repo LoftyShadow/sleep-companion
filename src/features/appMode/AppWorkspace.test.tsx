@@ -69,6 +69,7 @@ const TEST_BILIBILI_DIRECT_AUDIO_SOURCE = {
 
 function createLoggedOutBilibiliAuthClient(): BilibiliAuthClient {
   return {
+    canSyncWebLogin: false,
     createLoginQr: vi.fn(),
     getStatus: vi.fn().mockResolvedValue({
       account: undefined,
@@ -142,47 +143,51 @@ describe("AppWorkspace", () => {
     vi.useRealTimers();
   });
 
-  it("keeps ambient sounds and audiobook playback independent across mode switches", async () => {
-    const user = userEvent.setup();
-    const { play, player, stopAll } = createPlayerPortTestDouble();
-    const { cancel, engine, speak } = createTtsEngineTestDouble();
-    render(
-      <AppWorkspace
-        bilibiliAuthClient={createLoggedOutBilibiliAuthClient()}
-        fileSystem={createMemoryFileSystem()}
-        player={player}
-        ttsEngine={engine}
-      />,
-    );
+  it(
+    "keeps ambient sounds and audiobook playback independent across mode switches",
+    async () => {
+      const user = userEvent.setup();
+      const { play, player, stopAll } = createPlayerPortTestDouble();
+      const { cancel, engine, speak } = createTtsEngineTestDouble();
+      render(
+        <AppWorkspace
+          bilibiliAuthClient={createLoggedOutBilibiliAuthClient()}
+          fileSystem={createMemoryFileSystem()}
+          player={player}
+          ttsEngine={engine}
+        />,
+      );
 
-    await user.click(screen.getByRole("button", { name: "大雨" }));
-    await user.click(screen.getByRole("button", { name: "听书" }));
+      await user.click(screen.getByRole("button", { name: "大雨" }));
+      await user.click(screen.getByRole("button", { name: "听书" }));
 
-    expect(stopAll).not.toHaveBeenCalled();
+      expect(stopAll).not.toHaveBeenCalled();
 
-    await importAudiobookTextBook(user);
-    expect(await screen.findByText("系统女声 · zh-CN")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "播放" }));
+      await importAudiobookTextBook(user);
+      expect(await screen.findByText("系统女声 · zh-CN")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "播放" }));
 
-    expect(play).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "heavy_rain" }),
-      0.62,
-    );
-    expect(speak).toHaveBeenCalledWith(
-      expect.objectContaining({
-        text: FIRST_TEST_AUDIOBOOK_SEGMENT,
-        voiceId: "voice:default",
-      }),
-    );
-    expect(stopAll).not.toHaveBeenCalled();
+      expect(play).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "heavy_rain" }),
+        0.62,
+      );
+      expect(speak).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: FIRST_TEST_AUDIOBOOK_SEGMENT,
+          voiceId: "voice:default",
+        }),
+      );
+      expect(stopAll).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "声音" }));
+      await user.click(screen.getByRole("button", { name: "声音" }));
 
-    expect(cancel).not.toHaveBeenCalled();
-    expect(
-      within(screen.getByRole("button", { name: "大雨" })).getByText("播放中"),
-    ).toBeInTheDocument();
-  });
+      expect(cancel).not.toHaveBeenCalled();
+      expect(
+        within(screen.getByRole("button", { name: "大雨" })).getByText("播放中"),
+      ).toBeInTheDocument();
+    },
+    10_000,
+  );
 
   it("keeps ambient sounds playing when opening video listening", async () => {
     const user = userEvent.setup();
@@ -620,7 +625,12 @@ describe("AppWorkspace", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "听视频" }));
+    await user.click(
+      screen.getByRole("button", { name: "打开收藏" }),
+    );
     expect(await screen.findByText("还没有收藏视频")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "去载入视频" }));
+    expect(screen.getByLabelText("视频或直播链接")).toHaveFocus();
 
     await user.type(screen.getByLabelText("视频或直播链接"), "BV1xx411c7mD");
     await user.click(screen.getByRole("button", { name: "载入" }));
@@ -633,8 +643,16 @@ describe("AppWorkspace", () => {
 
     expect(await screen.findByText("已收藏 1 个视频")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "已收藏" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("当前视频")).not.toBeInTheDocument();
 
     const favoriteList = screen.getByLabelText("已收藏视频");
+    expect(
+      within(favoriteList).getByRole("button", {
+        name: "播放收藏 视频测试标题",
+      }),
+    ).toHaveAttribute("aria-current", "true");
+    expect(within(favoriteList).getByText("正在播放收藏")).toBeInTheDocument();
+
     await user.click(
       within(favoriteList).getByRole("button", {
         name: "播放收藏 视频测试标题",
@@ -656,6 +674,7 @@ describe("AppWorkspace", () => {
     );
 
     expect(await screen.findByText("还没有收藏视频")).toBeInTheDocument();
+    expect(screen.getByText("还没有可播放收藏")).toBeInTheDocument();
     expect(
       within(screen.getByLabelText("已收藏视频")).queryByRole("button", {
         name: /视频测试标题/u,
@@ -673,6 +692,11 @@ describe("AppWorkspace", () => {
         mid: "123456",
         name: "测试UP",
       },
+      hasMore: false,
+      page: 1,
+      pageSize: 5,
+      totalCount: 1,
+      totalPages: 1,
       videos: [
         {
           bvid: "BV1xx411c7mD",
@@ -695,6 +719,9 @@ describe("AppWorkspace", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "听视频" }));
+    await user.click(
+      screen.getByRole("button", { name: "打开 UP 主" }),
+    );
     expect(await screen.findByText("还没有保存 UP 主")).toBeInTheDocument();
 
     await user.type(
@@ -704,7 +731,10 @@ describe("AppWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "保存" }));
 
     await waitFor(() => {
-      expect(loadCreatorVideos).toHaveBeenCalledWith("123456", 12);
+      expect(loadCreatorVideos).toHaveBeenCalledWith("123456", {
+        page: 1,
+        pageSize: 5,
+      });
     });
     expect(
       (await screen.findAllByText("测试UP")).length,

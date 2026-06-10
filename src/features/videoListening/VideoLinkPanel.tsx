@@ -1,7 +1,8 @@
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 
 interface VideoLinkPanelProps {
   inputId: string;
+  shortcutSlot?: ReactNode;
   sourceSummaryText: string;
   videoInput: string;
   onInputChange: (value: string) => void;
@@ -11,6 +12,7 @@ interface VideoLinkPanelProps {
 
 export function VideoLinkPanel({
   inputId,
+  shortcutSlot,
   sourceSummaryText,
   videoInput,
   onInputChange,
@@ -30,6 +32,9 @@ export function VideoLinkPanel({
     >
       <div className="video-link-form">
         <h1 className="video-listening-title">听视频</h1>
+        {shortcutSlot ? (
+          <div className="video-link-shortcut-slot">{shortcutSlot}</div>
+        ) : null}
 
         <label className="field-label" htmlFor={inputId}>
           视频或直播链接

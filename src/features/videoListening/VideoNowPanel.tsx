@@ -9,6 +9,7 @@ interface VideoNowPanelProps {
   canUseOuterPlaybackButton: boolean;
   canUseOuterVolumeControl: boolean;
   isDirectAudioPlaying: boolean;
+  isCurrentVideoFavorite: boolean;
   listeningVolume: number;
   loadedReferenceLabel: string | null;
   videoMetadata: BilibiliMetadata | null;
@@ -16,6 +17,7 @@ interface VideoNowPanelProps {
   videoStatusText: string;
   videoTransportLabel: string;
   onListeningVolumeChange: (volume: number) => void;
+  onSaveCurrentVideo: () => void;
   onTogglePlayback: () => void;
 }
 
@@ -25,6 +27,7 @@ export function VideoNowPanel({
   canUseOuterPlaybackButton,
   canUseOuterVolumeControl,
   isDirectAudioPlaying,
+  isCurrentVideoFavorite,
   listeningVolume,
   loadedReferenceLabel,
   videoMetadata,
@@ -32,8 +35,11 @@ export function VideoNowPanel({
   videoStatusText,
   videoTransportLabel,
   onListeningVolumeChange,
+  onSaveCurrentVideo,
   onTogglePlayback,
 }: VideoNowPanelProps) {
+  const canSaveCurrentVideo = Boolean(audioSource);
+
   return (
     <section
       className="video-now glass-panel"
@@ -44,30 +50,6 @@ export function VideoNowPanel({
           <h2 id="video-player-heading">收听面板</h2>
         </div>
         <span className="section-meta">{videoPanelStatusText}</span>
-      </div>
-
-      <div className="video-listening-card">
-        <div className="video-cover-shell">
-          {videoMetadata?.imageUrl ? (
-            <img
-              alt={`${videoMetadata.title} 封面`}
-              className="video-cover-image"
-              referrerPolicy="no-referrer"
-              src={videoMetadata.imageUrl}
-            />
-          ) : (
-            <span className="video-cover-placeholder" aria-hidden="true">
-              B
-            </span>
-          )}
-        </div>
-        <div className="video-listening-copy">
-          <p className="app-kicker">
-            {audioSource ? "B 站直连音频" : "等待来源"}
-          </p>
-          <h3>{videoMetadata?.title ?? loadedReferenceLabel ?? "尚未载入"}</h3>
-          <p>{videoStatusText}</p>
-        </div>
       </div>
 
       <section className="video-listening-controls" aria-label="收听控制">
@@ -110,10 +92,41 @@ export function VideoNowPanel({
             }}
           />
         </label>
-        <p className="video-control-hint">
-          直连模式使用应用内音频播放器，可直接播放、暂停和调音量；视频画面可按需展开。
-        </p>
       </section>
+
+      <div className="video-listening-card">
+        <div className="video-cover-shell">
+          {videoMetadata?.imageUrl ? (
+            <img
+              alt={`${videoMetadata.title} 封面`}
+              className="video-cover-image"
+              referrerPolicy="no-referrer"
+              src={videoMetadata.imageUrl}
+            />
+          ) : (
+            <span className="video-cover-placeholder" aria-hidden="true">
+              B
+            </span>
+          )}
+        </div>
+        <div className="video-listening-copy">
+          <p className="app-kicker">
+            {audioSource ? "B 站直连音频" : "等待来源"}
+          </p>
+          <h3>{videoMetadata?.title ?? loadedReferenceLabel ?? "尚未载入"}</h3>
+          <p>{videoStatusText}</p>
+        </div>
+        <button
+          className="custom-audio-button video-favorite-save-button"
+          type="button"
+          disabled={!canSaveCurrentVideo}
+          aria-pressed={isCurrentVideoFavorite}
+          onClick={onSaveCurrentVideo}
+        >
+          {isCurrentVideoFavorite ? "已收藏" : "收藏视频"}
+        </button>
+      </div>
+
     </section>
   );
 }

@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { BilibiliDirectAudioSource } from "./bilibiliDirectAudio";
 import {
@@ -9,6 +9,36 @@ import {
 import { useBilibiliVideoPreview } from "./useBilibiliVideoPreview";
 import { VideoProgressControls } from "./VideoProgressControls";
 import { VideoSourceDetails } from "./VideoSourceDetails";
+
+function getFullscreenElement(): Element | null {
+  return document.fullscreenElement;
+}
+
+interface WebKitFullscreenVideoElement extends HTMLVideoElement {
+  webkitEnterFullscreen: () => void;
+}
+
+function isWebKitFullscreenVideoElement(
+  video: HTMLVideoElement | null,
+): video is WebKitFullscreenVideoElement {
+  return Boolean(
+    video &&
+      "webkitEnterFullscreen" in video &&
+      typeof video.webkitEnterFullscreen === "function",
+  );
+}
+
+function getWebKitEnterFullscreen(
+  video: HTMLVideoElement | null,
+): (() => void) | null {
+  if (!isWebKitFullscreenVideoElement(video)) {
+    return null;
+  }
+
+  return () => {
+    video.webkitEnterFullscreen();
+  };
+}
 
 interface BilibiliVideoPlaybackPanelProps {
   audioRef: RefObject<HTMLAudioElement | null>;
@@ -30,6 +60,10 @@ export function BilibiliVideoPlaybackPanel({
   onSeek,
 }: BilibiliVideoPlaybackPanelProps) {
   const videoRegionId = useId();
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [canUseInlineVideoFullscreen, setCanUseInlineVideoFullscreen] =
+    useState(false);
   const {
     canExpandVideo,
     currentVideoTrack,
@@ -49,6 +83,12 @@ export function BilibiliVideoPlaybackPanel({
     audioSource,
     isAudioPlaying,
   });
+  const canUseStandardFullscreen =
+    typeof document.fullscreenEnabled !== "boolean" ||
+    document.fullscreenEnabled;
+  const canUseFullscreen =
+    isExpanded && Boolean(selectedVideoUrl) &&
+    (canUseStandardFullscreen || canUseInlineVideoFullscreen);
   const panelClassName = [
     "video-source-panel",
     "glass-panel",
@@ -58,6 +98,43 @@ export function BilibiliVideoPlaybackPanel({
   ]
     .filter(Boolean)
     .join(" ");
+  const handleToggleFullscreen = useCallback(() => {
+    if (!isExpanded || !selectedVideoUrl) {
+      return;
+    }
+
+    if (getFullscreenElement()) {
+      void document.exitFullscreen();
+      return;
+    }
+
+    if (typeof frameRef.current?.requestFullscreen === "function") {
+      void frameRef.current.requestFullscreen();
+      return;
+    }
+
+    getWebKitEnterFullscreen(videoRef.current)?.();
+  }, [isExpanded, selectedVideoUrl, videoRef]);
+
+  useEffect(() => {
+    function handleFullscreenChange() {
+      setIsFullscreen(getFullscreenElement() === frameRef.current);
+    }
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    setCanUseInlineVideoFullscreen(
+        isExpanded &&
+        Boolean(selectedVideoUrl) &&
+        Boolean(getWebKitEnterFullscreen(videoRef.current)),
+    );
+  }, [isExpanded, selectedVideoUrl, videoRef]);
 
   return (
     <section className={panelClassName}>
@@ -106,6 +183,16 @@ export function BilibiliVideoPlaybackPanel({
               isVideoUnavailable,
             )}
           </button>
+          <button
+            aria-controls={videoRegionId}
+            aria-pressed={isFullscreen}
+            className="secondary-control-button video-fullscreen-toggle"
+            disabled={!canUseFullscreen}
+            type="button"
+            onClick={handleToggleFullscreen}
+          >
+            {isFullscreen ? "退出全屏" : "全屏"}
+          </button>
         </div>
       </div>
 
@@ -125,6 +212,7 @@ export function BilibiliVideoPlaybackPanel({
             : "video-player-frame-shell video-player-frame-shell-collapsed"
         }
         id={videoRegionId}
+        ref={frameRef}
       >
         {isExpanded && selectedVideoUrl ? (
           <video

@@ -10,8 +10,8 @@ interface BilibiliFavoriteVideoPanelProps {
   isCurrentVideoFavorite: boolean;
   isLoading: boolean;
   onDeleteVideo: (bvid: string) => void;
-  onSaveCurrentVideo: () => void;
   onVideoSelect: (video: BilibiliFavoriteVideo) => void;
+  onRequestLoadVideo?: () => void;
 }
 
 function formatDate(timestampSeconds?: number): string {
@@ -95,10 +95,14 @@ export function BilibiliFavoriteVideoPanel({
   isCurrentVideoFavorite,
   isLoading,
   onDeleteVideo,
-  onSaveCurrentVideo,
+  onRequestLoadVideo,
   onVideoSelect,
 }: BilibiliFavoriteVideoPanelProps) {
-  const canSaveCurrentVideo = Boolean(currentVideo);
+  const canRequestLoadVideo =
+    !currentVideo && !isLoading && Boolean(onRequestLoadVideo);
+  const currentFavoriteBvid = isCurrentVideoFavorite
+    ? currentVideo?.bvid
+    : undefined;
 
   return (
     <section
@@ -112,15 +116,6 @@ export function BilibiliFavoriteVideoPanel({
             {favoriteStatusText(favoriteVideos.length, isLoading)}
           </p>
         </div>
-        <button
-          className="custom-audio-button bilibili-favorite-save-button"
-          type="button"
-          disabled={!canSaveCurrentVideo}
-          aria-pressed={isCurrentVideoFavorite}
-          onClick={onSaveCurrentVideo}
-        >
-          {isCurrentVideoFavorite ? "已收藏" : "收藏视频"}
-        </button>
       </div>
 
       {errorMessage ? (
@@ -129,62 +124,72 @@ export function BilibiliFavoriteVideoPanel({
         </p>
       ) : null}
 
-      {currentVideo ? (
-        <div className="bilibili-current-favorite" aria-label="当前视频">
-          <span className="bilibili-current-favorite-cover">
-            {currentVideo.coverUrl ? (
-              <img alt="" referrerPolicy="no-referrer" src={currentVideo.coverUrl} />
-            ) : (
-              <span aria-hidden="true">BV</span>
-            )}
-          </span>
-          <span className="bilibili-current-favorite-copy">
-            <strong>{currentVideo.title}</strong>
-            <span>{currentVideo.aid ? `av ${currentVideo.aid}` : currentVideo.bvid}</span>
-          </span>
-        </div>
-      ) : null}
-
       <div className="bilibili-favorite-list" aria-label="已收藏视频">
         {favoriteVideos.length > 0 ? (
-          favoriteVideos.map((video) => (
-            <article className="bilibili-favorite-item" key={video.bvid}>
-              <button
-                className="bilibili-favorite-select"
-                type="button"
-                aria-label={`播放收藏 ${video.title}`}
-                onClick={() => {
-                  onVideoSelect(video);
-                }}
+          favoriteVideos.map((video) => {
+            const isActiveFavorite = currentFavoriteBvid === video.bvid;
+
+            return (
+              <article
+                className={
+                  isActiveFavorite
+                    ? "bilibili-favorite-item is-active"
+                    : "bilibili-favorite-item"
+                }
+                key={video.bvid}
               >
-                <span className="bilibili-favorite-cover">
-                  {video.coverUrl ? (
-                    <img alt="" referrerPolicy="no-referrer" src={video.coverUrl} />
-                  ) : (
-                    <span aria-hidden="true">BV</span>
-                  )}
-                </span>
-                <span className="bilibili-favorite-copy">
-                  <strong>{video.title}</strong>
-                  <span>{favoriteVideoMeta(video)}</span>
-                </span>
-              </button>
-              <button
-                className="secondary-control-button bilibili-favorite-delete-button"
-                type="button"
-                aria-label={`删除收藏 ${video.title}`}
-                onClick={() => {
-                  onDeleteVideo(video.bvid);
-                }}
-              >
-                删除
-              </button>
-            </article>
-          ))
+                <button
+                  className="bilibili-favorite-select"
+                  type="button"
+                  aria-label={`播放收藏 ${video.title}`}
+                  aria-current={isActiveFavorite ? "true" : undefined}
+                  onClick={() => {
+                    onVideoSelect(video);
+                  }}
+                >
+                  <span className="bilibili-favorite-cover">
+                    {video.coverUrl ? (
+                      <img alt="" referrerPolicy="no-referrer" src={video.coverUrl} />
+                    ) : (
+                      <span aria-hidden="true">BV</span>
+                    )}
+                  </span>
+                  <span className="bilibili-favorite-copy">
+                    <strong>{video.title}</strong>
+                    <span>{favoriteVideoMeta(video)}</span>
+                    <span className="bilibili-favorite-action">
+                      {isActiveFavorite ? "正在播放收藏" : "点击播放收藏"}
+                    </span>
+                  </span>
+                </button>
+                <button
+                  className="secondary-control-button bilibili-favorite-delete-button"
+                  type="button"
+                  aria-label={`删除收藏 ${video.title}`}
+                  onClick={() => {
+                    onDeleteVideo(video.bvid);
+                  }}
+                >
+                  删除
+                </button>
+              </article>
+            );
+          })
         ) : (
-          <p className="bilibili-empty-state">
-            {isLoading ? "正在读取本地视频收藏" : "载入视频后可以加入收藏"}
-          </p>
+          <div className="bilibili-empty-state bilibili-favorite-empty-state">
+            <span>
+              {isLoading ? "正在读取本地视频收藏" : "还没有可播放收藏"}
+            </span>
+            {canRequestLoadVideo ? (
+              <button
+                className="secondary-control-button bilibili-favorite-load-button"
+                type="button"
+                onClick={onRequestLoadVideo}
+              >
+                去载入视频
+              </button>
+            ) : null}
+          </div>
         )}
       </div>
     </section>

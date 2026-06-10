@@ -307,6 +307,29 @@ describe("BilibiliVideoPlaybackPanel", () => {
     expect(screen.getByText("1800 kbps")).toBeInTheDocument();
   });
 
+  it("requests fullscreen for the expanded video frame", async () => {
+    const user = userEvent.setup();
+    const requestFullscreen = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    Object.defineProperty(document, "fullscreenEnabled", {
+      configurable: true,
+      value: true,
+    });
+    Object.defineProperty(HTMLDivElement.prototype, "requestFullscreen", {
+      configurable: true,
+      value: requestFullscreen,
+    });
+
+    renderVideoPlaybackPanel();
+
+    expect(screen.getByRole("button", { name: "全屏" })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "展开视频" }));
+    await user.click(await screen.findByRole("button", { name: "全屏" }));
+
+    expect(requestFullscreen).toHaveBeenCalled();
+  });
+
   it("seeks the direct audio source when dragging progress", () => {
     const { onSeek } = renderVideoPlaybackPanel(
       TEST_DIRECT_AUDIO_SOURCE,

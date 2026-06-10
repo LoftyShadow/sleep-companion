@@ -11,6 +11,7 @@ const LOGIN_POLL_INTERVAL_MS = 2_000;
 
 export interface UseBilibiliAuthState {
   account: BilibiliAuthAccount | null;
+  canSyncWebLogin: boolean;
   errorMessage: string | null;
   importCookies: (cookieText: string) => Promise<boolean>;
   isImportingCookies: boolean;
@@ -315,6 +316,7 @@ export function useBilibiliAuth(
 
   return {
     account,
+    canSyncWebLogin: authClient.canSyncWebLogin,
     createLoginQr,
     errorMessage,
     importCookies,

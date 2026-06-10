@@ -18,8 +18,8 @@ const DEFAULT_DM_IMG_STR = "V2ViR0wgMS4wIChPcGVuR0wgRVMgMi4wIENocm9taXVtKQ";
 const DEFAULT_DM_COVER_IMG_STR =
   "QU5HTEUgKEdvb2dsZSwgQ2hyb21pdW0pR29vZ2xlIEluYy4=";
 const DEFAULT_DM_IMG_INTER = "{\"ds\":[],\"wh\":[1920,1080,100],\"of\":[0,0,0]}";
-const DEFAULT_CREATOR_VIDEO_LIMIT = 12;
-const MAX_CREATOR_VIDEO_LIMIT = 12;
+const DEFAULT_CREATOR_VIDEO_PAGE = 1;
+const DEFAULT_CREATOR_VIDEO_PAGE_SIZE = 5;
 const MAX_CREATOR_DYNAMIC_PAGE_COUNT = 10;
 const BILIBILI_WEB_SESSION_FILE_NAME = "bilibili-web-session.json";
 const VENDOR_CHUNK_RULES: ReadonlyArray<{
@@ -66,6 +66,11 @@ interface BilibiliCreatorVideosPayload {
     mid: string;
     name: string;
   };
+  hasMore: boolean;
+  page: number;
+  pageSize: number;
+  totalCount?: number;
+  totalPages?: number;
   videos: BilibiliCreatorVideoPayload[];
 }
 
@@ -760,6 +765,8 @@ function modulesValue(
 
 function parseCreatorVideos(
   mid: string,
+  page: number,
+  pageSize: number,
   responseValue: unknown,
 ): BilibiliCreatorVideosPayload {
   const response = ensureBilibiliSuccess(responseValue);
@@ -790,6 +797,14 @@ function parseCreatorVideos(
       title,
     };
   });
+  const totalCount =
+    readNumber(list?.count) ??
+    readNumber(asRecord(data?.page)?.count) ??
+    readNumber(asRecord(data?.page)?.total);
+  const totalPages =
+    totalCount === undefined
+      ? undefined
+      : Math.max(1, Math.ceil(totalCount / Math.max(pageSize, 1)));
   const firstVideo = asRecord(videoValues[0]);
   const card = asRecord(data?.card);
 
@@ -799,6 +814,11 @@ function parseCreatorVideos(
       mid,
       name: readString(firstVideo?.author) ?? readString(card?.name) ?? `UP ${mid}`,
     },
+    hasMore: totalPages === undefined ? false : page < totalPages,
+    page,
+    pageSize,
+    totalCount,
+    totalPages,
     videos,
   };
 }
@@ -822,17 +842,36 @@ function parseDynamicCreatorProfile(
   };
 }
 
-function parseDynamicArchiveVideo(
+function dynamicArchiveValue(
+  moduleDynamic: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const major = asRecord(moduleDynamic.major);
+
+  return asRecord(moduleDynamic.dyn_archive) ?? asRecord(major?.archive);
+}
+
+function dynamicAuthorMid(item: Record<string, unknown>): string | null {
+  const author = modulesValue(item, "module_author");
+  const user = asRecord(author?.user) ?? author;
+
+  return readString(user?.mid);
+}
+
+function parseDynamicArchiveVideoFromItem(
   item: Record<string, unknown>,
+  publishedAtOverride?: number,
 ): BilibiliCreatorVideoPayload | null {
   const moduleDynamic = modulesValue(item, "module_dynamic");
-  const major = asRecord(moduleDynamic?.major);
-  const archive =
-    asRecord(moduleDynamic?.dyn_archive) ?? asRecord(major?.archive);
+  if (!moduleDynamic) {
+    return null;
+  }
+
+  const archive = dynamicArchiveValue(moduleDynamic);
   const bvid = readString(archive?.bvid);
   const title = readString(archive?.title);
   const author = modulesValue(item, "module_author");
   const publishedAt =
+    publishedAtOverride ??
     readNumber(author?.pub_ts) ??
     readNumber(archive?.pubdate) ??
     readNumber(archive?.ctime) ??
@@ -861,6 +900,35 @@ function parseDynamicArchiveVideo(
   };
 }
 
+function parseDynamicForwardArchiveVideo(
+  mid: string,
+  item: Record<string, unknown>,
+): BilibiliCreatorVideoPayload | null {
+  const moduleDynamic = modulesValue(item, "module_dynamic");
+  const forward = asRecord(moduleDynamic?.dyn_forward);
+  const forwardItem = asRecord(forward?.item);
+  if (!forwardItem || dynamicAuthorMid(forwardItem) !== mid) {
+    return null;
+  }
+
+  const author = modulesValue(item, "module_author");
+
+  return parseDynamicArchiveVideoFromItem(
+    forwardItem,
+    readNumber(author?.pub_ts),
+  );
+}
+
+function parseDynamicArchiveVideo(
+  mid: string,
+  item: Record<string, unknown>,
+): BilibiliCreatorVideoPayload | null {
+  return (
+    parseDynamicArchiveVideoFromItem(item) ??
+    parseDynamicForwardArchiveVideo(mid, item)
+  );
+}
+
 function fallbackCreatorProfile(
   mid: string,
 ): BilibiliCreatorVideosPayload["creator"] {
@@ -872,7 +940,7 @@ function fallbackCreatorProfile(
 
 function parseCreatorDynamicVideosPage(
   mid: string,
-  limit: number,
+  pageSize: number,
   responseValue: unknown,
 ): BilibiliCreatorDynamicVideosPage {
   const response = ensureBilibiliSuccess(responseValue);
@@ -895,11 +963,11 @@ function parseCreatorDynamicVideosPage(
     }
 
     creator ??= parseDynamicCreatorProfile(mid, item);
-    if (videos.length >= limit) {
+    if (videos.length >= pageSize) {
       break;
     }
 
-    const video = parseDynamicArchiveVideo(item);
+    const video = parseDynamicArchiveVideo(mid, item);
     if (video && !seenBvids.has(video.bvid)) {
       seenBvids.add(video.bvid);
       videos.push(video);
@@ -914,26 +982,65 @@ function parseCreatorDynamicVideosPage(
   };
 }
 
-function validateCreatorRequest(url: URL): { limit: number; mid: string } {
+function mergeDynamicVideosIntoSpacePage(
+  spaceVideos: BilibiliCreatorVideosPayload,
+  dynamicVideos: BilibiliCreatorVideosPayload,
+): BilibiliCreatorVideosPayload {
+  const seenBvids = new Set(spaceVideos.videos.map((video) => video.bvid));
+  const videos = [...spaceVideos.videos];
+  const promotedDynamicVideo = dynamicVideos.videos.find(
+    (video) => !seenBvids.has(video.bvid),
+  );
+  if (promotedDynamicVideo) {
+    videos.push(promotedDynamicVideo);
+  }
+
+  const creator = { ...spaceVideos.creator };
+  if (!creator.avatarUrl && dynamicVideos.creator.avatarUrl) {
+    creator.avatarUrl = dynamicVideos.creator.avatarUrl;
+  }
+
+  if (
+    creator.name === `UP ${creator.mid}` &&
+    dynamicVideos.creator.name !== `UP ${creator.mid}`
+  ) {
+    creator.name = dynamicVideos.creator.name;
+  }
+
+  return {
+    ...spaceVideos,
+    creator,
+    videos: videos
+      .sort((left, right) => right.publishedAt - left.publishedAt)
+      .slice(0, spaceVideos.pageSize),
+  };
+}
+
+function validateCreatorRequest(url: URL): {
+  mid: string;
+  page: number;
+  pageSize: number;
+} {
   const mid = url.searchParams.get("mid")?.trim() ?? "";
   if (!/^\d+$/u.test(mid)) {
     throw new Error("B 站 UP 主 mid 必须是数字");
   }
 
-  const requestedLimit = Number(
-    url.searchParams.get("limit") ?? DEFAULT_CREATOR_VIDEO_LIMIT,
+  const requestedPage = Number(
+    url.searchParams.get("page") ?? DEFAULT_CREATOR_VIDEO_PAGE,
   );
-  if (
-    !Number.isInteger(requestedLimit) ||
-    requestedLimit <= 0 ||
-    requestedLimit > MAX_CREATOR_VIDEO_LIMIT
-  ) {
-    throw new Error(
-      `B 站 UP 主视频刷新数量必须在 1 到 ${MAX_CREATOR_VIDEO_LIMIT} 之间`,
-    );
+  if (!Number.isInteger(requestedPage) || requestedPage <= 0) {
+    throw new Error("B 站 UP 主视频页码必须大于 0");
   }
 
-  return { limit: requestedLimit, mid };
+  const requestedPageSize = Number(
+    url.searchParams.get("pageSize") ?? DEFAULT_CREATOR_VIDEO_PAGE_SIZE,
+  );
+  if (!Number.isInteger(requestedPageSize) || requestedPageSize <= 0) {
+    throw new Error("B 站 UP 主视频每页数量必须大于 0");
+  }
+
+  return { mid, page: requestedPage, pageSize: requestedPageSize };
 }
 
 function validateDirectAudioRequest(
@@ -1534,7 +1641,7 @@ async function fetchBilibiliCreatorVideosForDevApi(
   url: URL,
 ): Promise<BilibiliCreatorVideosPayload> {
   await ensureBilibiliWebAuthSessionLoaded();
-  const { limit, mid } = validateCreatorRequest(url);
+  const { mid, page, pageSize } = validateCreatorRequest(url);
   const session = getActiveBilibiliWebAuthSession();
 
   if (session) {
@@ -1542,7 +1649,8 @@ async function fetchBilibiliCreatorVideosForDevApi(
       return await fetchBilibiliCreatorVideosForDevApiMode(
         url,
         mid,
-        limit,
+        page,
+        pageSize,
         "登录态刷新",
         session,
       );
@@ -1550,7 +1658,8 @@ async function fetchBilibiliCreatorVideosForDevApi(
       return fetchBilibiliCreatorVideosForDevApiMode(
         url,
         mid,
-        limit,
+        page,
+        pageSize,
         "匿名刷新",
         null,
       ).catch((anonymousError: unknown) => {
@@ -1564,7 +1673,8 @@ async function fetchBilibiliCreatorVideosForDevApi(
   return fetchBilibiliCreatorVideosForDevApiMode(
     url,
     mid,
-    limit,
+    page,
+    pageSize,
     "匿名刷新",
     null,
   ).catch((error: unknown) => {
@@ -1575,17 +1685,37 @@ async function fetchBilibiliCreatorVideosForDevApi(
 async function fetchBilibiliCreatorVideosForDevApiMode(
   url: URL,
   mid: string,
-  limit: number,
+  page: number,
+  pageSize: number,
   modeLabel: string,
   session: BilibiliWebAuthSession | null,
 ): Promise<BilibiliCreatorVideosPayload> {
   try {
-    return await fetchBilibiliCreatorDynamicVideos(mid, limit, session);
-  } catch (dynamicError) {
-    return fetchBilibiliCreatorSpaceVideos(url, mid, limit, session).catch(
-      (spaceError: unknown) => {
+    const spaceVideos = await fetchBilibiliCreatorSpaceVideos(
+      url,
+      mid,
+      page,
+      pageSize,
+      session,
+    );
+    if (page !== 1) {
+      return spaceVideos;
+    }
+
+    return fetchBilibiliCreatorDynamicVideos(mid, pageSize, session)
+      .then((dynamicVideos) =>
+        mergeDynamicVideosIntoSpacePage(spaceVideos, dynamicVideos),
+      )
+      .catch(() => spaceVideos);
+  } catch (spaceError) {
+    if (page !== 1) {
+      throw spaceError;
+    }
+
+    return fetchBilibiliCreatorDynamicVideos(mid, pageSize, session).catch(
+      (dynamicError: unknown) => {
         throw new Error(
-          `${modeLabel}失败：动态接口：${errorMessage(dynamicError)}；投稿接口：${errorMessage(spaceError)}`,
+          `${modeLabel}失败：投稿接口：${errorMessage(spaceError)}；动态接口：${errorMessage(dynamicError)}`,
         );
       },
     );
@@ -1612,7 +1742,7 @@ async function prepareBilibiliCreatorSession(
 
 async function fetchBilibiliCreatorDynamicVideosPage(
   mid: string,
-  limit: number,
+  pageSize: number,
   cookieStore: Map<string, string>,
   imgKey: string,
   subKey: string,
@@ -1637,12 +1767,12 @@ async function fetchBilibiliCreatorDynamicVideosPage(
 
   const responseValue: unknown = await response.json();
 
-  return parseCreatorDynamicVideosPage(mid, limit, responseValue);
+  return parseCreatorDynamicVideosPage(mid, pageSize, responseValue);
 }
 
 async function fetchBilibiliCreatorDynamicVideos(
   mid: string,
-  limit: number,
+  pageSize: number,
   session: BilibiliWebAuthSession | null,
 ): Promise<BilibiliCreatorVideosPayload> {
   const cookieStore = createCookieStoreFromSession(session);
@@ -1663,7 +1793,7 @@ async function fetchBilibiliCreatorDynamicVideos(
     pageIndex < MAX_CREATOR_DYNAMIC_PAGE_COUNT;
     pageIndex += 1
   ) {
-    const remainingLimit = limit - videos.length;
+    const remainingLimit = pageSize - videos.length;
     if (remainingLimit <= 0) {
       break;
     }
@@ -1679,7 +1809,7 @@ async function fetchBilibiliCreatorDynamicVideos(
     creator ??= page.creator;
 
     for (const video of page.videos) {
-      if (videos.length >= limit) {
+      if (videos.length >= pageSize) {
         break;
       }
 
@@ -1706,6 +1836,9 @@ async function fetchBilibiliCreatorDynamicVideos(
 
   return {
     creator: creator ?? fallbackCreatorProfile(mid),
+    hasMore: false,
+    page: 1,
+    pageSize,
     videos,
   };
 }
@@ -1717,7 +1850,8 @@ function errorMessage(error: unknown): string {
 async function fetchBilibiliCreatorSpaceVideos(
   url: URL,
   mid: string,
-  limit: number,
+  page: number,
+  pageSize: number,
   session: BilibiliWebAuthSession | null,
 ): Promise<BilibiliCreatorVideosPayload> {
   const cookieStore = createCookieStoreFromSession(session);
@@ -1739,8 +1873,8 @@ async function fetchBilibiliCreatorSpaceVideos(
       order: "pubdate",
       order_avoided: "true",
       platform: "web",
-      pn: "1",
-      ps: limit.toString(),
+      pn: page.toString(),
+      ps: pageSize.toString(),
       special_type: "",
       tid: "0",
       web_location: "333.1387",
@@ -1754,7 +1888,7 @@ async function fetchBilibiliCreatorSpaceVideos(
     spaceUrl,
   );
 
-  return parseCreatorVideos(mid, creatorVideosResponse);
+  return parseCreatorVideos(mid, page, pageSize, creatorVideosResponse);
 }
 
 function writeJsonResponse(

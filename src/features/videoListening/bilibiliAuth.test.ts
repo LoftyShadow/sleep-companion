@@ -128,6 +128,7 @@ describe("bilibiliAuth", () => {
     });
     const client = createBilibiliAuthClient(invoke);
 
+    expect(client.canSyncWebLogin).toBe(true);
     await expect(client.getStatus()).resolves.toEqual({
       account: undefined,
       expiresAt: undefined,
@@ -252,6 +253,7 @@ describe("bilibiliAuth", () => {
     vi.stubGlobal("fetch", fetchMock);
     const client = createBilibiliWebAuthClient("");
 
+    expect(client.canSyncWebLogin).toBe(false);
     await expect(client.getStatus()).resolves.toEqual({
       account: undefined,
       expiresAt: undefined,
@@ -302,5 +304,19 @@ describe("bilibiliAuth", () => {
       body: JSON.stringify({ cookieText: "SESSDATA=sess-secret" }),
       method: "POST",
     });
+  });
+
+  it("does not open external Bilibili web login in a plain Web runtime", async () => {
+    const openMock = vi.fn();
+    vi.stubGlobal("open", openMock);
+    const client = createBilibiliWebAuthClient("");
+
+    await expect(client.openWebLogin()).rejects.toThrow(
+      "当前 Web 环境不能复用外部 B 站网页登录，请使用扫码登录或 Cookie 导入",
+    );
+    await expect(client.syncWebLogin()).rejects.toThrow(
+      "当前 Web 环境不能复用外部 B 站网页登录，请使用扫码登录或 Cookie 导入",
+    );
+    expect(openMock).not.toHaveBeenCalled();
   });
 });

@@ -71,6 +71,7 @@ describe("AppWorkspace integration", () => {
 
   function createLoggedOutBilibiliAuthClient(): BilibiliAuthClient {
     return {
+      canSyncWebLogin: false,
       createLoginQr: vi.fn(),
       getStatus: vi.fn().mockResolvedValue({
         account: undefined,

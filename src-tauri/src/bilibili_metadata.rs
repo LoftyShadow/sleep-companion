@@ -51,6 +51,13 @@ pub struct BilibiliCreatorVideo {
 #[serde(rename_all = "camelCase")]
 pub struct BilibiliCreatorVideos {
     creator: BilibiliCreatorProfile,
+    has_more: bool,
+    page: u32,
+    page_size: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    total_count: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    total_pages: Option<u32>,
     videos: Vec<BilibiliCreatorVideo>,
 }
 
@@ -70,8 +77,8 @@ pub struct BilibiliBrowserFingerprint {
     dm_img_inter: Option<String>,
 }
 
-const DEFAULT_CREATOR_VIDEO_LIMIT: u8 = 12;
-const MAX_CREATOR_VIDEO_LIMIT: u8 = 12;
+const DEFAULT_CREATOR_VIDEO_PAGE: u32 = 1;
+const DEFAULT_CREATOR_VIDEO_PAGE_SIZE: u32 = 5;
 const MAX_CREATOR_DYNAMIC_PAGE_COUNT: u8 = 10;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BilibiliCreatorFetchMode {
@@ -180,15 +187,22 @@ fn validate_creator_mid(mid: &str) -> Result<String, String> {
     }
 }
 
-fn validate_creator_video_limit(limit: Option<u8>) -> Result<u8, String> {
-    let normalized_limit = limit.unwrap_or(DEFAULT_CREATOR_VIDEO_LIMIT);
-    if normalized_limit == 0 || normalized_limit > MAX_CREATOR_VIDEO_LIMIT {
-        return Err(format!(
-            "B 站 UP 主视频刷新数量必须在 1 到 {MAX_CREATOR_VIDEO_LIMIT} 之间"
-        ));
+fn validate_creator_video_page(page: Option<u32>) -> Result<u32, String> {
+    let normalized_page = page.unwrap_or(DEFAULT_CREATOR_VIDEO_PAGE);
+    if normalized_page == 0 {
+        return Err("B 站 UP 主视频页码必须大于 0".to_string());
     }
 
-    Ok(normalized_limit)
+    Ok(normalized_page)
+}
+
+fn validate_creator_video_page_size(page_size: Option<u32>) -> Result<u32, String> {
+    let normalized_page_size = page_size.unwrap_or(DEFAULT_CREATOR_VIDEO_PAGE_SIZE);
+    if normalized_page_size == 0 {
+        return Err("B 站 UP 主视频每页数量必须大于 0".to_string());
+    }
+
+    Ok(normalized_page_size)
 }
 
 fn modules_value<'a>(item: &'a Value, key: &str) -> Option<&'a Value> {
@@ -303,7 +317,19 @@ fn parse_creator_video(value: &Value) -> Result<BilibiliCreatorVideo, String> {
     })
 }
 
-fn parse_creator_videos(mid: &str, value: &Value) -> Result<BilibiliCreatorVideos, String> {
+fn total_pages_from_count(total_count: u64, page_size: u32) -> u32 {
+    let page_size = u64::from(page_size.max(1));
+    u32::try_from(total_count.div_ceil(page_size))
+        .unwrap_or(u32::MAX)
+        .max(1)
+}
+
+fn parse_creator_videos(
+    mid: &str,
+    page: u32,
+    page_size: u32,
+    value: &Value,
+) -> Result<BilibiliCreatorVideos, String> {
     ensure_bilibili_creator_success(value)?;
 
     let data = value
@@ -320,6 +346,11 @@ fn parse_creator_videos(mid: &str, value: &Value) -> Result<BilibiliCreatorVideo
         .iter()
         .map(parse_creator_video)
         .collect::<Result<Vec<_>, _>>()?;
+    let total_count = read_u64(list, &["count"])
+        .or_else(|| read_u64(data, &["page", "count"]))
+        .or_else(|| read_u64(data, &["page", "total"]));
+    let total_pages = total_count.map(|count| total_pages_from_count(count, page_size));
+    let has_more = total_pages.map(|pages| page < pages).unwrap_or(false);
     let creator_name = video_values
         .first()
         .and_then(|video| read_non_empty_string(video, &["author"]))
@@ -333,6 +364,11 @@ fn parse_creator_videos(mid: &str, value: &Value) -> Result<BilibiliCreatorVideo
             name: creator_name.to_string(),
             avatar_url,
         },
+        has_more,
+        page,
+        page_size,
+        total_count,
+        total_pages,
         videos,
     })
 }
@@ -363,13 +399,24 @@ fn dynamic_archive_value(module_dynamic: &Value) -> Option<&Value> {
     })
 }
 
-fn parse_dynamic_archive_video(value: &Value) -> Option<BilibiliCreatorVideo> {
+fn dynamic_author_mid(value: &Value) -> Option<String> {
+    let author = modules_value(value, "module_author")?;
+    let user = author.get("user").unwrap_or(author);
+
+    read_i64(user, &["mid"]).map(|value| value.to_string())
+}
+
+fn parse_dynamic_archive_video_from_item(
+    value: &Value,
+    published_at_override: Option<i64>,
+) -> Option<BilibiliCreatorVideo> {
     let module_dynamic = modules_value(value, "module_dynamic")?;
     let archive = dynamic_archive_value(module_dynamic)?;
     let bvid = read_non_empty_string(archive, &["bvid"])?;
     let title = read_non_empty_string(archive, &["title"])?;
     let author = modules_value(value, "module_author")?;
-    let published_at = read_i64(author, &["pub_ts"])
+    let published_at = published_at_override
+        .or_else(|| read_i64(author, &["pub_ts"]))
         .or_else(|| read_i64(archive, &["pubdate"]))
         .or_else(|| read_i64(archive, &["ctime"]))
         .or_else(|| read_i64(archive, &["created"]))?;
@@ -396,6 +443,22 @@ fn parse_dynamic_archive_video(value: &Value) -> Option<BilibiliCreatorVideo> {
     })
 }
 
+fn parse_dynamic_forward_archive_video(mid: &str, value: &Value) -> Option<BilibiliCreatorVideo> {
+    let module_dynamic = modules_value(value, "module_dynamic")?;
+    let forward_item = module_dynamic.get("dyn_forward")?.get("item")?;
+    if dynamic_author_mid(forward_item).as_deref() != Some(mid) {
+        return None;
+    }
+
+    let author = modules_value(value, "module_author")?;
+    parse_dynamic_archive_video_from_item(forward_item, read_i64(author, &["pub_ts"]))
+}
+
+fn parse_dynamic_archive_video(mid: &str, value: &Value) -> Option<BilibiliCreatorVideo> {
+    parse_dynamic_archive_video_from_item(value, None)
+        .or_else(|| parse_dynamic_forward_archive_video(mid, value))
+}
+
 fn fallback_creator_profile(mid: &str) -> BilibiliCreatorProfile {
     BilibiliCreatorProfile {
         mid: mid.to_string(),
@@ -406,7 +469,7 @@ fn fallback_creator_profile(mid: &str) -> BilibiliCreatorProfile {
 
 fn parse_creator_dynamic_videos_page(
     mid: &str,
-    limit: u8,
+    page_size: usize,
     value: &Value,
 ) -> Result<BilibiliCreatorDynamicVideosPage, String> {
     ensure_bilibili_creator_success(value)?;
@@ -426,11 +489,11 @@ fn parse_creator_dynamic_videos_page(
             creator = parse_dynamic_creator_profile(mid, item);
         }
 
-        if videos.len() >= usize::from(limit) {
+        if videos.len() >= page_size {
             break;
         }
 
-        let Some(video) = parse_dynamic_archive_video(item) else {
+        let Some(video) = parse_dynamic_archive_video(mid, item) else {
             continue;
         };
 
@@ -445,6 +508,58 @@ fn parse_creator_dynamic_videos_page(
         has_more,
         next_offset,
     })
+}
+
+fn merge_dynamic_videos_into_space_page(
+    mut space_videos: BilibiliCreatorVideos,
+    dynamic_videos: BilibiliCreatorVideos,
+) -> BilibiliCreatorVideos {
+    let BilibiliCreatorVideos {
+        creator: dynamic_creator,
+        videos: dynamic_video_values,
+        ..
+    } = dynamic_videos;
+    let seen_bvids = space_videos
+        .videos
+        .iter()
+        .map(|video| video.bvid.clone())
+        .collect::<BTreeSet<_>>();
+    let target_len = usize::try_from(space_videos.page_size).unwrap_or(usize::MAX);
+
+    if let Some(video) = dynamic_video_values
+        .into_iter()
+        .find(|video| !seen_bvids.contains(&video.bvid))
+    {
+        space_videos.videos.push(video);
+    }
+
+    space_videos
+        .videos
+        .sort_by(|left, right| right.published_at.cmp(&left.published_at));
+    space_videos.videos.truncate(target_len);
+
+    if space_videos.creator.avatar_url.is_none() && dynamic_creator.avatar_url.is_some() {
+        space_videos.creator.avatar_url = dynamic_creator.avatar_url;
+    }
+
+    if space_videos.creator.name == "B 站 UP 主" && dynamic_creator.name != "B 站 UP 主" {
+        space_videos.creator.name = dynamic_creator.name;
+    }
+
+    space_videos
+}
+
+async fn try_merge_creator_dynamic_videos(
+    client: &reqwest::Client,
+    mid: &str,
+    page_size: u32,
+    context: &mut BilibiliCreatorRequestContext,
+    space_videos: BilibiliCreatorVideos,
+) -> BilibiliCreatorVideos {
+    match fetch_bilibili_creator_dynamic_videos(client, mid, page_size, context).await {
+        Ok(dynamic_videos) => merge_dynamic_videos_into_space_page(space_videos, dynamic_videos),
+        Err(_) => space_videos,
+    }
 }
 
 fn validate_reference(reference: &BilibiliMetadataReference) -> Result<(), String> {
@@ -562,7 +677,8 @@ fn fingerprint_value(
 
 fn creator_videos_url(
     mid: &str,
-    limit: u8,
+    page: u32,
+    page_size: u32,
     img_key: &str,
     sub_key: &str,
     wts: i64,
@@ -592,8 +708,8 @@ fn creator_videos_url(
             ("order".to_string(), "pubdate".to_string()),
             ("order_avoided".to_string(), "true".to_string()),
             ("platform".to_string(), "web".to_string()),
-            ("pn".to_string(), "1".to_string()),
-            ("ps".to_string(), limit.to_string()),
+            ("pn".to_string(), page.to_string()),
+            ("ps".to_string(), page_size.to_string()),
             ("special_type".to_string(), String::new()),
             ("tid".to_string(), "0".to_string()),
             ("web_location".to_string(), "333.1387".to_string()),
@@ -652,7 +768,7 @@ async fn prepare_bilibili_creator_session(
 async fn fetch_bilibili_creator_dynamic_videos_page(
     client: &reqwest::Client,
     mid: &str,
-    limit: u8,
+    page_size: usize,
     cookie_store: &mut BilibiliCookieStore,
     img_key: &str,
     sub_key: &str,
@@ -673,13 +789,13 @@ async fn fetch_bilibili_creator_dynamic_videos_page(
     )
     .await?;
 
-    parse_creator_dynamic_videos_page(mid, limit, &value)
+    parse_creator_dynamic_videos_page(mid, page_size, &value)
 }
 
 async fn fetch_bilibili_creator_dynamic_videos(
     client: &reqwest::Client,
     mid: &str,
-    limit: u8,
+    page_size: u32,
     context: &mut BilibiliCreatorRequestContext,
 ) -> Result<BilibiliCreatorVideos, String> {
     prepare_bilibili_creator_session(client, &mut context.cookie_store, mid).await?;
@@ -690,15 +806,17 @@ async fn fetch_bilibili_creator_dynamic_videos(
     let mut offset = None;
 
     for _page_index in 0..MAX_CREATOR_DYNAMIC_PAGE_COUNT {
-        let remaining_limit = limit.saturating_sub(videos.len() as u8);
-        if remaining_limit == 0 {
+        let remaining_page_size = usize::try_from(page_size)
+            .unwrap_or(usize::MAX)
+            .saturating_sub(videos.len());
+        if remaining_page_size == 0 {
             break;
         }
 
         let page = fetch_bilibili_creator_dynamic_videos_page(
             client,
             mid,
-            remaining_limit,
+            remaining_page_size,
             &mut context.cookie_store,
             &img_key,
             &sub_key,
@@ -710,7 +828,7 @@ async fn fetch_bilibili_creator_dynamic_videos(
         }
 
         for video in page.videos {
-            if videos.len() >= usize::from(limit) {
+            if videos.len() >= usize::try_from(page_size).unwrap_or(usize::MAX) {
                 break;
             }
 
@@ -736,6 +854,11 @@ async fn fetch_bilibili_creator_dynamic_videos(
 
     Ok(BilibiliCreatorVideos {
         creator: creator.unwrap_or_else(|| fallback_creator_profile(mid)),
+        has_more: false,
+        page: 1,
+        page_size,
+        total_count: None,
+        total_pages: None,
         videos,
     })
 }
@@ -743,7 +866,8 @@ async fn fetch_bilibili_creator_dynamic_videos(
 async fn fetch_bilibili_creator_space_videos(
     client: &reqwest::Client,
     mid: &str,
-    limit: u8,
+    page: u32,
+    page_size: u32,
     fingerprint: &BilibiliBrowserFingerprint,
     context: &mut BilibiliCreatorRequestContext,
 ) -> Result<BilibiliCreatorVideos, String> {
@@ -751,7 +875,8 @@ async fn fetch_bilibili_creator_space_videos(
     let (img_key, sub_key) = fetch_bilibili_wbi_keys(client, &mut context.cookie_store).await?;
     let url = creator_videos_url(
         mid,
-        limit,
+        page,
+        page_size,
         &img_key,
         &sub_key,
         now_unix_seconds()?,
@@ -768,24 +893,37 @@ async fn fetch_bilibili_creator_space_videos(
     )
     .await?;
 
-    parse_creator_videos(mid, &value)
+    parse_creator_videos(mid, page, page_size, &value)
 }
 
 async fn fetch_bilibili_creator_videos_with_context(
     client: &reqwest::Client,
     mid: &str,
-    limit: u8,
+    page: u32,
+    page_size: u32,
     fingerprint: &BilibiliBrowserFingerprint,
     context: &mut BilibiliCreatorRequestContext,
 ) -> Result<BilibiliCreatorVideos, String> {
-    match fetch_bilibili_creator_dynamic_videos(client, mid, limit, context).await {
-        Ok(videos) => Ok(videos),
-        Err(dynamic_error) => {
-            fetch_bilibili_creator_space_videos(client, mid, limit, fingerprint, context)
+    match fetch_bilibili_creator_space_videos(client, mid, page, page_size, fingerprint, context)
+        .await
+    {
+        Ok(videos) => {
+            if page == 1 {
+                Ok(try_merge_creator_dynamic_videos(client, mid, page_size, context, videos).await)
+            } else {
+                Ok(videos)
+            }
+        }
+        Err(space_error) => {
+            if page != 1 {
+                return Err(space_error);
+            }
+
+            fetch_bilibili_creator_dynamic_videos(client, mid, page_size, context)
                 .await
-                .map_err(|space_error| {
+                .map_err(|dynamic_error| {
                     format!(
-                        "{}失败：动态接口：{dynamic_error}；投稿接口：{space_error}",
+                        "{}失败：投稿接口：{space_error}；动态接口：{dynamic_error}",
                         context.mode.label()
                     )
                 })
@@ -795,12 +933,14 @@ async fn fetch_bilibili_creator_videos_with_context(
 
 async fn fetch_bilibili_creator_videos_with_session(
     mid: String,
-    limit: Option<u8>,
+    page: Option<u32>,
+    page_size: Option<u32>,
     fingerprint: Option<BilibiliBrowserFingerprint>,
     session: Option<&StoredBilibiliSession>,
 ) -> Result<BilibiliCreatorVideos, String> {
     let normalized_mid = validate_creator_mid(&mid)?;
-    let normalized_limit = validate_creator_video_limit(limit)?;
+    let normalized_page = validate_creator_video_page(page)?;
+    let normalized_page_size = validate_creator_video_page_size(page_size)?;
     let normalized_fingerprint = normalize_browser_fingerprint(fingerprint);
     let client = create_bilibili_client(10, "B 站 UP 主视频")?;
 
@@ -809,7 +949,8 @@ async fn fetch_bilibili_creator_videos_with_session(
         let authenticated_result = fetch_bilibili_creator_videos_with_context(
             &client,
             &normalized_mid,
-            normalized_limit,
+            normalized_page,
+            normalized_page_size,
             &normalized_fingerprint,
             &mut authenticated_context,
         )
@@ -823,7 +964,8 @@ async fn fetch_bilibili_creator_videos_with_session(
         let anonymous_result = fetch_bilibili_creator_videos_with_context(
             &client,
             &normalized_mid,
-            normalized_limit,
+            normalized_page,
+            normalized_page_size,
             &normalized_fingerprint,
             &mut anonymous_context,
         )
@@ -841,7 +983,8 @@ async fn fetch_bilibili_creator_videos_with_session(
     fetch_bilibili_creator_videos_with_context(
         &client,
         &normalized_mid,
-        normalized_limit,
+        normalized_page,
+        normalized_page_size,
         &normalized_fingerprint,
         &mut anonymous_context,
     )
@@ -864,12 +1007,14 @@ pub async fn fetch_bilibili_metadata(
 pub async fn fetch_bilibili_creator_videos(
     app: tauri::AppHandle,
     mid: String,
-    limit: Option<u8>,
+    page: Option<u32>,
+    page_size: Option<u32>,
     fingerprint: Option<BilibiliBrowserFingerprint>,
 ) -> Result<BilibiliCreatorVideos, String> {
     let session = load_active_bilibili_session(&app)?;
 
-    fetch_bilibili_creator_videos_with_session(mid, limit, fingerprint, session.as_ref()).await
+    fetch_bilibili_creator_videos_with_session(mid, page, page_size, fingerprint, session.as_ref())
+        .await
 }
 
 #[cfg(test)]
@@ -942,15 +1087,20 @@ mod tests {
     }
 
     #[test]
-    fn validates_creator_mid_and_limit() {
+    fn validates_creator_mid_and_page_size() {
         assert_eq!(validate_creator_mid(" 123456 ").unwrap(), "123456");
         assert!(validate_creator_mid("space123").is_err());
         assert_eq!(
-            validate_creator_video_limit(None).unwrap(),
-            DEFAULT_CREATOR_VIDEO_LIMIT
+            validate_creator_video_page(None).unwrap(),
+            DEFAULT_CREATOR_VIDEO_PAGE
         );
-        assert!(validate_creator_video_limit(Some(0)).is_err());
-        assert!(validate_creator_video_limit(Some(MAX_CREATOR_VIDEO_LIMIT + 1)).is_err());
+        assert!(validate_creator_video_page(Some(0)).is_err());
+        assert_eq!(
+            validate_creator_video_page_size(None).unwrap(),
+            DEFAULT_CREATOR_VIDEO_PAGE_SIZE
+        );
+        assert!(validate_creator_video_page_size(Some(0)).is_err());
+        assert!(validate_creator_video_page_size(Some(120)).unwrap() == 120);
     }
 
     #[test]
@@ -999,6 +1149,7 @@ mod tests {
             "code": 0,
             "data": {
                 "list": {
+                    "count": 18,
                     "vlist": [
                         {
                             "aid": 170001,
@@ -1017,10 +1168,15 @@ mod tests {
             }
         });
 
-        let videos = parse_creator_videos("123456", &value).unwrap();
+        let videos = parse_creator_videos("123456", 2, 5, &value).unwrap();
 
         assert_eq!(videos.creator.mid, "123456");
         assert_eq!(videos.creator.name, "测试UP");
+        assert_eq!(videos.page, 2);
+        assert_eq!(videos.page_size, 5);
+        assert_eq!(videos.total_count, Some(18));
+        assert_eq!(videos.total_pages, Some(4));
+        assert!(videos.has_more);
         assert_eq!(videos.videos.len(), 1);
         assert_eq!(videos.videos[0].aid, Some("170001".to_string()));
         assert_eq!(videos.videos[0].bvid, "BV1xx411c7mD");
@@ -1095,7 +1251,7 @@ mod tests {
             }
         });
 
-        let videos = parse_creator_dynamic_videos_page("15810", 12, &value).unwrap();
+        let videos = parse_creator_dynamic_videos_page("15810", 20, &value).unwrap();
 
         assert_eq!(videos.creator.mid, "15810");
         assert_eq!(videos.creator.name, "Mr.Quin");
@@ -1155,7 +1311,7 @@ mod tests {
             }
         });
 
-        let videos = parse_creator_dynamic_videos_page("15810", 12, &value).unwrap();
+        let videos = parse_creator_dynamic_videos_page("15810", 20, &value).unwrap();
 
         assert_eq!(videos.creator.mid, "15810");
         assert_eq!(videos.creator.name, "Mr.Quin");
@@ -1172,11 +1328,200 @@ mod tests {
     }
 
     #[test]
+    fn parses_creator_forwarded_dynamic_archive_videos() {
+        let value = serde_json::json!({
+            "code": 0,
+            "data": {
+                "items": [
+                    {
+                        "type": "DYNAMIC_TYPE_FORWARD",
+                        "modules": [
+                            {
+                                "module_author": {
+                                    "pub_ts": 1780858952,
+                                    "user": {
+                                        "face": "//i0.hdslb.com/avatar.jpg",
+                                        "mid": 15810,
+                                        "name": "Mr.Quin"
+                                    }
+                                }
+                            },
+                            {
+                                "module_dynamic": {
+                                    "dyn_forward": {
+                                        "item": {
+                                            "type": "DYNAMIC_TYPE_AV",
+                                            "modules": [
+                                                {
+                                                    "module_author": {
+                                                        "pub_ts": 1780858702,
+                                                        "user": {
+                                                            "mid": 15810,
+                                                            "name": "Mr.Quin"
+                                                        }
+                                                    }
+                                                },
+                                                {
+                                                    "module_dynamic": {
+                                                        "dyn_archive": {
+                                                            "aid": "116710317296409",
+                                                            "bvid": "BV1vPE86oEhd",
+                                                            "cover": "http://i0.hdslb.com/bfs/archive/replay.jpg",
+                                                            "duration_text": "01:43:24",
+                                                            "stat": {
+                                                                "danmaku": "1.8万",
+                                                                "like": "355",
+                                                                "play": "9967"
+                                                            },
+                                                            "title": "【直播回放】XBOX游戏展示会了 2026年06月08日00点场"
+                                                        },
+                                                        "type": "MDL_DYN_TYPE_ARCHIVE"
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    },
+                                    "type": "MDL_DYN_TYPE_FORWARD"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+        });
+
+        let videos = parse_creator_dynamic_videos_page("15810", 20, &value).unwrap();
+
+        assert_eq!(videos.creator.mid, "15810");
+        assert_eq!(videos.creator.name, "Mr.Quin");
+        assert_eq!(videos.videos.len(), 1);
+        assert_eq!(videos.videos[0].aid, Some("116710317296409".to_string()));
+        assert_eq!(videos.videos[0].bvid, "BV1vPE86oEhd");
+        assert_eq!(
+            videos.videos[0].title,
+            "【直播回放】XBOX游戏展示会了 2026年06月08日00点场"
+        );
+        assert_eq!(videos.videos[0].published_at, 1780858952);
+        assert_eq!(videos.videos[0].duration_seconds, Some(6204));
+        assert_eq!(videos.videos[0].play_count, Some(9967));
+        assert_eq!(
+            videos.videos[0].cover_url,
+            Some("https://i0.hdslb.com/bfs/archive/replay.jpg".to_string())
+        );
+    }
+
+    #[test]
+    fn merges_dynamic_replay_videos_into_space_page() {
+        let space_videos = BilibiliCreatorVideos {
+            creator: BilibiliCreatorProfile {
+                avatar_url: None,
+                mid: "15810".to_string(),
+                name: "Mr.Quin".to_string(),
+            },
+            has_more: true,
+            page: 1,
+            page_size: 3,
+            total_count: Some(1598),
+            total_pages: Some(533),
+            videos: vec![
+                BilibiliCreatorVideo {
+                    aid: Some("1".to_string()),
+                    bvid: "BVspaceOld1".to_string(),
+                    cover_url: None,
+                    duration_seconds: Some(650),
+                    play_count: Some(18_000),
+                    published_at: 1780279202,
+                    title: "空间投稿 1".to_string(),
+                },
+                BilibiliCreatorVideo {
+                    aid: Some("2".to_string()),
+                    bvid: "BVspaceOld2".to_string(),
+                    cover_url: None,
+                    duration_seconds: Some(660),
+                    play_count: Some(19_000),
+                    published_at: 1780192802,
+                    title: "空间投稿 2".to_string(),
+                },
+                BilibiliCreatorVideo {
+                    aid: Some("3".to_string()),
+                    bvid: "BVspaceOld3".to_string(),
+                    cover_url: None,
+                    duration_seconds: Some(670),
+                    play_count: Some(20_000),
+                    published_at: 1780106402,
+                    title: "空间投稿 3".to_string(),
+                },
+            ],
+        };
+        let dynamic_videos = BilibiliCreatorVideos {
+            creator: BilibiliCreatorProfile {
+                avatar_url: Some("https://i0.hdslb.com/avatar.jpg".to_string()),
+                mid: "15810".to_string(),
+                name: "Mr.Quin".to_string(),
+            },
+            has_more: false,
+            page: 1,
+            page_size: 3,
+            total_count: None,
+            total_pages: None,
+            videos: vec![
+                BilibiliCreatorVideo {
+                    aid: Some("116681745697349".to_string()),
+                    bvid: "BV1ZzVk6XEfb".to_string(),
+                    cover_url: Some("https://i0.hdslb.com/replay.jpg".to_string()),
+                    duration_seconds: Some(15535),
+                    play_count: Some(33_000),
+                    published_at: 1780425165,
+                    title: "【直播回放】古法修车 2026年06月02日20点场".to_string(),
+                },
+                BilibiliCreatorVideo {
+                    aid: Some("116681745697350".to_string()),
+                    bvid: "BVreplayNew2".to_string(),
+                    cover_url: Some("https://i0.hdslb.com/replay-2.jpg".to_string()),
+                    duration_seconds: Some(12_000),
+                    play_count: Some(22_000),
+                    published_at: 1780390000,
+                    title: "【直播回放】第二条回放不应挤掉投稿".to_string(),
+                },
+                BilibiliCreatorVideo {
+                    aid: Some("1".to_string()),
+                    bvid: "BVspaceOld1".to_string(),
+                    cover_url: None,
+                    duration_seconds: Some(650),
+                    play_count: Some(18_000),
+                    published_at: 1780279202,
+                    title: "空间投稿 1".to_string(),
+                },
+            ],
+        };
+
+        let videos = merge_dynamic_videos_into_space_page(space_videos, dynamic_videos);
+
+        assert_eq!(videos.videos.len(), 3);
+        assert_eq!(videos.videos[0].bvid, "BV1ZzVk6XEfb");
+        assert_eq!(
+            videos.videos[0].title,
+            "【直播回放】古法修车 2026年06月02日20点场"
+        );
+        assert_eq!(videos.videos[1].bvid, "BVspaceOld1");
+        assert_eq!(videos.videos[2].bvid, "BVspaceOld2");
+        assert!(videos
+            .videos
+            .iter()
+            .all(|video| video.bvid != "BVreplayNew2"));
+        assert_eq!(
+            videos.creator.avatar_url,
+            Some("https://i0.hdslb.com/avatar.jpg".to_string())
+        );
+    }
+
+    #[test]
     #[ignore = "外网验证依赖 B 站当前风控策略和本机网络，只在调试 UP 主刷新时手动运行"]
     fn fetches_creator_videos_from_bilibili_for_uid_15810() {
         let videos = tauri::async_runtime::block_on(fetch_bilibili_creator_videos_with_session(
             "15810".to_string(),
-            Some(12),
+            Some(1),
+            Some(5),
             Some(BilibiliBrowserFingerprint {
                 dm_img_list: Some(DEFAULT_DM_IMG_LIST.to_string()),
                 dm_img_str: Some(DEFAULT_DM_IMG_STR.to_string()),

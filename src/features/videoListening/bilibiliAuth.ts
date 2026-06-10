@@ -43,6 +43,7 @@ export interface BilibiliCookieLoginResult {
 }
 
 export interface BilibiliAuthClient {
+  canSyncWebLogin: boolean;
   createLoginQr: () => Promise<BilibiliLoginQr>;
   getStatus: () => Promise<BilibiliAuthStatus>;
   importCookies: (cookieText: string) => Promise<BilibiliCookieLoginResult>;
@@ -223,6 +224,7 @@ export function createBilibiliAuthClient(
   invoke: InvokeFn = createSafeTauriInvoke("当前环境不能登录 B 站"),
 ): BilibiliAuthClient {
   return {
+    canSyncWebLogin: true,
     async createLoginQr() {
       return normalizeBilibiliLoginQr(
         await invoke("create_bilibili_login_qr"),
@@ -261,6 +263,7 @@ export function createBilibiliWebAuthClient(
   baseUrl: string = readWebAuthApiBaseUrl(),
 ): BilibiliAuthClient {
   return {
+    canSyncWebLogin: false,
     async createLoginQr() {
       const response = await fetch(bilibiliAuthApiUrl(baseUrl, "login-qr"), {
         method: "POST",
@@ -296,8 +299,9 @@ export function createBilibiliWebAuthClient(
       await parseWebAuthResponse(response);
     },
     openWebLogin() {
-      window.open("https://passport.bilibili.com/login", "_blank", "noopener");
-      return Promise.resolve();
+      return Promise.reject(
+        new Error("当前 Web 环境不能复用外部 B 站网页登录，请使用扫码登录或 Cookie 导入"),
+      );
     },
     async pollLoginQr(qrcodeKey) {
       const response = await fetch(bilibiliAuthApiUrl(baseUrl, "login-poll"), {
@@ -314,7 +318,7 @@ export function createBilibiliWebAuthClient(
     },
     syncWebLogin() {
       return Promise.reject(
-        new Error("当前 Web 环境不能自动同步 B 站网页登录"),
+        new Error("当前 Web 环境不能复用外部 B 站网页登录，请使用扫码登录或 Cookie 导入"),
       );
     },
   };

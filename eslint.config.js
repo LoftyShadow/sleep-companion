@@ -34,7 +34,9 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
       parserOptions: {
-        projectService: true,
+        projectService: {
+          allowDefaultProject: ["*.config.ts", "vite.config.ts", "vitest.config.ts"],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
     },
