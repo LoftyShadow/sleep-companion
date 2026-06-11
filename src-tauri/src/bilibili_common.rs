@@ -67,10 +67,6 @@ pub fn read_non_empty_string<'a>(value: &'a Value, path: &[&str]) -> Option<&'a 
         .filter(|text| !text.trim().is_empty())
 }
 
-pub fn read_array<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Vec<Value>> {
-    read_path(value, path)?.as_array()
-}
-
 pub fn read_number_as_string(value: &Value, path: &[&str]) -> Option<String> {
     let current_value = read_path(value, path)?;
 

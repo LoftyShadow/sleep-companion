@@ -20,7 +20,6 @@ const DEFAULT_DM_COVER_IMG_STR =
 const DEFAULT_DM_IMG_INTER = "{\"ds\":[],\"wh\":[1920,1080,100],\"of\":[0,0,0]}";
 const DEFAULT_CREATOR_VIDEO_PAGE = 1;
 const DEFAULT_CREATOR_VIDEO_PAGE_SIZE = 5;
-const MAX_CREATOR_DYNAMIC_PAGE_COUNT = 10;
 const BILIBILI_WEB_SESSION_FILE_NAME = "bilibili-web-session.json";
 const VENDOR_CHUNK_RULES: ReadonlyArray<{
   matchers: readonly string[];
@@ -72,11 +71,6 @@ interface BilibiliCreatorVideosPayload {
   totalCount?: number;
   totalPages?: number;
   videos: BilibiliCreatorVideoPayload[];
-}
-
-interface BilibiliCreatorDynamicVideosPage extends BilibiliCreatorVideosPayload {
-  hasMore: boolean;
-  nextOffset?: string;
 }
 
 interface BilibiliDirectAudioReferencePayload {
@@ -223,53 +217,6 @@ function readNumber(value: unknown): number | undefined {
     const parsedValue = Number(value.trim());
 
     return Number.isFinite(parsedValue) ? parsedValue : undefined;
-  }
-
-  return undefined;
-}
-
-function parseBilibiliCountText(text: string): number | undefined {
-  const trimmedText = text.trim();
-  if (!trimmedText) {
-    return undefined;
-  }
-
-  if (trimmedText.endsWith("万")) {
-    const count = Number(trimmedText.slice(0, -1).trim());
-
-    return Number.isFinite(count) ? Math.round(count * 10_000) : undefined;
-  }
-
-  const count = Number(trimmedText);
-
-  return Number.isFinite(count) ? count : undefined;
-}
-
-function readBilibiliCount(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  return typeof value === "string" ? parseBilibiliCountText(value) : undefined;
-}
-
-function readFirstDurationSeconds(...values: unknown[]): number | undefined {
-  for (const value of values) {
-    const duration = parseDurationSeconds(value);
-    if (duration !== undefined) {
-      return duration;
-    }
-  }
-
-  return undefined;
-}
-
-function readFirstBilibiliCount(...values: unknown[]): number | undefined {
-  for (const value of values) {
-    const count = readBilibiliCount(value);
-    if (count !== undefined) {
-      return count;
-    }
   }
 
   return undefined;
@@ -738,31 +685,6 @@ async function fetchBilibiliJson(
   return response.json();
 }
 
-function modulesValue(
-  item: Record<string, unknown>,
-  key: string,
-): Record<string, unknown> | null {
-  const moduleMap = asRecord(item.modules);
-  if (moduleMap) {
-    const value = asRecord(moduleMap[key]);
-    if (value) {
-      return value;
-    }
-  }
-
-  if (Array.isArray(item.modules)) {
-    for (const moduleValue of item.modules) {
-      const moduleRecord = asRecord(moduleValue);
-      const value = asRecord(moduleRecord?.[key]);
-      if (value) {
-        return value;
-      }
-    }
-  }
-
-  return null;
-}
-
 function parseCreatorVideos(
   mid: string,
   page: number,
@@ -820,199 +742,6 @@ function parseCreatorVideos(
     totalCount,
     totalPages,
     videos,
-  };
-}
-
-function parseDynamicCreatorProfile(
-  mid: string,
-  item: Record<string, unknown>,
-): BilibiliCreatorVideosPayload["creator"] | null {
-  const author = modulesValue(item, "module_author");
-  const user = asRecord(author?.user) ?? author;
-  const userMid = readString(user?.mid);
-  const name = readString(user?.name);
-  if (!userMid || userMid !== mid || !name) {
-    return null;
-  }
-
-  return {
-    avatarUrl: normalizeImageUrl(user?.face),
-    mid: userMid,
-    name,
-  };
-}
-
-function dynamicArchiveValue(
-  moduleDynamic: Record<string, unknown>,
-): Record<string, unknown> | null {
-  const major = asRecord(moduleDynamic.major);
-
-  return asRecord(moduleDynamic.dyn_archive) ?? asRecord(major?.archive);
-}
-
-function dynamicAuthorMid(item: Record<string, unknown>): string | null {
-  const author = modulesValue(item, "module_author");
-  const user = asRecord(author?.user) ?? author;
-
-  return readString(user?.mid);
-}
-
-function parseDynamicArchiveVideoFromItem(
-  item: Record<string, unknown>,
-  publishedAtOverride?: number,
-): BilibiliCreatorVideoPayload | null {
-  const moduleDynamic = modulesValue(item, "module_dynamic");
-  if (!moduleDynamic) {
-    return null;
-  }
-
-  const archive = dynamicArchiveValue(moduleDynamic);
-  const bvid = readString(archive?.bvid);
-  const title = readString(archive?.title);
-  const author = modulesValue(item, "module_author");
-  const publishedAt =
-    publishedAtOverride ??
-    readNumber(author?.pub_ts) ??
-    readNumber(archive?.pubdate) ??
-    readNumber(archive?.ctime) ??
-    readNumber(archive?.created);
-  if (!bvid || !title || publishedAt === undefined) {
-    return null;
-  }
-  const stat = asRecord(archive?.stat);
-
-  return {
-    aid: readString(archive?.aid) ?? undefined,
-    bvid,
-    coverUrl: normalizeImageUrl(archive?.cover ?? archive?.pic),
-    durationSeconds: readFirstDurationSeconds(
-      archive?.duration_text,
-      archive?.duration,
-      archive?.length,
-    ),
-    playCount: readFirstBilibiliCount(
-      stat?.play,
-      stat?.view,
-      archive?.play,
-    ),
-    publishedAt,
-    title,
-  };
-}
-
-function parseDynamicForwardArchiveVideo(
-  mid: string,
-  item: Record<string, unknown>,
-): BilibiliCreatorVideoPayload | null {
-  const moduleDynamic = modulesValue(item, "module_dynamic");
-  const forward = asRecord(moduleDynamic?.dyn_forward);
-  const forwardItem = asRecord(forward?.item);
-  if (!forwardItem || dynamicAuthorMid(forwardItem) !== mid) {
-    return null;
-  }
-
-  const author = modulesValue(item, "module_author");
-
-  return parseDynamicArchiveVideoFromItem(
-    forwardItem,
-    readNumber(author?.pub_ts),
-  );
-}
-
-function parseDynamicArchiveVideo(
-  mid: string,
-  item: Record<string, unknown>,
-): BilibiliCreatorVideoPayload | null {
-  return (
-    parseDynamicArchiveVideoFromItem(item) ??
-    parseDynamicForwardArchiveVideo(mid, item)
-  );
-}
-
-function fallbackCreatorProfile(
-  mid: string,
-): BilibiliCreatorVideosPayload["creator"] {
-  return {
-    mid,
-    name: `UP ${mid}`,
-  };
-}
-
-function parseCreatorDynamicVideosPage(
-  mid: string,
-  pageSize: number,
-  responseValue: unknown,
-): BilibiliCreatorDynamicVideosPage {
-  const response = ensureBilibiliSuccess(responseValue);
-  const data = asRecord(response.data);
-  const items = Array.isArray(data?.items) ? data.items : null;
-  if (!items) {
-    throw new Error("B 站 UP 主动态响应缺少内容");
-  }
-  const nextOffset = readString(data?.offset) ?? undefined;
-  const hasMore = data?.has_more === true;
-
-  let creator: BilibiliCreatorVideosPayload["creator"] | null = null;
-  const seenBvids = new Set<string>();
-  const videos: BilibiliCreatorVideoPayload[] = [];
-
-  for (const itemValue of items) {
-    const item = asRecord(itemValue);
-    if (!item) {
-      continue;
-    }
-
-    creator ??= parseDynamicCreatorProfile(mid, item);
-    if (videos.length >= pageSize) {
-      break;
-    }
-
-    const video = parseDynamicArchiveVideo(mid, item);
-    if (video && !seenBvids.has(video.bvid)) {
-      seenBvids.add(video.bvid);
-      videos.push(video);
-    }
-  }
-
-  return {
-    creator: creator ?? fallbackCreatorProfile(mid),
-    hasMore,
-    nextOffset,
-    videos,
-  };
-}
-
-function mergeDynamicVideosIntoSpacePage(
-  spaceVideos: BilibiliCreatorVideosPayload,
-  dynamicVideos: BilibiliCreatorVideosPayload,
-): BilibiliCreatorVideosPayload {
-  const seenBvids = new Set(spaceVideos.videos.map((video) => video.bvid));
-  const videos = [...spaceVideos.videos];
-  const promotedDynamicVideo = dynamicVideos.videos.find(
-    (video) => !seenBvids.has(video.bvid),
-  );
-  if (promotedDynamicVideo) {
-    videos.push(promotedDynamicVideo);
-  }
-
-  const creator = { ...spaceVideos.creator };
-  if (!creator.avatarUrl && dynamicVideos.creator.avatarUrl) {
-    creator.avatarUrl = dynamicVideos.creator.avatarUrl;
-  }
-
-  if (
-    creator.name === `UP ${creator.mid}` &&
-    dynamicVideos.creator.name !== `UP ${creator.mid}`
-  ) {
-    creator.name = dynamicVideos.creator.name;
-  }
-
-  return {
-    ...spaceVideos,
-    creator,
-    videos: videos
-      .sort((left, right) => right.publishedAt - left.publishedAt)
-      .slice(0, spaceVideos.pageSize),
   };
 }
 
@@ -1617,26 +1346,6 @@ function creatorFingerprintParams(url: URL): Record<string, string> {
   };
 }
 
-function dynamicVideosQuery(
-  mid: string,
-  offset: string | undefined,
-  imgKey: string,
-  subKey: string,
-): string {
-  const params: Record<string, string> = {
-    features: "itemOpusStyle",
-    host_mid: mid,
-    timezone_offset: "-480",
-    web_location: "333.999",
-  };
-
-  if (offset) {
-    params.offset = offset;
-  }
-
-  return buildSignedWbiQuery(params, imgKey, subKey);
-}
-
 async function fetchBilibiliCreatorVideosForDevApi(
   url: URL,
 ): Promise<BilibiliCreatorVideosPayload> {
@@ -1690,36 +1399,15 @@ async function fetchBilibiliCreatorVideosForDevApiMode(
   modeLabel: string,
   session: BilibiliWebAuthSession | null,
 ): Promise<BilibiliCreatorVideosPayload> {
-  try {
-    const spaceVideos = await fetchBilibiliCreatorSpaceVideos(
-      url,
-      mid,
-      page,
-      pageSize,
-      session,
-    );
-    if (page !== 1) {
-      return spaceVideos;
-    }
-
-    return fetchBilibiliCreatorDynamicVideos(mid, pageSize, session)
-      .then((dynamicVideos) =>
-        mergeDynamicVideosIntoSpacePage(spaceVideos, dynamicVideos),
-      )
-      .catch(() => spaceVideos);
-  } catch (spaceError) {
-    if (page !== 1) {
-      throw spaceError;
-    }
-
-    return fetchBilibiliCreatorDynamicVideos(mid, pageSize, session).catch(
-      (dynamicError: unknown) => {
-        throw new Error(
-          `${modeLabel}失败：投稿接口：${errorMessage(spaceError)}；动态接口：${errorMessage(dynamicError)}`,
-        );
-      },
-    );
-  }
+  return fetchBilibiliCreatorSpaceVideos(
+    url,
+    mid,
+    page,
+    pageSize,
+    session,
+  ).catch((spaceError: unknown) => {
+    throw new Error(`${modeLabel}失败：投稿接口：${errorMessage(spaceError)}`);
+  });
 }
 
 async function prepareBilibiliCreatorSession(
@@ -1738,109 +1426,6 @@ async function prepareBilibiliCreatorSession(
   if (!spaceResponse.ok) {
     throw new Error(`建立 B 站匿名访问会话失败：HTTP ${spaceResponse.status}`);
   }
-}
-
-async function fetchBilibiliCreatorDynamicVideosPage(
-  mid: string,
-  pageSize: number,
-  cookieStore: Map<string, string>,
-  imgKey: string,
-  subKey: string,
-  offset?: string,
-): Promise<BilibiliCreatorDynamicVideosPage> {
-  const query = dynamicVideosQuery(mid, offset, imgKey, subKey);
-  const response = await fetch(
-    `https://api.bilibili.com/x/polymer/web-dynamic/desktop/v1/feed/space?${query}`,
-    {
-      headers: {
-        Cookie: cookieHeader(cookieStore),
-        Origin: "https://t.bilibili.com",
-        Referer: `https://space.bilibili.com/${mid}/dynamic`,
-        "User-Agent": BILIBILI_BROWSER_USER_AGENT,
-      },
-    },
-  );
-  storeResponseCookies(cookieStore, response);
-  if (!response.ok) {
-    throw new Error(`请求 B 站 UP 主动态失败：HTTP ${response.status}`);
-  }
-
-  const responseValue: unknown = await response.json();
-
-  return parseCreatorDynamicVideosPage(mid, pageSize, responseValue);
-}
-
-async function fetchBilibiliCreatorDynamicVideos(
-  mid: string,
-  pageSize: number,
-  session: BilibiliWebAuthSession | null,
-): Promise<BilibiliCreatorVideosPayload> {
-  const cookieStore = createCookieStoreFromSession(session);
-  await prepareBilibiliCreatorSession(mid, cookieStore);
-  const wbiResponse = await fetchBilibiliJson(
-    "https://api.bilibili.com/x/web-interface/nav",
-    cookieStore,
-    "https://www.bilibili.com/",
-  );
-  const { imgKey, subKey } = parseWbiKeys(wbiResponse);
-  let creator: BilibiliCreatorVideosPayload["creator"] | null = null;
-  const videos: BilibiliCreatorVideoPayload[] = [];
-  const seenBvids = new Set<string>();
-  let offset: string | undefined;
-
-  for (
-    let pageIndex = 0;
-    pageIndex < MAX_CREATOR_DYNAMIC_PAGE_COUNT;
-    pageIndex += 1
-  ) {
-    const remainingLimit = pageSize - videos.length;
-    if (remainingLimit <= 0) {
-      break;
-    }
-
-    const page = await fetchBilibiliCreatorDynamicVideosPage(
-      mid,
-      remainingLimit,
-      cookieStore,
-      imgKey,
-      subKey,
-      offset,
-    );
-    creator ??= page.creator;
-
-    for (const video of page.videos) {
-      if (videos.length >= pageSize) {
-        break;
-      }
-
-      if (!seenBvids.has(video.bvid)) {
-        seenBvids.add(video.bvid);
-        videos.push(video);
-      }
-    }
-
-    const nextOffset = page.nextOffset?.trim() || undefined;
-    if (!page.hasMore || nextOffset === offset) {
-      break;
-    }
-
-    offset = nextOffset;
-    if (!offset) {
-      break;
-    }
-  }
-
-  if (videos.length === 0) {
-    throw new Error("B 站 UP 主动态暂未返回公开视频");
-  }
-
-  return {
-    creator: creator ?? fallbackCreatorProfile(mid),
-    hasMore: false,
-    page: 1,
-    pageSize,
-    videos,
-  };
 }
 
 function errorMessage(error: unknown): string {

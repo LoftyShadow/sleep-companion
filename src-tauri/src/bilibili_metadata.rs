@@ -1,13 +1,11 @@
 use crate::bilibili_common::{
     create_bilibili_client, ensure_bilibili_success, fetch_bilibili_json, fetch_bilibili_wbi_keys,
-    normalize_image_url, now_unix_seconds, read_array, read_non_empty_string,
-    read_number_as_string, read_path, read_u64, send_bilibili_request, signed_wbi_query,
-    BilibiliCookieStore,
+    normalize_image_url, now_unix_seconds, read_non_empty_string, read_number_as_string, read_path,
+    read_u64, send_bilibili_request, signed_wbi_query, BilibiliCookieStore,
 };
 use crate::bilibili_session::{load_active_bilibili_session, StoredBilibiliSession};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::BTreeSet;
 const DEFAULT_DM_IMG_LIST: &str = "[]";
 const DEFAULT_DM_IMG_STR: &str = "V2ViR0wgMS4wIChPcGVuR0wgRVMgMi4wIENocm9taXVtKQ";
 const DEFAULT_DM_COVER_IMG_STR: &str = "QU5HTEUgKEFNRCwgQU1EIFJhZGVvbiA3ODBNIEdyYXBoaWNzIChyYWRlb25zaSBwaG9lbml4IEFDTyksIE9wZW5HTCBFUyAzLjIpR29vZ2xlIEluYy4gKEFNRC";
@@ -61,13 +59,6 @@ pub struct BilibiliCreatorVideos {
     videos: Vec<BilibiliCreatorVideo>,
 }
 
-struct BilibiliCreatorDynamicVideosPage {
-    creator: BilibiliCreatorProfile,
-    videos: Vec<BilibiliCreatorVideo>,
-    has_more: bool,
-    next_offset: Option<String>,
-}
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BilibiliBrowserFingerprint {
@@ -79,7 +70,6 @@ pub struct BilibiliBrowserFingerprint {
 
 const DEFAULT_CREATOR_VIDEO_PAGE: u32 = 1;
 const DEFAULT_CREATOR_VIDEO_PAGE_SIZE: u32 = 5;
-const MAX_CREATOR_DYNAMIC_PAGE_COUNT: u8 = 10;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BilibiliCreatorFetchMode {
     Anonymous,
@@ -98,29 +88,6 @@ impl BilibiliCreatorFetchMode {
 struct BilibiliCreatorRequestContext {
     cookie_store: BilibiliCookieStore,
     mode: BilibiliCreatorFetchMode,
-}
-
-fn parse_bilibili_count_text(text: &str) -> Option<u64> {
-    let trimmed_text = text.trim();
-    if trimmed_text.is_empty() {
-        return None;
-    }
-
-    if let Some(count_text) = trimmed_text.strip_suffix('万') {
-        let count = count_text.trim().parse::<f64>().ok()?;
-
-        return Some((count * 10_000.0).round() as u64);
-    }
-
-    trimmed_text.parse::<u64>().ok()
-}
-
-fn read_bilibili_count(value: &Value, path: &[&str]) -> Option<u64> {
-    let current_value = read_path(value, path)?;
-
-    current_value
-        .as_u64()
-        .or_else(|| current_value.as_str().and_then(parse_bilibili_count_text))
 }
 
 fn read_i64(value: &Value, path: &[&str]) -> Option<i64> {
@@ -203,16 +170,6 @@ fn validate_creator_video_page_size(page_size: Option<u32>) -> Result<u32, Strin
     }
 
     Ok(normalized_page_size)
-}
-
-fn modules_value<'a>(item: &'a Value, key: &str) -> Option<&'a Value> {
-    let modules = item.get("modules")?;
-
-    if let Some(module_items) = modules.as_array() {
-        return module_items.iter().find_map(|module| module.get(key));
-    }
-
-    modules.as_object()?.get(key)
 }
 
 fn create_creator_request_context(
@@ -371,195 +328,6 @@ fn parse_creator_videos(
         total_pages,
         videos,
     })
-}
-
-fn parse_dynamic_creator_profile(mid: &str, value: &Value) -> Option<BilibiliCreatorProfile> {
-    let author = modules_value(value, "module_author")?;
-    let user = author.get("user").unwrap_or(author);
-    let user_mid = read_i64(user, &["mid"]).map(|value| value.to_string())?;
-    if user_mid != mid {
-        return None;
-    }
-
-    let name = read_non_empty_string(user, &["name"])?;
-    let avatar_url = normalize_image_url(read_non_empty_string(user, &["face"]));
-
-    Some(BilibiliCreatorProfile {
-        mid: user_mid,
-        name: name.to_string(),
-        avatar_url,
-    })
-}
-
-fn dynamic_archive_value(module_dynamic: &Value) -> Option<&Value> {
-    module_dynamic.get("dyn_archive").or_else(|| {
-        module_dynamic
-            .get("major")
-            .and_then(|major| major.get("archive"))
-    })
-}
-
-fn dynamic_author_mid(value: &Value) -> Option<String> {
-    let author = modules_value(value, "module_author")?;
-    let user = author.get("user").unwrap_or(author);
-
-    read_i64(user, &["mid"]).map(|value| value.to_string())
-}
-
-fn parse_dynamic_archive_video_from_item(
-    value: &Value,
-    published_at_override: Option<i64>,
-) -> Option<BilibiliCreatorVideo> {
-    let module_dynamic = modules_value(value, "module_dynamic")?;
-    let archive = dynamic_archive_value(module_dynamic)?;
-    let bvid = read_non_empty_string(archive, &["bvid"])?;
-    let title = read_non_empty_string(archive, &["title"])?;
-    let author = modules_value(value, "module_author")?;
-    let published_at = published_at_override
-        .or_else(|| read_i64(author, &["pub_ts"]))
-        .or_else(|| read_i64(archive, &["pubdate"]))
-        .or_else(|| read_i64(archive, &["ctime"]))
-        .or_else(|| read_i64(archive, &["created"]))?;
-    let aid = read_number_as_string(archive, &["aid"]);
-    let cover_url = normalize_image_url(
-        read_non_empty_string(archive, &["cover"])
-            .or_else(|| read_non_empty_string(archive, &["pic"])),
-    );
-    let duration_seconds = parse_duration_seconds(archive, &["duration_text"])
-        .or_else(|| parse_duration_seconds(archive, &["duration"]))
-        .or_else(|| parse_duration_seconds(archive, &["length"]));
-    let play_count = read_bilibili_count(archive, &["stat", "play"])
-        .or_else(|| read_bilibili_count(archive, &["stat", "view"]))
-        .or_else(|| read_bilibili_count(archive, &["play"]));
-
-    Some(BilibiliCreatorVideo {
-        aid,
-        bvid: bvid.to_string(),
-        title: title.to_string(),
-        cover_url,
-        published_at,
-        duration_seconds,
-        play_count,
-    })
-}
-
-fn parse_dynamic_forward_archive_video(mid: &str, value: &Value) -> Option<BilibiliCreatorVideo> {
-    let module_dynamic = modules_value(value, "module_dynamic")?;
-    let forward_item = module_dynamic.get("dyn_forward")?.get("item")?;
-    if dynamic_author_mid(forward_item).as_deref() != Some(mid) {
-        return None;
-    }
-
-    let author = modules_value(value, "module_author")?;
-    parse_dynamic_archive_video_from_item(forward_item, read_i64(author, &["pub_ts"]))
-}
-
-fn parse_dynamic_archive_video(mid: &str, value: &Value) -> Option<BilibiliCreatorVideo> {
-    parse_dynamic_archive_video_from_item(value, None)
-        .or_else(|| parse_dynamic_forward_archive_video(mid, value))
-}
-
-fn fallback_creator_profile(mid: &str) -> BilibiliCreatorProfile {
-    BilibiliCreatorProfile {
-        mid: mid.to_string(),
-        name: format!("UP {mid}"),
-        avatar_url: None,
-    }
-}
-
-fn parse_creator_dynamic_videos_page(
-    mid: &str,
-    page_size: usize,
-    value: &Value,
-) -> Result<BilibiliCreatorDynamicVideosPage, String> {
-    ensure_bilibili_creator_success(value)?;
-
-    let items = read_array(value, &["data", "items"])
-        .ok_or_else(|| "B 站 UP 主动态响应缺少内容".to_string())?;
-    let has_more = read_path(value, &["data", "has_more"])
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let next_offset = read_non_empty_string(value, &["data", "offset"]).map(str::to_string);
-    let mut creator = None;
-    let mut seen_bvids = BTreeSet::new();
-    let mut videos = Vec::new();
-
-    for item in items {
-        if creator.is_none() {
-            creator = parse_dynamic_creator_profile(mid, item);
-        }
-
-        if videos.len() >= page_size {
-            break;
-        }
-
-        let Some(video) = parse_dynamic_archive_video(mid, item) else {
-            continue;
-        };
-
-        if seen_bvids.insert(video.bvid.clone()) {
-            videos.push(video);
-        }
-    }
-
-    Ok(BilibiliCreatorDynamicVideosPage {
-        creator: creator.unwrap_or_else(|| fallback_creator_profile(mid)),
-        videos,
-        has_more,
-        next_offset,
-    })
-}
-
-fn merge_dynamic_videos_into_space_page(
-    mut space_videos: BilibiliCreatorVideos,
-    dynamic_videos: BilibiliCreatorVideos,
-) -> BilibiliCreatorVideos {
-    let BilibiliCreatorVideos {
-        creator: dynamic_creator,
-        videos: dynamic_video_values,
-        ..
-    } = dynamic_videos;
-    let seen_bvids = space_videos
-        .videos
-        .iter()
-        .map(|video| video.bvid.clone())
-        .collect::<BTreeSet<_>>();
-    let target_len = usize::try_from(space_videos.page_size).unwrap_or(usize::MAX);
-
-    if let Some(video) = dynamic_video_values
-        .into_iter()
-        .find(|video| !seen_bvids.contains(&video.bvid))
-    {
-        space_videos.videos.push(video);
-    }
-
-    space_videos
-        .videos
-        .sort_by(|left, right| right.published_at.cmp(&left.published_at));
-    space_videos.videos.truncate(target_len);
-
-    if space_videos.creator.avatar_url.is_none() && dynamic_creator.avatar_url.is_some() {
-        space_videos.creator.avatar_url = dynamic_creator.avatar_url;
-    }
-
-    if space_videos.creator.name == "B 站 UP 主" && dynamic_creator.name != "B 站 UP 主" {
-        space_videos.creator.name = dynamic_creator.name;
-    }
-
-    space_videos
-}
-
-async fn try_merge_creator_dynamic_videos(
-    client: &reqwest::Client,
-    mid: &str,
-    page_size: u32,
-    context: &mut BilibiliCreatorRequestContext,
-    space_videos: BilibiliCreatorVideos,
-) -> BilibiliCreatorVideos {
-    match fetch_bilibili_creator_dynamic_videos(client, mid, page_size, context).await {
-        Ok(dynamic_videos) => merge_dynamic_videos_into_space_page(space_videos, dynamic_videos),
-        Err(_) => space_videos,
-    }
 }
 
 fn validate_reference(reference: &BilibiliMetadataReference) -> Result<(), String> {
@@ -724,31 +492,6 @@ fn creator_videos_url(
     ))
 }
 
-fn creator_dynamic_videos_url(
-    mid: &str,
-    offset: Option<&str>,
-    img_key: &str,
-    sub_key: &str,
-    wts: i64,
-) -> Result<String, String> {
-    let mut params = vec![
-        ("features".to_string(), "itemOpusStyle".to_string()),
-        ("host_mid".to_string(), mid.to_string()),
-        ("timezone_offset".to_string(), "-480".to_string()),
-        ("web_location".to_string(), "333.999".to_string()),
-    ];
-
-    if let Some(offset) = offset.filter(|value| !value.trim().is_empty()) {
-        params.push(("offset".to_string(), offset.to_string()));
-    }
-
-    let query = signed_wbi_query(params, img_key, sub_key, wts)?;
-
-    Ok(format!(
-        "https://api.bilibili.com/x/polymer/web-dynamic/desktop/v1/feed/space?{query}"
-    ))
-}
-
 async fn prepare_bilibili_creator_session(
     client: &reqwest::Client,
     cookie_store: &mut BilibiliCookieStore,
@@ -763,104 +506,6 @@ async fn prepare_bilibili_creator_session(
     )
     .await
     .map(|_| ())
-}
-
-async fn fetch_bilibili_creator_dynamic_videos_page(
-    client: &reqwest::Client,
-    mid: &str,
-    page_size: usize,
-    cookie_store: &mut BilibiliCookieStore,
-    img_key: &str,
-    sub_key: &str,
-    offset: Option<&str>,
-) -> Result<BilibiliCreatorDynamicVideosPage, String> {
-    let url = creator_dynamic_videos_url(mid, offset, img_key, sub_key, now_unix_seconds()?)?;
-    let value = fetch_bilibili_json(
-        client
-            .get(url)
-            .header("Origin", "https://t.bilibili.com")
-            .header(
-                "Referer",
-                format!("https://space.bilibili.com/{mid}/dynamic"),
-            ),
-        Some(cookie_store),
-        "B 站 UP 主动态",
-        "B 站 UP 主动态",
-    )
-    .await?;
-
-    parse_creator_dynamic_videos_page(mid, page_size, &value)
-}
-
-async fn fetch_bilibili_creator_dynamic_videos(
-    client: &reqwest::Client,
-    mid: &str,
-    page_size: u32,
-    context: &mut BilibiliCreatorRequestContext,
-) -> Result<BilibiliCreatorVideos, String> {
-    prepare_bilibili_creator_session(client, &mut context.cookie_store, mid).await?;
-    let (img_key, sub_key) = fetch_bilibili_wbi_keys(client, &mut context.cookie_store).await?;
-    let mut creator = None;
-    let mut videos = Vec::new();
-    let mut seen_bvids = BTreeSet::new();
-    let mut offset = None;
-
-    for _page_index in 0..MAX_CREATOR_DYNAMIC_PAGE_COUNT {
-        let remaining_page_size = usize::try_from(page_size)
-            .unwrap_or(usize::MAX)
-            .saturating_sub(videos.len());
-        if remaining_page_size == 0 {
-            break;
-        }
-
-        let page = fetch_bilibili_creator_dynamic_videos_page(
-            client,
-            mid,
-            remaining_page_size,
-            &mut context.cookie_store,
-            &img_key,
-            &sub_key,
-            offset.as_deref(),
-        )
-        .await?;
-        if creator.is_none() {
-            creator = Some(page.creator);
-        }
-
-        for video in page.videos {
-            if videos.len() >= usize::try_from(page_size).unwrap_or(usize::MAX) {
-                break;
-            }
-
-            if seen_bvids.insert(video.bvid.clone()) {
-                videos.push(video);
-            }
-        }
-
-        let next_offset = page.next_offset.filter(|value| !value.trim().is_empty());
-        if !page.has_more || next_offset.as_deref() == offset.as_deref() {
-            break;
-        }
-
-        offset = next_offset;
-        if offset.is_none() {
-            break;
-        }
-    }
-
-    if videos.is_empty() {
-        return Err("B 站 UP 主动态暂未返回公开视频".to_string());
-    }
-
-    Ok(BilibiliCreatorVideos {
-        creator: creator.unwrap_or_else(|| fallback_creator_profile(mid)),
-        has_more: false,
-        page: 1,
-        page_size,
-        total_count: None,
-        total_pages: None,
-        videos,
-    })
 }
 
 async fn fetch_bilibili_creator_space_videos(
@@ -904,31 +549,9 @@ async fn fetch_bilibili_creator_videos_with_context(
     fingerprint: &BilibiliBrowserFingerprint,
     context: &mut BilibiliCreatorRequestContext,
 ) -> Result<BilibiliCreatorVideos, String> {
-    match fetch_bilibili_creator_space_videos(client, mid, page, page_size, fingerprint, context)
+    fetch_bilibili_creator_space_videos(client, mid, page, page_size, fingerprint, context)
         .await
-    {
-        Ok(videos) => {
-            if page == 1 {
-                Ok(try_merge_creator_dynamic_videos(client, mid, page_size, context, videos).await)
-            } else {
-                Ok(videos)
-            }
-        }
-        Err(space_error) => {
-            if page != 1 {
-                return Err(space_error);
-            }
-
-            fetch_bilibili_creator_dynamic_videos(client, mid, page_size, context)
-                .await
-                .map_err(|dynamic_error| {
-                    format!(
-                        "{}失败：投稿接口：{space_error}；动态接口：{dynamic_error}",
-                        context.mode.label()
-                    )
-                })
-        }
-    }
+        .map_err(|space_error| format!("{}失败：投稿接口：{space_error}", context.mode.label()))
 }
 
 async fn fetch_bilibili_creator_videos_with_session(
@@ -1100,7 +723,7 @@ mod tests {
             DEFAULT_CREATOR_VIDEO_PAGE_SIZE
         );
         assert!(validate_creator_video_page_size(Some(0)).is_err());
-        assert!(validate_creator_video_page_size(Some(120)).unwrap() == 120);
+        assert_eq!(validate_creator_video_page_size(Some(120)).unwrap(), 120);
     }
 
     #[test]
@@ -1185,333 +808,6 @@ mod tests {
         assert_eq!(
             videos.videos[0].cover_url,
             Some("https://i0.hdslb.com/video.jpg".to_string())
-        );
-    }
-
-    #[test]
-    fn parses_creator_dynamic_videos() {
-        let value = serde_json::json!({
-            "code": 0,
-            "data": {
-                "items": [
-                    {
-                        "type": "DYNAMIC_TYPE_AV",
-                    "modules": [
-                            {
-                                "module_author": {
-                                    "pub_ts": 1780425165,
-                                    "user": {
-                                        "face": "//i0.hdslb.com/avatar.jpg",
-                                        "mid": 15810,
-                                        "name": "Mr.Quin"
-                                    }
-                                }
-                            },
-                            {
-                                "module_dynamic": {
-                                    "dyn_archive": {
-                                        "aid": "116681745697349",
-                                        "bvid": "BV1ZzVk6XEfb",
-                                        "cover": format!(
-                                            "{}://i0.hdslb.com/video.jpg",
-                                            "http"
-                                        ),
-                                        "duration_text": "04:18:55",
-                                        "stat": {
-                                            "play": "3.3万"
-                                        },
-                                        "title": "【直播回放】古法修车 2026年06月02日20点场"
-                                    },
-                                    "type": "MDL_DYN_TYPE_ARCHIVE"
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        "type": "DYNAMIC_TYPE_DRAW",
-                        "modules": [
-                            {
-                                "module_author": {
-                                    "pub_ts": 1780420951,
-                                    "user": {
-                                        "mid": 15810,
-                                        "name": "Mr.Quin"
-                                    }
-                                }
-                            },
-                            {
-                                "module_dynamic": {
-                                    "dyn_draw": {},
-                                    "type": "MDL_DYN_TYPE_DRAW"
-                                }
-                            }
-                        ]
-                    }
-                ]
-            }
-        });
-
-        let videos = parse_creator_dynamic_videos_page("15810", 20, &value).unwrap();
-
-        assert_eq!(videos.creator.mid, "15810");
-        assert_eq!(videos.creator.name, "Mr.Quin");
-        assert_eq!(
-            videos.creator.avatar_url,
-            Some("https://i0.hdslb.com/avatar.jpg".to_string())
-        );
-        assert!(!videos.has_more);
-        assert!(videos.next_offset.is_none());
-        assert_eq!(videos.videos.len(), 1);
-        assert_eq!(videos.videos[0].aid, Some("116681745697349".to_string()));
-        assert_eq!(videos.videos[0].bvid, "BV1ZzVk6XEfb");
-        assert_eq!(videos.videos[0].published_at, 1780425165);
-        assert_eq!(videos.videos[0].duration_seconds, Some(15535));
-        assert_eq!(videos.videos[0].play_count, Some(33_000));
-        assert_eq!(
-            videos.videos[0].cover_url,
-            Some("https://i0.hdslb.com/video.jpg".to_string())
-        );
-    }
-
-    #[test]
-    fn parses_creator_dynamic_major_archive_videos() {
-        let value = serde_json::json!({
-            "code": 0,
-            "data": {
-                "items": [
-                    {
-                        "type": "DYNAMIC_TYPE_AV",
-                        "modules": {
-                            "module_author": {
-                                "user": {
-                                    "face": "//i0.hdslb.com/avatar.jpg",
-                                    "mid": 15810,
-                                    "name": "Mr.Quin"
-                                }
-                            },
-                            "module_dynamic": {
-                                "major": {
-                                    "archive": {
-                                        "aid": 116656965684065_i64,
-                                        "bvid": "BV1g5Vh63EqE",
-                                        "duration": 650,
-                                        "pic": "//i0.hdslb.com/major-video.jpg",
-                                        "pubdate": 1780279202,
-                                        "stat": {
-                                            "view": 30000
-                                        },
-                                        "title": "摸鱼禁止&Mr.Quin十周年新品服饰发布会"
-                                    },
-                                    "type": "MAJOR_TYPE_ARCHIVE"
-                                }
-                            }
-                        }
-                    }
-                ]
-            }
-        });
-
-        let videos = parse_creator_dynamic_videos_page("15810", 20, &value).unwrap();
-
-        assert_eq!(videos.creator.mid, "15810");
-        assert_eq!(videos.creator.name, "Mr.Quin");
-        assert_eq!(videos.videos.len(), 1);
-        assert_eq!(videos.videos[0].aid, Some("116656965684065".to_string()));
-        assert_eq!(videos.videos[0].bvid, "BV1g5Vh63EqE");
-        assert_eq!(videos.videos[0].published_at, 1780279202);
-        assert_eq!(videos.videos[0].duration_seconds, Some(650));
-        assert_eq!(videos.videos[0].play_count, Some(30_000));
-        assert_eq!(
-            videos.videos[0].cover_url,
-            Some("https://i0.hdslb.com/major-video.jpg".to_string())
-        );
-    }
-
-    #[test]
-    fn parses_creator_forwarded_dynamic_archive_videos() {
-        let value = serde_json::json!({
-            "code": 0,
-            "data": {
-                "items": [
-                    {
-                        "type": "DYNAMIC_TYPE_FORWARD",
-                        "modules": [
-                            {
-                                "module_author": {
-                                    "pub_ts": 1780858952,
-                                    "user": {
-                                        "face": "//i0.hdslb.com/avatar.jpg",
-                                        "mid": 15810,
-                                        "name": "Mr.Quin"
-                                    }
-                                }
-                            },
-                            {
-                                "module_dynamic": {
-                                    "dyn_forward": {
-                                        "item": {
-                                            "type": "DYNAMIC_TYPE_AV",
-                                            "modules": [
-                                                {
-                                                    "module_author": {
-                                                        "pub_ts": 1780858702,
-                                                        "user": {
-                                                            "mid": 15810,
-                                                            "name": "Mr.Quin"
-                                                        }
-                                                    }
-                                                },
-                                                {
-                                                    "module_dynamic": {
-                                                        "dyn_archive": {
-                                                            "aid": "116710317296409",
-                                                            "bvid": "BV1vPE86oEhd",
-                                                            "cover": "http://i0.hdslb.com/bfs/archive/replay.jpg",
-                                                            "duration_text": "01:43:24",
-                                                            "stat": {
-                                                                "danmaku": "1.8万",
-                                                                "like": "355",
-                                                                "play": "9967"
-                                                            },
-                                                            "title": "【直播回放】XBOX游戏展示会了 2026年06月08日00点场"
-                                                        },
-                                                        "type": "MDL_DYN_TYPE_ARCHIVE"
-                                                    }
-                                                }
-                                            ]
-                                        }
-                                    },
-                                    "type": "MDL_DYN_TYPE_FORWARD"
-                                }
-                            }
-                        ]
-                    }
-                ]
-            }
-        });
-
-        let videos = parse_creator_dynamic_videos_page("15810", 20, &value).unwrap();
-
-        assert_eq!(videos.creator.mid, "15810");
-        assert_eq!(videos.creator.name, "Mr.Quin");
-        assert_eq!(videos.videos.len(), 1);
-        assert_eq!(videos.videos[0].aid, Some("116710317296409".to_string()));
-        assert_eq!(videos.videos[0].bvid, "BV1vPE86oEhd");
-        assert_eq!(
-            videos.videos[0].title,
-            "【直播回放】XBOX游戏展示会了 2026年06月08日00点场"
-        );
-        assert_eq!(videos.videos[0].published_at, 1780858952);
-        assert_eq!(videos.videos[0].duration_seconds, Some(6204));
-        assert_eq!(videos.videos[0].play_count, Some(9967));
-        assert_eq!(
-            videos.videos[0].cover_url,
-            Some("https://i0.hdslb.com/bfs/archive/replay.jpg".to_string())
-        );
-    }
-
-    #[test]
-    fn merges_dynamic_replay_videos_into_space_page() {
-        let space_videos = BilibiliCreatorVideos {
-            creator: BilibiliCreatorProfile {
-                avatar_url: None,
-                mid: "15810".to_string(),
-                name: "Mr.Quin".to_string(),
-            },
-            has_more: true,
-            page: 1,
-            page_size: 3,
-            total_count: Some(1598),
-            total_pages: Some(533),
-            videos: vec![
-                BilibiliCreatorVideo {
-                    aid: Some("1".to_string()),
-                    bvid: "BVspaceOld1".to_string(),
-                    cover_url: None,
-                    duration_seconds: Some(650),
-                    play_count: Some(18_000),
-                    published_at: 1780279202,
-                    title: "空间投稿 1".to_string(),
-                },
-                BilibiliCreatorVideo {
-                    aid: Some("2".to_string()),
-                    bvid: "BVspaceOld2".to_string(),
-                    cover_url: None,
-                    duration_seconds: Some(660),
-                    play_count: Some(19_000),
-                    published_at: 1780192802,
-                    title: "空间投稿 2".to_string(),
-                },
-                BilibiliCreatorVideo {
-                    aid: Some("3".to_string()),
-                    bvid: "BVspaceOld3".to_string(),
-                    cover_url: None,
-                    duration_seconds: Some(670),
-                    play_count: Some(20_000),
-                    published_at: 1780106402,
-                    title: "空间投稿 3".to_string(),
-                },
-            ],
-        };
-        let dynamic_videos = BilibiliCreatorVideos {
-            creator: BilibiliCreatorProfile {
-                avatar_url: Some("https://i0.hdslb.com/avatar.jpg".to_string()),
-                mid: "15810".to_string(),
-                name: "Mr.Quin".to_string(),
-            },
-            has_more: false,
-            page: 1,
-            page_size: 3,
-            total_count: None,
-            total_pages: None,
-            videos: vec![
-                BilibiliCreatorVideo {
-                    aid: Some("116681745697349".to_string()),
-                    bvid: "BV1ZzVk6XEfb".to_string(),
-                    cover_url: Some("https://i0.hdslb.com/replay.jpg".to_string()),
-                    duration_seconds: Some(15535),
-                    play_count: Some(33_000),
-                    published_at: 1780425165,
-                    title: "【直播回放】古法修车 2026年06月02日20点场".to_string(),
-                },
-                BilibiliCreatorVideo {
-                    aid: Some("116681745697350".to_string()),
-                    bvid: "BVreplayNew2".to_string(),
-                    cover_url: Some("https://i0.hdslb.com/replay-2.jpg".to_string()),
-                    duration_seconds: Some(12_000),
-                    play_count: Some(22_000),
-                    published_at: 1780390000,
-                    title: "【直播回放】第二条回放不应挤掉投稿".to_string(),
-                },
-                BilibiliCreatorVideo {
-                    aid: Some("1".to_string()),
-                    bvid: "BVspaceOld1".to_string(),
-                    cover_url: None,
-                    duration_seconds: Some(650),
-                    play_count: Some(18_000),
-                    published_at: 1780279202,
-                    title: "空间投稿 1".to_string(),
-                },
-            ],
-        };
-
-        let videos = merge_dynamic_videos_into_space_page(space_videos, dynamic_videos);
-
-        assert_eq!(videos.videos.len(), 3);
-        assert_eq!(videos.videos[0].bvid, "BV1ZzVk6XEfb");
-        assert_eq!(
-            videos.videos[0].title,
-            "【直播回放】古法修车 2026年06月02日20点场"
-        );
-        assert_eq!(videos.videos[1].bvid, "BVspaceOld1");
-        assert_eq!(videos.videos[2].bvid, "BVspaceOld2");
-        assert!(videos
-            .videos
-            .iter()
-            .all(|video| video.bvid != "BVreplayNew2"));
-        assert_eq!(
-            videos.creator.avatar_url,
-            Some("https://i0.hdslb.com/avatar.jpg".to_string())
         );
     }
 
